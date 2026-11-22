@@ -1,0 +1,20 @@
+# 언리얼이 자동으로 만드는 폴더와 파일 (커밋하지 않는다)
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+.vs/
+*.sln
+*.slnx
+*.suo
+*.sdf
+*.VC.db
+*.VC.opendb
+.vsconfig
+
+# 플러그인 빌드 산출물
+Plugins/**/Binaries/
+Plugins/**/Intermediate/
+
+# 개인 AI 작업 파일
+.claude/settings.local.json
