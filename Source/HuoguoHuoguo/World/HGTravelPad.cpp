@@ -4,8 +4,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "Debug/HGPlaceholderPaint.h"
 #include "Engine/StaticMesh.h"
-#include "Game/HGPlayerController.h"
-#include "Player/HGExplorerCharacter.h"
+#include "Game/HGPlayerControllerBase.h"
+#include "Player/HGBossCharacter.h"
 #include "UObject/ConstructorHelpers.h"
 
 AHGTravelPad::AHGTravelPad()
@@ -46,14 +46,14 @@ void AHGTravelPad::OnConstruction(const FTransform& Transform)
 void AHGTravelPad::HandleBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp,
 	int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	// 탐험 캐릭터가 밟았을 때만 반응한다. 경영 카메라 Pawn은 충돌이 꺼져 있어서 여기 들어오지 않는다.
-	AHGExplorerCharacter* Explorer = Cast<AHGExplorerCharacter>(OtherActor);
-	if (!Explorer)
+	// 사장님(경영/탐험 어느 쪽이든)이 밟았을 때만 반응한다. 실제 이동 처리는 그 파트의 컨트롤러가 한다.
+	AHGBossCharacter* Boss = Cast<AHGBossCharacter>(OtherActor);
+	if (!Boss)
 	{
 		return;
 	}
 
-	if (AHGPlayerController* PC = Cast<AHGPlayerController>(Explorer->GetController()))
+	if (AHGPlayerControllerBase* PC = Cast<AHGPlayerControllerBase>(Boss->GetController()))
 	{
 		PC->RequestTravel(this);
 	}

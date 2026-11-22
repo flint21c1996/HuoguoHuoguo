@@ -15,7 +15,7 @@
 
 `[/Script/EngineSettings.GameMapsSettings]`
 - `GameDefaultMap`, `EditorStartupMap` = `/Game/HG/Maps/L_Station`
-- `GlobalDefaultGameMode` = `/Script/HuoguoHuoguo.HGGameMode`
+- `GlobalDefaultGameMode` = `/Script/HuoguoHuoguo.HGExploreGameMode` (맵에 지정이 없을 때만 쓴다. 실제 파트는 맵 World Settings가 정한다)
 - `GameInstanceClass` = `/Script/HuoguoHuoguo.HGGameInstance`
 
 주의: 템플릿이 만든 AndroidFileServer `SecurityToken` 값이 들어 있다. 안드로이드 빌드를 하지 않으면 영향 없다.

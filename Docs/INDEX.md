@@ -28,12 +28,22 @@
   - HGPlaceholderPaint (.h/.cpp)
 - 알려진 문제와 다음 할 일
 
-### [Game - 게임 모드, 플레이어 컨트롤러, GameInstance](Source/Game.md)
+### [Explore - 탐험 파트 (3인칭으로 행성을 걷는다)](Source/Explore.md)
 
 - 역할
 - 파일
-  - HGGameMode (.h/.cpp)
-  - HGPlayerController (.h/.cpp)
+  - HGExploreGameMode (.h/.cpp)
+  - HGExplorerCharacter (.h/.cpp)
+  - HGExplorePlayerController (.h/.cpp)
+- 흐름 / 규칙
+- 알려진 문제와 다음 할 일
+
+### [Game - 두 파트의 공통 부모(게임 모드, 컨트롤러)와 GameInstance](Source/Game.md)
+
+- 역할
+- 파일
+  - HGGameModeBase (.h/.cpp)
+  - HGPlayerControllerBase (.h/.cpp)
   - HGGameInstance (.h/.cpp)
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
@@ -54,12 +64,21 @@
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
 
-### [Player - 경영 카메라 Pawn과 탐험 캐릭터](Source/Player.md)
+### [Player - 사장님 캐릭터 공통 몸체](Source/Player.md)
 
 - 역할
 - 파일
-  - HGShopCameraPawn (.h/.cpp)
-  - HGExplorerCharacter (.h/.cpp)
+  - HGBossCharacter (.h/.cpp)
+- 흐름 / 규칙
+- 알려진 문제와 다음 할 일
+
+### [Shop - 경영 파트 (아이소 시점에서 사장님이 가게를 걷는다)](Source/Shop.md)
+
+- 역할
+- 파일
+  - HGShopGameMode (.h/.cpp)
+  - HGShopBossCharacter (.h/.cpp)
+  - HGShopPlayerController (.h/.cpp)
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
 

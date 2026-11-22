@@ -9,8 +9,8 @@
   /Game/HG/Maps/L_PlanetSurface       절차적 행성 표면. 조명과 AHGPlanetGenerator만 있고 지형은 실행할 때 시드로 만든다.
 - 이미 있는 맵과 머티리얼은 건드리지 않는다. 사람이 에디터에서 고친 배치를 덮어쓰지 않기 위해서이다.
   다시 만들고 싶으면 환경 변수 HG_MAPGEN_FORCE=1을 주고 실행한다 (기존 맵을 지우고 새로 만든다).
-- 예외: upgrade_station()은 이미 있는 L_Station에서 에어록 발판과 귀환 시작점의 "값"만 새 규칙으로 바꾼다.
-  액터를 지우거나 옮기지 않으며, 이미 바뀌어 있으면 저장하지 않는다.
+- 예외: upgrade_station()/upgrade_existing_map()은 이미 있는 맵에서 "값"만 새 규칙으로 바꾼다
+  (게임 모드 지정, 정거장 에어록 발판과 귀환 시작점). 액터를 지우거나 옮기지 않으며, 이미 맞으면 저장하지 않는다.
 - 이 스크립트는 처음 배치를 잡아 주는 용도이다. 이후의 배치 수정은 에디터에서 맵을 직접 고치는 것이 기준이다.
 
 좌표 단위는 언리얼 유닛(1 = 1cm)이다. 엔진 기본 도형(Cube, Cylinder, Sphere)은 Scale 1일 때 1m 크기이고 중심이 원점이다.
@@ -216,8 +216,8 @@ def build_station():
     shape("cube", "Airlock_Light", f, (-450, HY - 18, 245), (1.4, 0.06, 0.1), "Oxygen", collide=False)
 
     # 게임플레이 표식
-    anchor = spawn(unreal.HGShopCameraAnchor, "ShopCameraAnchor", "Gameplay", (0, 0, 0), rot(yaw=45))
-    anchor.set_editor_property("pan_radius", 900.0)
+    # 경영 카메라의 처음 방향(Yaw 45). 카메라는 사장님을 따라가므로 위치는 쓰지 않는다.
+    spawn(unreal.HGShopCameraAnchor, "ShopCameraAnchor", "Gameplay", (0, 0, 0), rot(yaw=45))
     explorer_start("ExplorerStart_Default", (-100, 220), 90, "Default", False)
     explorer_start("ExplorerStart_FromPlanet", (-450, 250), -90, FROM_PLANET, False)
 
@@ -311,10 +311,39 @@ def build_planet_surface():
     shape("sphere", "GasPlanet", "Backdrop", (900000, 600000, 300000), (4000, 4000, 4000), "GasPlanet", collide=False)
 
 
+# 맵마다 쓰는 파트(게임 모드). 맵의 World Settings > GameMode Override에 넣는다.
+MAP_GAME_MODES = {
+    STATION_MAP: "HGShopGameMode",
+    PLANET_MAP: "HGExploreGameMode",
+    ASTEROID_MAP: "HGExploreGameMode",
+}
+
+
+def apply_game_mode(map_path):
+    """지금 열린 맵의 게임 모드 지정을 MAP_GAME_MODES 값으로 맞춘다. 바꿨으면 True."""
+    world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    settings = world.get_world_settings()
+    wanted = getattr(unreal, MAP_GAME_MODES[map_path]).static_class()
+    current = settings.get_editor_property("default_game_mode")
+    if current == wanted:
+        return False
+    settings.set_editor_property("default_game_mode", wanted)
+    unreal.log("[MapGen] %s 게임 모드 지정: %s" % (map_path, MAP_GAME_MODES[map_path]))
+    return True
+
+
+def upgrade_existing_map(map_path):
+    """이미 있는 맵의 게임 모드 지정만 맞춘다. 바뀐 것이 있을 때만 저장한다."""
+    world = unreal.EditorLoadingAndSavingUtils.load_map(map_path)
+    if apply_game_mode(map_path):
+        unreal.EditorLoadingAndSavingUtils.save_map(world, map_path)
+        unreal.log("[MapGen] 맵 저장: " + map_path)
+
+
 def upgrade_station():
-    """이미 있는 L_Station을 행성 다이빙 규칙으로 바꾼다. 값만 바꾸고, 바뀐 것이 있을 때만 저장한다."""
+    """이미 있는 L_Station을 행성 다이빙 규칙과 경영 게임 모드로 바꾼다. 값만 바꾸고, 바뀐 것이 있을 때만 저장한다."""
     world = unreal.EditorLoadingAndSavingUtils.load_map(STATION_MAP)
-    changed = False
+    changed = apply_game_mode(STATION_MAP)
     for actor in actor_sub.get_all_level_actors():
         if isinstance(actor, unreal.HGTravelPad):
             if actor.get_actor_label() == "TravelPad_Airlock" and not actor.get_editor_property("dive_to_selected_planet"):
@@ -346,10 +375,16 @@ for map_path, builder in ((STATION_MAP, build_station), (ASTEROID_MAP, build_ast
 for map_path, builder in targets:
     world = unreal.EditorLoadingAndSavingUtils.load_map(map_path)
     builder()
+    apply_game_mode(map_path)
     unreal.EditorLoadingAndSavingUtils.save_map(world, map_path)
     unreal.log("[MapGen] 맵 저장: " + map_path)
 
-if STATION_MAP not in [path for path, _ in targets]:
+# 이미 있던 맵은 값만 새 규칙으로 맞춘다 (액터를 지우거나 옮기지 않는다).
+new_paths = [path for path, _ in targets]
+if STATION_MAP not in new_paths:
     upgrade_station()
+for map_path in (PLANET_MAP, ASTEROID_MAP):
+    if map_path not in new_paths:
+        upgrade_existing_map(map_path)
 
 unreal.log("[MapGen] 완료. 새로 만든 맵 %d개" % len(targets))

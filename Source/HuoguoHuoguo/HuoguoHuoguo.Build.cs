@@ -8,7 +8,7 @@ public class HuoguoHuoguo : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		// 모듈 루트를 include 경로에 넣어서 "Game/HGPlayerController.h"처럼 하위 폴더 경로로 include할 수 있게 한다.
+		// 모듈 루트를 include 경로에 넣어서 "Game/HGPlayerControllerBase.h"처럼 하위 폴더 경로로 include할 수 있게 한다.
 		PublicIncludePaths.Add(ModuleDirectory);
 
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput" });
