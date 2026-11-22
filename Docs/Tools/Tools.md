@@ -20,6 +20,7 @@ powershell -ExecutionPolicy Bypass -File .\Tools\Invoke-HGBuild.ps1
 - `MI_GB_*` 머티리얼, `L_Station`, `L_Asteroid_Krak7`, `L_PlanetSurface`를 만든다. 이미 있으면 건너뛴다.
 - `MAP_GAME_MODES`: 맵마다 World Settings GameMode를 정한다 (L_Station = 경영, 나머지 = 탐험). 새 맵을 만들 때와 이미 있는 맵 모두에 적용한다.
 - `upgrade_station()` / `upgrade_existing_map()`: 이미 있는 맵에서 값만 새 규칙으로 바꾼다 (게임 모드 지정, 정거장 에어록 발판을 다이빙 발판으로, `FromAsteroid` 시작점을 `FromPlanet`으로). 바뀐 것이 없으면 저장하지 않는다.
+- 예외로 액터를 지우는 경우 하나: 정거장에 가구 액터(`HGFurniture`)가 하나도 없고 홀 식탁이 예전 도형 묶음(`Table_N_Top/Leg/Pot/Seat`)이면, 그 도형들을 지우고 `place_hall_furniture()`로 식탁 4 + 의자 4 가구 액터를 놓는다. 가구 액터가 하나라도 있으면 건드리지 않는다.
 - 파이썬에서 C++ 속성 이름은 `b` 접두사를 뺀 snake_case다 (`bDiveToSelectedPlanet` → `dive_to_selected_planet`).
 
 ### Update-HGDocsIndex.ps1 - 문서 색인 생성
@@ -40,3 +41,4 @@ powershell -ExecutionPolicy Bypass -File .\Tools\Update-HGDocsIndex.ps1
 ## 알려진 문제와 다음 할 일
 
 - 스모크 테스트(실행 → 로그 확인 → 게임 창만 캡처) 스크립트는 아직 저장소에 없다. 필요하면 `Tools/`로 옮긴다.
+  여러 단계 시험은 `-ExecCmds="HGSeq 명령|명령|..."`으로 한 번에 넣는다 (`Docs/Source/Game.md`).

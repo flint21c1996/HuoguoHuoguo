@@ -8,10 +8,17 @@
 #include "HuoguoHuoguo.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
+#include "Shop/HGFurniture.h"
+#include "Shop/HGFurniturePlacer.h"
 #include "Shop/HGShopBossCharacter.h"
 #include "World/HGExplorerStart.h"
 #include "World/HGShopCameraAnchor.h"
 #include "World/HGTravelPad.h"
+
+AHGShopPlayerController::AHGShopPlayerController()
+{
+	FurniturePlacer = CreateDefaultSubobject<UHGFurniturePlacer>(TEXT("FurniturePlacer"));
+}
 
 void AHGShopPlayerController::BeginPlay()
 {
@@ -56,6 +63,9 @@ void AHGShopPlayerController::InitializeFromLevel()
 	}
 	SetControlRotation(FRotator(ShopBoss->GetCameraPitch(), Yaw, 0.f));
 
+	// 행성에 다녀왔으면 사장님이 바꿔 둔 가구 배치로 되돌린다. 처음이면 맵의 배치를 기록해 둔다.
+	FurniturePlacer->RestoreLayout();
+
 	BuildInputObjects();
 	ApplyMappingContext(ShopContext);
 
@@ -66,7 +76,7 @@ void AHGShopPlayerController::InitializeFromLevel()
 	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	SetInputMode(Mode);
 
-	SetControlsHint(TEXT("[경영] WASD 사장님 이동 | 우클릭 드래그 회전 | Q/E 90도 회전 | 휠 확대 | 1~4 행성 선택 | 청록 발판 = 다이빙"));
+	UpdateControlsHint();
 	UpdatePlanetBoard();
 
 	if (bArrivedByTravel)
@@ -114,6 +124,11 @@ void AHGShopPlayerController::SetupInputComponent()
 	Input->BindAction(RotateStepAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnRotateStep);
 	Input->BindAction(ZoomAction, ETriggerEvent::Triggered, this, &AHGShopPlayerController::OnZoom);
 	Input->BindAction(SelectPlanetAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnSelectPlanet);
+	Input->BindAction(ToggleBuildAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnToggleBuild);
+	Input->BindAction(PlaceAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnPlace);
+	Input->BindAction(RotateFurnitureAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnRotateFurniture);
+	Input->BindAction(RemoveFurnitureAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnRemoveFurniture);
+	Input->BindAction(SelectFurnitureAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnSelectFurniture);
 }
 
 void AHGShopPlayerController::BuildInputObjects()
@@ -129,21 +144,76 @@ void AHGShopPlayerController::BuildInputObjects()
 	RotateStepAction = MakeAction(TEXT("IA_Shop_RotateStep"), EInputActionValueType::Axis1D);
 	ZoomAction = MakeAction(TEXT("IA_Shop_Zoom"), EInputActionValueType::Axis1D);
 	SelectPlanetAction = MakeAction(TEXT("IA_Shop_SelectPlanet"), EInputActionValueType::Axis1D);
+	ToggleBuildAction = MakeAction(TEXT("IA_Shop_ToggleBuild"), EInputActionValueType::Boolean);
+	PlaceAction = MakeAction(TEXT("IA_Shop_Place"), EInputActionValueType::Boolean);
+	RotateFurnitureAction = MakeAction(TEXT("IA_Shop_RotateFurniture"), EInputActionValueType::Boolean);
+	RemoveFurnitureAction = MakeAction(TEXT("IA_Shop_RemoveFurniture"), EInputActionValueType::Boolean);
+	SelectFurnitureAction = MakeAction(TEXT("IA_Shop_SelectFurniture"), EInputActionValueType::Axis1D);
 
+	// 숫자 키: 액션 하나에 키 여러 개를 매핑하고, 배율 수정자로 키마다 값을 1, 2, 3...으로 다르게 낸다.
+	// 받는 쪽은 값을 반올림해서 몇 번인지 안다. 키마다 액션을 따로 만들지 않아도 된다.
+	const FKey NumberKeys[] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine };
+
+	// 평소: 이동, 카메라, 행성 선택(1~4).
 	ShopContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Shop"));
-	MapWASD(ShopContext, MoveAction);
-	ShopContext->MapKey(LookAction, EKeys::Mouse2D);
-	ShopContext->MapKey(RotateHoldAction, EKeys::RightMouseButton);
-	MapDirectionalKey(ShopContext, RotateStepAction, EKeys::Q, false, true);
-	MapDirectionalKey(ShopContext, RotateStepAction, EKeys::E, false, false);
-	ShopContext->MapKey(ZoomAction, EKeys::MouseWheelAxis);
-
-	// 숫자 키 1~4: 액션 하나에 키 네 개를 매핑하고, 배율 수정자로 키마다 값을 1, 2, 3, 4로 다르게 낸다.
-	// 받는 쪽은 값을 반올림해서 몇 번 행성인지 안다. 키마다 액션을 따로 만들지 않아도 된다.
-	const FKey NumberKeys[] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four };
-	for (int32 i = 0; i < UE_ARRAY_COUNT(NumberKeys); ++i)
+	MapCommonKeys(ShopContext);
+	for (int32 i = 0; i < 4; ++i)
 	{
 		MapScaledKey(ShopContext, SelectPlanetAction, NumberKeys[i], static_cast<float>(i + 1));
+	}
+
+	// 배치 모드: 이동, 카메라는 그대로 두고 숫자 키는 가구 고르기로, 좌클릭/R/X는 배치 조작으로 쓴다.
+	BuildContext = NewObject<UInputMappingContext>(this, TEXT("IMC_ShopBuild"));
+	MapCommonKeys(BuildContext);
+	BuildContext->MapKey(PlaceAction, EKeys::LeftMouseButton);
+	BuildContext->MapKey(RotateFurnitureAction, EKeys::R);
+	BuildContext->MapKey(RemoveFurnitureAction, EKeys::X);
+	const int32 FurnitureCount = FMath::Min(FurniturePlacer->Catalog.Num(), static_cast<int32>(UE_ARRAY_COUNT(NumberKeys)));
+	for (int32 i = 0; i < FurnitureCount; ++i)
+	{
+		MapScaledKey(BuildContext, SelectFurnitureAction, NumberKeys[i], static_cast<float>(i + 1));
+	}
+}
+
+void AHGShopPlayerController::MapCommonKeys(UInputMappingContext* Context)
+{
+	MapWASD(Context, MoveAction);
+	Context->MapKey(LookAction, EKeys::Mouse2D);
+	Context->MapKey(RotateHoldAction, EKeys::RightMouseButton);
+	MapDirectionalKey(Context, RotateStepAction, EKeys::Q, false, true);
+	MapDirectionalKey(Context, RotateStepAction, EKeys::E, false, false);
+	Context->MapKey(ZoomAction, EKeys::MouseWheelAxis);
+	Context->MapKey(ToggleBuildAction, EKeys::B);
+}
+
+void AHGShopPlayerController::PlayerTick(float DeltaTime)
+{
+	Super::PlayerTick(DeltaTime);
+	if (FurniturePlacer->IsBuilding())
+	{
+		FurniturePlacer->UpdateCursor();
+	}
+}
+
+void AHGShopPlayerController::UpdateControlsHint() const
+{
+	if (FurniturePlacer->IsBuilding())
+	{
+		FString Choices;
+		for (int32 i = 0; i < FurniturePlacer->Catalog.Num(); ++i)
+		{
+			if (const UClass* Class = FurniturePlacer->Catalog[i])
+			{
+				Choices += FString::Printf(TEXT("%s%d %s"), i > 0 ? TEXT(" / ") : TEXT(""), i + 1,
+					*Class->GetDefaultObject<AHGFurniture>()->DisplayName.ToString());
+			}
+		}
+		SetControlsHint(FString::Printf(TEXT("[가구 배치] 손에 든 것: %s | %s | 좌클릭 놓기/집기 | R 회전 | X 치우기/취소 | B 끝"),
+			*FurniturePlacer->GetHeldName().ToString(), *Choices));
+	}
+	else
+	{
+		SetControlsHint(TEXT("[경영] WASD 사장님 이동 | 우클릭 드래그 회전 | Q/E 90도 회전 | 휠 확대 | 1~4 행성 선택 | B 가구 배치 | 청록 발판 = 다이빙"));
 	}
 }
 
@@ -196,6 +266,93 @@ void AHGShopPlayerController::OnZoom(const FInputActionValue& Value)
 void AHGShopPlayerController::OnSelectPlanet(const FInputActionValue& Value)
 {
 	HGSelectPlanet(FMath::RoundToInt(Value.Get<float>()));
+}
+
+void AHGShopPlayerController::OnToggleBuild(const FInputActionValue& Value)
+{
+	HGBuild();
+}
+
+void AHGShopPlayerController::OnPlace(const FInputActionValue& Value)
+{
+	const FString Result = FurniturePlacer->Click();
+	if (!Result.IsEmpty())
+	{
+		ShowMessage(Result);
+	}
+	UpdateControlsHint(); // 집어 들었으면 손에 든 것이 바뀐다.
+}
+
+void AHGShopPlayerController::OnRotateFurniture(const FInputActionValue& Value)
+{
+	FurniturePlacer->RotateHeld(FurniturePlacer->RotateStepDegrees);
+}
+
+void AHGShopPlayerController::OnRemoveFurniture(const FInputActionValue& Value)
+{
+	const FString Result = FurniturePlacer->RemoveOrCancel();
+	if (!Result.IsEmpty())
+	{
+		ShowMessage(Result);
+	}
+	UpdateControlsHint();
+}
+
+void AHGShopPlayerController::OnSelectFurniture(const FInputActionValue& Value)
+{
+	HGBuildSelect(FMath::RoundToInt(Value.Get<float>()));
+}
+
+void AHGShopPlayerController::HGBuild()
+{
+	if (bTraveling)
+	{
+		return;
+	}
+	if (FurniturePlacer->IsBuilding())
+	{
+		FurniturePlacer->EndBuild();
+		ApplyMappingContext(ShopContext);
+		ShowMessage(TEXT("가구 배치 끝"));
+	}
+	else
+	{
+		FurniturePlacer->BeginBuild();
+		ApplyMappingContext(BuildContext);
+		ShowMessage(TEXT("가구 배치 시작"));
+	}
+	// 회전용 우클릭이 눌린 채로 컨텍스트가 바뀌면 뗌(Completed)을 못 받을 수 있어서 회전 상태를 풀어 둔다.
+	bRotateHeld = false;
+	UpdateControlsHint();
+}
+
+void AHGShopPlayerController::HGBuildSelect(int32 Number)
+{
+	if (!FurniturePlacer->SelectCatalog(Number - 1))
+	{
+		ShowMessage(FString::Printf(TEXT("%d번 가구는 목록에 없다"), Number), FColor::Red);
+		return;
+	}
+	ShowMessage(FString::Printf(TEXT("배치할 가구: %s"), *FurniturePlacer->GetHeldName().ToString()));
+	UpdateControlsHint();
+}
+
+void AHGShopPlayerController::HGCursorAt(float X, float Y)
+{
+	FurniturePlacer->SetCursorWorldOverride(FVector(X, Y, FurniturePlacer->FloorZ));
+	UE_LOG(LogHuoguo, Log, TEXT("[Furniture] 시험 커서를 바닥 (%.0f, %.0f)에 둠"), X, Y);
+}
+
+void AHGShopPlayerController::HGCursorClear()
+{
+	FurniturePlacer->SetCursorWorldOverride(TOptional<FVector>());
+}
+
+void AHGShopPlayerController::HGFurniture()
+{
+	FurniturePlacer->UpdateCursor();
+	UE_LOG(LogHuoguo, Log, TEXT("[Furniture] %s"), *FurniturePlacer->DescribeLayout());
+	UE_LOG(LogHuoguo, Log, TEXT("[Furniture] 커서: %s"), *FurniturePlacer->DescribeCursor());
 }
 
 void AHGShopPlayerController::HGRotate(float Degrees)

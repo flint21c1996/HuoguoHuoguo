@@ -25,8 +25,10 @@
   - `MapWASD`/`MapDirectionalKey`: 키보드 키를 Swizzle(YXZ)/Negate 수정자로 2D 축의 한 방향으로 매핑
   - `MapScaledKey`: Scalar 수정자로 키마다 다른 값 (숫자 키 1~4 → 1~4)
 - 화면 안내 (정식 UI 전 임시): `ShowMessage`, `SetControlsHint`(고정 키 `0x48470001`)
-- 개발용 콘솔 명령: `HGTravel <맵 경로 일부>`, `HGSimKey <키> <초>`
-  - `HGSimKey`는 `InputKey(FInputKeyEventArgs::CreateSimulated)`로 엔진 입력에 키를 넣는다 (OS 입력 주입 아님). 뗄 때 Move 이벤트 수, 이동 거리, 이동 방향 Yaw, 위치, 파트별 정보(`DescribeForSimKey`)를 로그로 남긴다.
+- 개발용 콘솔 명령: `HGTravel <맵 경로 일부>`, `HGSimKey <키> <초>`, `HGSeq <명령|명령|...>`
+  - `HGSimKey`는 `InputKey(FInputKeyEventArgs::CreateSimulated)`로 엔진 입력에 키를 넣는다 (OS 입력 주입 아님). 뗄 때 Move 이벤트 수, 이동 거리, 이동 방향 Yaw, 위치, 파트별 정보(`DescribeForSimKey`)를 로그로 남긴다. 마우스 버튼(`LeftMouseButton`)도 된다.
+  - `HGSeq`: `|`로 나눈 명령을 `DevSequenceInterval`(1.5초) 간격으로 하나씩 `ConsoleCommand`로 실행한다. `wait`는 한 칸 쉰다. 남은 명령은 GameInstance에 있어서 맵을 옮겨도 새 맵의 컨트롤러가 `BeginPlay`에서 이어 실행한다. 마지막 인자가 문자열이면 언리얼이 줄 끝까지 통째로 넘기므로 공백 있는 명령도 된다.
+- `RequestTravel`은 "이동 시작" 로그에 발판 이름, 사장님 위치, 맵 시작 후 시간을 남긴다.
 
 ### HGGameInstance (.h/.cpp)
 맵이 바뀌어도 유지되는 상태.
@@ -34,6 +36,9 @@
 - 접근 행성: `UniverseSeed`(현재 고정값 20261123) + `OrbitCycle`로 `HGPlanet::MakeApproachingPlanets(…, 4)`를 처음 요청 때 만든다.
   - `AdvanceOrbitCycle()`, `SelectPlanet(Index)`, `GetSelectedPlanet()`
   - `CommitDiveToSelectedPlanet()` → `GetDivePlanet()` (TOptional). 표면 맵 생성기가 읽는다.
+- 정거장 가구 배치 기록: `FHGPlacedFurniture`(클래스, 위치, Yaw) 배열. `HasShopLayout`, `GetShopLayout`, `SetShopLayout`.
+  - 클래스는 `TSubclassOf<AActor>`로 들고 있다. 공통 폴더가 경영 파트(`Shop/HGFurniture.h`)를 include하지 않기 위해서이다.
+- `GetDevSequence()`: `HGSeq`가 아직 실행하지 않은 명령들.
 
 ## 흐름 / 규칙
 
@@ -45,6 +50,6 @@
 
 - 입력이 코드 생성이다. 키 설정 화면이 필요해지면 `IA_`/`IMC_` 에셋으로 옮긴다.
 - 화면 안내는 디버그 메시지다. UMG 위젯으로 바꿀 때 `ShowMessage`/`SetControlsHint`와 경영 파트의 행성 목록만 교체하면 된다.
-- `UniverseSeed`는 새 게임 시작 시 무작위로 정하고 저장해야 한다 (저장 기능 없음). `OrbitCycle`은 아직 게임 내 날짜와 연결되지 않았다.
+- `UniverseSeed`와 가구 배치 기록은 새 게임 시작 시 정하고 파일에 저장해야 한다 (저장 기능 없음). `OrbitCycle`은 아직 게임 내 날짜와 연결되지 않았다.
 - 접근 행성 관리는 GameInstance 서브시스템으로 분리할 수 있다 (인벤토리가 생길 때 같이).
 - 다이빙 연출은 화면 암전뿐이다.

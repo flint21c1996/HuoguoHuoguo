@@ -10,12 +10,15 @@
 - 이미 있는 맵과 머티리얼은 건드리지 않는다. 사람이 에디터에서 고친 배치를 덮어쓰지 않기 위해서이다.
   다시 만들고 싶으면 환경 변수 HG_MAPGEN_FORCE=1을 주고 실행한다 (기존 맵을 지우고 새로 만든다).
 - 예외: upgrade_station()/upgrade_existing_map()은 이미 있는 맵에서 "값"만 새 규칙으로 바꾼다
-  (게임 모드 지정, 정거장 에어록 발판과 귀환 시작점). 액터를 지우거나 옮기지 않으며, 이미 맞으면 저장하지 않는다.
+  (게임 모드 지정, 정거장 에어록 발판과 귀환 시작점). 이미 맞으면 저장하지 않는다.
+  유일하게 액터를 지우는 경우: 정거장 홀 식탁이 예전 도형 묶음(Table_N_Top/Leg/Pot/Seat)이고 가구 액터가 하나도 없으면
+  그 도형들을 지우고 HGTable/HGChair 가구 액터로 바꾼다. 가구 액터가 하나라도 있으면 건드리지 않는다.
 - 이 스크립트는 처음 배치를 잡아 주는 용도이다. 이후의 배치 수정은 에디터에서 맵을 직접 고치는 것이 기준이다.
 
 좌표 단위는 언리얼 유닛(1 = 1cm)이다. 엔진 기본 도형(Cube, Cylinder, Sphere)은 Scale 1일 때 1m 크기이고 중심이 원점이다.
 """
 import os
+import re
 import unreal
 
 FORCE = os.environ.get("HG_MAPGEN_FORCE") == "1"
@@ -193,13 +196,8 @@ def build_station():
         shape("cylinder", "Burner_%d_Mala" % i, f, (x - 10, 400, 126), (0.36, 0.72, 0.03), "Broth", collide=False)
         shape("cylinder", "Burner_%d_Baitang" % i, f, (x + 10, 400, 126), (0.36, 0.72, 0.03), "BrothWhite", collide=False)
 
-    # 홀: 손님 테이블 4개와 의자.
-    f = "Shop/Hall"
-    for i, (x, y) in enumerate(((-300, -250), (100, -250), (-300, 50), (100, 50))):
-        shape("cylinder", "Table_%d_Top" % i, f, (x, y, 78), (1.56, 1.56, 0.08), "Wood")
-        shape("cylinder", "Table_%d_Leg" % i, f, (x, y, 38), (0.2, 0.2, 0.76), "Steel")
-        shape("cylinder", "Table_%d_Pot" % i, f, (x, y, 92), (0.6, 0.6, 0.2), "Steel", collide=False)
-        shape("cylinder", "Table_%d_Seat" % i, f, (x, y - 105, 22), (0.56, 0.56, 0.45), "BrothWhite")
+    # 홀: 손님 식탁 4개와 의자. 경영 파트에서 사장님이 옮기거나 치울 수 있는 가구 액터다.
+    place_hall_furniture()
 
     # 재료 진열대와 도착 전광판 (+X 벽).
     f = "Shop/Props"
@@ -223,6 +221,21 @@ def build_station():
 
     pad = spawn(unreal.HGTravelPad, "TravelPad_Airlock", "Gameplay", (-450, 400, 60))
     set_dive(pad)
+
+
+HALL_TABLES = ((-300, -250), (100, -250), (-300, 50), (100, 50))
+
+
+def place_hall_furniture():
+    """홀의 처음 가구 배치: 식탁 4개와 식탁마다 의자 1개.
+
+    가구 액터(HGTable, HGChair)의 원점은 바닥 위 가구 중심이라 Z = 0에 놓는다.
+    의자는 앞쪽(+X)이 손님이 보는 방향이다. 식탁 남쪽(-Y)에 두고 Yaw 90으로 돌려 식탁(북쪽)을 보게 한다.
+    """
+    f = "Shop/Hall"
+    for i, (x, y) in enumerate(HALL_TABLES):
+        spawn(unreal.HGTable, "Table_%d" % i, f, (x, y, 0))
+        spawn(unreal.HGChair, "Chair_%d" % i, f, (x, y - 105, 0), rot(yaw=90))
 
 
 def set_dive(pad):
@@ -356,6 +369,19 @@ def upgrade_station():
                 actor.set_actor_label("ExplorerStart_FromPlanet")
                 changed = True
                 unreal.log("[MapGen] L_Station 귀환 시작점 태그를 FromPlanet으로 바꿈")
+
+    # 홀 식탁이 예전 방식(기본 도형 StaticMeshActor 묶음)이면 배치 가능한 가구 액터로 바꾼다.
+    # 가구 액터가 하나라도 있으면 이미 바꾼 맵이거나 사람이 에디터에서 배치한 것이므로 건드리지 않는다.
+    actors = actor_sub.get_all_level_actors()
+    if not any(isinstance(a, unreal.HGFurniture) for a in actors):
+        old_pattern = re.compile(r"^Table_\d+_(Top|Leg|Pot|Seat)$")
+        old_parts = [a for a in actors if isinstance(a, unreal.StaticMeshActor) and old_pattern.match(a.get_actor_label())]
+        for actor in old_parts:
+            actor_sub.destroy_actor(actor)
+        place_hall_furniture()
+        changed = True
+        unreal.log("[MapGen] L_Station 홀 식탁: 도형 %d개를 지우고 가구 액터 %d개로 바꿈" % (len(old_parts), len(HALL_TABLES) * 2))
+
     if changed:
         unreal.EditorLoadingAndSavingUtils.save_map(world, STATION_MAP)
         unreal.log("[MapGen] 맵 저장: " + STATION_MAP)
@@ -379,7 +405,7 @@ for map_path, builder in targets:
     unreal.EditorLoadingAndSavingUtils.save_map(world, map_path)
     unreal.log("[MapGen] 맵 저장: " + map_path)
 
-# 이미 있던 맵은 값만 새 규칙으로 맞춘다 (액터를 지우거나 옮기지 않는다).
+# 이미 있던 맵은 값만 새 규칙으로 맞춘다 (예외: 정거장 홀 식탁 도형을 가구 액터로 바꾸는 것, 위 설명 참고).
 new_paths = [path for path, _ in targets]
 if STATION_MAP not in new_paths:
     upgrade_station()

@@ -6,6 +6,26 @@
 #include "HGGameInstance.generated.h"
 
 /**
+ * 정거장 가게에 놓인 가구 하나의 기록.
+ * 가구 클래스는 경영 파트(Shop/) 것이지만 공통 폴더가 경영 파트를 include하지 않도록 AActor 클래스로 들고 있는다.
+ */
+USTRUCT()
+struct FHGPlacedFurniture
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TSubclassOf<AActor> Class;
+
+	// 바닥 위 가구 중심 위치.
+	UPROPERTY()
+	FVector Location = FVector::ZeroVector;
+
+	UPROPERTY()
+	float Yaw = 0.f;
+};
+
+/**
  * 맵을 옮겨 다녀도 유지되는 게임 전체 상태.
  *
  * 맵을 열면(OpenLevel) 그 맵의 액터, 게임 모드, 플레이어 컨트롤러는 모두 새로 만들어진다.
@@ -52,7 +72,27 @@ public:
 	// 다이빙 직전에 정거장 쪽 컨트롤러가 부른다. 고른 행성을 표면 맵으로 넘길 값으로 고정한다.
 	void CommitDiveToSelectedPlanet();
 
+	// 정거장 가구 배치 기록. 경영 파트가 가구를 놓거나 없앨 때마다 통째로 덮어쓰고, 정거장 맵을 다시 열 때 읽는다.
+	// 아직 한 번도 기록하지 않았으면 HasShopLayout()이 false다 (그때는 맵에 배치된 가구가 처음 배치).
+	bool HasShopLayout() const { return bShopLayoutSaved; }
+	const TArray<FHGPlacedFurniture>& GetShopLayout() const { return ShopLayout; }
+	void SetShopLayout(const TArray<FHGPlacedFurniture>& Layout)
+	{
+		ShopLayout = Layout;
+		bShopLayoutSaved = true;
+	}
+
+	// 개발 명령 HGSeq가 아직 실행하지 않은 명령들. 맵을 옮겨도 남아서 새 맵의 컨트롤러가 이어서 실행한다.
+	TArray<FString>& GetDevSequence() { return DevSequence; }
+
 private:
+	UPROPERTY()
+	TArray<FHGPlacedFurniture> ShopLayout;
+
+	TArray<FString> DevSequence;
+
+	bool bShopLayoutSaved = false;
+
 	FName PendingArrivalTag = NAME_None;
 
 	// 세계 전체의 시드. 나중에 새 게임을 시작할 때 무작위로 정하고 저장 파일에 넣는다.

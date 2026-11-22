@@ -12,7 +12,8 @@
 - 게임과 에디터의 기본 맵. 경영 파트 (World Settings GameMode = `HGShopGameMode`). 12m x 10m 가게, 바닥 윗면 Z = 0, 가게 중심 = 원점.
 - 아웃라이너 폴더: `Lighting`, `Gameplay`, `Shop/Structure`, `Shop/Kitchen`, `Shop/Hall`, `Shop/Props`
 - 카메라 쪽 두 벽(서, 남)은 발목 높이, 먼 쪽 두 벽(동, 북)은 높게 (기본 카메라 45도 기준).
-- 주방(카운터, 화구 2개, 마라탕/백탕), 홀(테이블 4개), 재료 진열대, 도착 전광판, 에어록 문.
+- 주방(카운터, 화구 2개, 마라탕/백탕), 재료 진열대, 도착 전광판, 에어록 문.
+- 홀(`Shop/Hall`): 가구 액터 `Table_0~3`(`HGTable`, (-300,-250) (100,-250) (-300,50) (100,50))과 `Chair_0~3`(`HGChair`, 각 식탁 남쪽 105, Yaw 90). 경영 파트에서 옮기거나 치울 수 있는 처음 배치다. 예전 도형 묶음(Table_N_Top/Leg/Pot/Seat)은 `upgrade_station()`이 이것으로 바꿨다.
 - 게임플레이: `ShopCameraAnchor`(원점, Yaw 45 = 카메라 처음 방향), `ExplorerStart_Default`(-100, 220, 사장님 시작), `ExplorerStart_FromPlanet`(-450, 250, 행성에서 귀환), `TravelPad_Airlock`(-450, 400, 60, 다이빙 발판 → `L_PlanetSurface`).
 - 조명: DirectionalLight, SkyAtmosphere, SkyLight(실시간 캡처).
 

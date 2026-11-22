@@ -72,13 +72,15 @@
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
 
-### [Shop - 경영 파트 (아이소 시점에서 사장님이 가게를 걷는다)](Source/Shop.md)
+### [Shop - 경영 파트 (아이소 시점에서 사장님이 가게를 걷고 가구를 배치한다)](Source/Shop.md)
 
 - 역할
 - 파일
   - HGShopGameMode (.h/.cpp)
   - HGShopBossCharacter (.h/.cpp)
   - HGShopPlayerController (.h/.cpp)
+  - HGFurniture (.h/.cpp)
+  - HGFurniturePlacer (.h/.cpp)
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
 

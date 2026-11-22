@@ -43,7 +43,19 @@ public:
 	UFUNCTION(Exec)
 	void HGSimKey(const FString& KeyName, float HoldSeconds = 1.f);
 
+	// HGSeq HGBuild|HGCursorAt 0 -100|HGSimKey LeftMouseButton 0.2|wait|HGFurniture
+	// 명령 여러 개를 |로 나눠 DevSequenceInterval초 간격으로 하나씩 실행한다. "wait"는 한 칸 쉰다.
+	// 남은 명령은 GameInstance에 있어서 맵을 옮겨도 새 맵에서 이어서 실행된다 (정거장 -> 행성 -> 정거장 시험용).
+	// 마지막 인자가 문자열이라 줄 끝까지 통째로 받는다 (공백이 들어간 명령도 된다).
+	UFUNCTION(Exec)
+	void HGSeq(const FString& Commands);
+
 protected:
+	virtual void BeginPlay() override;
+
+	UPROPERTY(EditAnywhere, Category = "Debug")
+	float DevSequenceInterval = 1.5f;
+
 	// 이동 발판 암전 시간(초). 어두워지는 시간과 밝아지는 시간에 각각 쓴다.
 	UPROPERTY(EditAnywhere, Category = "Travel")
 	float TravelFadeTime = 0.35f;
@@ -98,4 +110,8 @@ protected:
 private:
 	FTimerHandle TravelTimer;
 	FTimerHandle SimKeyTimer;
+	FTimerHandle DevSequenceTimer;
+
+	// HGSeq 대기열에서 명령 하나를 꺼내 실행한다. 비었으면 타이머를 멈춘다.
+	void RunNextDevCommand();
 };

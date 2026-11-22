@@ -18,6 +18,63 @@
 #include "World/HGExplorerStart.h"
 #include "World/HGTravelPad.h"
 
+void AHGPlayerControllerBase::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// 이전 맵에서 HGSeq로 넣어 둔 명령이 남아 있으면 이어서 실행한다.
+	// 첫 명령은 한 간격 뒤에 나가므로 하위 클래스의 맵 시작 처리(사장님 스폰 등)가 먼저 끝난다.
+	UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
+	if (IsLocalController() && GI && !GI->GetDevSequence().IsEmpty())
+	{
+		GetWorldTimerManager().SetTimer(DevSequenceTimer, this, &AHGPlayerControllerBase::RunNextDevCommand, DevSequenceInterval, true);
+	}
+}
+
+void AHGPlayerControllerBase::HGSeq(const FString& Commands)
+{
+	UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
+	if (!GI)
+	{
+		return;
+	}
+	TArray<FString> Parts;
+	Commands.ParseIntoArray(Parts, TEXT("|"), true);
+	for (FString& Part : Parts)
+	{
+		Part.TrimStartAndEndInline();
+	}
+	GI->GetDevSequence() = MoveTemp(Parts);
+	UE_LOG(LogHuoguo, Log, TEXT("[Seq] 명령 %d개를 %.1f초 간격으로 실행"), GI->GetDevSequence().Num(), DevSequenceInterval);
+	GetWorldTimerManager().SetTimer(DevSequenceTimer, this, &AHGPlayerControllerBase::RunNextDevCommand, DevSequenceInterval, true);
+}
+
+void AHGPlayerControllerBase::RunNextDevCommand()
+{
+	UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
+	if (!GI || GI->GetDevSequence().IsEmpty())
+	{
+		GetWorldTimerManager().ClearTimer(DevSequenceTimer);
+		UE_LOG(LogHuoguo, Log, TEXT("[Seq] 끝"));
+		return;
+	}
+
+	// 맵 이동 중에는 기다린다. 명령은 새 맵의 컨트롤러가 이어서 꺼낸다.
+	if (bTraveling)
+	{
+		return;
+	}
+
+	const FString Command = GI->GetDevSequence()[0];
+	GI->GetDevSequence().RemoveAt(0);
+	if (Command.IsEmpty() || Command.Equals(TEXT("wait"), ESearchCase::IgnoreCase))
+	{
+		return;
+	}
+	UE_LOG(LogHuoguo, Log, TEXT("[Seq] %s"), *Command);
+	ConsoleCommand(Command);
+}
+
 void AHGPlayerControllerBase::RequestTravel(AHGTravelPad* Pad)
 {
 	if (!Pad || !Boss || bTraveling)
@@ -46,6 +103,8 @@ void AHGPlayerControllerBase::RequestTravel(AHGTravelPad* Pad)
 	}
 
 	bTraveling = true;
+	UE_LOG(LogHuoguo, Log, TEXT("이동 시작: 발판 %s, 사장님 위치 %s, 맵 시작 후 %.2f초"),
+		*Pad->GetActorNameOrLabel(), *Boss->GetActorLocation().ToCompactString(), GetWorld()->GetTimeSeconds());
 
 	// 화면을 검게 만든다. bHoldWhenFinished = true라서 다음 페이드를 부를 때까지 검은 화면을 유지한다.
 	if (PlayerCameraManager)
