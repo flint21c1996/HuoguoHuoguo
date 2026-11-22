@@ -8,10 +8,10 @@ class UBoxComponent;
 class UStaticMeshComponent;
 
 /**
- * 밟으면 다른 장소로 이동시키는 발판. 가게의 에어록과 소행성의 귀환 지점에 쓴다.
+ * 밟으면 다른 맵으로 이동시키는 발판. 정거장의 에어록, 소행성의 귀환 지점에 배치한다.
  *
- * 발판 자체는 "어디로 보내는지"만 알고, 실제 이동 연출(화면 암전, 순간 이동, 장비 교체)은
- * 플레이어 컨트롤러가 맡는다. 연출 방식이 바뀌어도 발판 코드는 손댈 필요가 없게 하려는 분리이다.
+ * 발판은 "어느 맵의 어느 시작점으로 보내는지"만 갖고 있고, 화면 암전과 맵 열기는 플레이어 컨트롤러가 맡는다.
+ * 연출 방식이 바뀌어도 발판과 맵 배치는 손댈 필요가 없게 하려는 분리이다.
  */
 UCLASS()
 class HUOGUOHUOGUO_API AHGTravelPad : public AActor
@@ -21,20 +21,23 @@ class HUOGUOHUOGUO_API AHGTravelPad : public AActor
 public:
 	AHGTravelPad();
 
-	// 도착 위치와 방향. 도착 지점은 반대편 발판과 겹치지 않게 조금 떨어뜨려 둔다 (도착하자마자 되돌아가는 것 방지).
-	UPROPERTY(EditAnywhere, Category = "Travel")
-	FTransform Destination;
+	// 도착할 맵. 소프트 참조라서 이 맵을 열 때 도착 맵까지 함께 메모리에 올라가지 않는다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Travel")
+	TSoftObjectPtr<UWorld> DestinationLevel;
 
-	// true면 우주(탐험 지역)로 나가는 발판, false면 가게로 돌아오는 발판.
-	UPROPERTY(EditAnywhere, Category = "Travel")
-	bool bLeadsToSpace = true;
+	// 도착 맵에서 이 태그를 가진 AHGExplorerStart 위치에 나타난다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Travel")
+	FName ArrivalTag = TEXT("Default");
 
-	// 화면에 띄울 장소 이름.
-	UPROPERTY(EditAnywhere, Category = "Travel")
+	// 이동할 때 화면에 띄울 장소 이름.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Travel")
 	FText DestinationName;
 
 	// 발판 색 (에어록은 청록, 귀환 지점은 금색 등).
-	void SetPadColor(const FLinearColor& Color);
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Travel")
+	FLinearColor PadColor = FLinearColor(0.25f, 0.80f, 0.88f);
+
+	virtual void OnConstruction(const FTransform& Transform) override;
 
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Travel")

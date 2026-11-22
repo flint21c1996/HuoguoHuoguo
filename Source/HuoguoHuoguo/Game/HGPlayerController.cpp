@@ -7,14 +7,18 @@
 #include "EngineUtils.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
-#include "Explore/HGExplorerCharacter.h"
-#include "Game/HGGameMode.h"
+#include "Game/HGGameInstance.h"
 #include "HuoguoHuoguo.h"
 #include "InputAction.h"
+#include "InputKeyEventArgs.h"
 #include "InputMappingContext.h"
 #include "InputModifiers.h"
-#include "Shop/HGShopCameraPawn.h"
+#include "Kismet/GameplayStatics.h"
+#include "Player/HGExplorerCharacter.h"
+#include "Player/HGShopCameraPawn.h"
 #include "TimerManager.h"
+#include "World/HGExplorerStart.h"
+#include "World/HGShopCameraAnchor.h"
 #include "World/HGTravelPad.h"
 
 namespace
@@ -64,56 +68,123 @@ void AHGPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 게임 모드가 StartPlay에서 이미 초기화했다면 아무 일도 하지 않는다.
-	// 게임 모드보다 늦게 생긴 컨트롤러(늦은 접속 등)만 여기서 초기화된다.
-	if (!bModesInitialized)
+	if (IsLocalController())
 	{
-		if (const AHGGameMode* GM = GetWorld()->GetAuthGameMode<AHGGameMode>())
-		{
-			if (GM->GetLayout().bValid)
-			{
-				InitializeModes(GM->GetLayout());
-			}
-		}
+		InitializeFromLevel();
 	}
 }
 
-void AHGPlayerController::InitializeModes(const FHGWorldLayout& Layout)
+void AHGPlayerController::InitializeFromLevel()
 {
-	if (bModesInitialized || !IsLocalController())
+	if (bModesInitialized)
 	{
 		return;
 	}
 	bModesInitialized = true;
-	CachedLayout = Layout;
+	UWorld* World = GetWorld();
 
-	// 1) 경영 카메라: 게임 모드가 기본 Pawn으로 만들어 준 것을 쓰고, 없으면 직접 만든다.
-	ShopPawn = Cast<AHGShopCameraPawn>(GetPawn());
-	if (!ShopPawn)
+	// 1) 도착 태그: 다른 맵에서 발판을 타고 왔다면 GameInstance에 맡겨 둔 태그가 있다.
+	FName ArrivalTag = NAME_None;
+	if (UHGGameInstance* GI = GetGameInstance<UHGGameInstance>())
 	{
-		ShopPawn = GetWorld()->SpawnActor<AHGShopCameraPawn>(AHGShopCameraPawn::StaticClass(), FTransform(Layout.ShopFocus));
-		Possess(ShopPawn);
+		ArrivalTag = GI->ConsumePendingArrival();
 	}
-	ShopPawn->SnapTo(Layout.ShopFocus, Layout.ShopYaw, Layout.ShopPanRadius);
+	const bool bArrivedByTravel = !ArrivalTag.IsNone();
+	const FName WantedTag = bArrivedByTravel ? ArrivalTag : FName(TEXT("Default"));
 
-	// 2) 탐험 캐릭터: 가게 안에 미리 세워 둔다. 경영 모드에서도 월드에 보이고, 빙의만 안 된 상태이다.
+	// 2) 사장님 시작점: 태그가 맞는 것 > "Default" > 아무거나 순서로 고른다.
+	AHGExplorerStart* Start = nullptr;
+	AHGExplorerStart* Fallback = nullptr;
+	for (TActorIterator<AHGExplorerStart> It(World); It; ++It)
+	{
+		if (It->StartTag == WantedTag)
+		{
+			Start = *It;
+			break;
+		}
+		if (!Fallback || It->StartTag == TEXT("Default"))
+		{
+			Fallback = *It;
+		}
+	}
+	if (!Start)
+	{
+		Start = Fallback;
+		if (bArrivedByTravel)
+		{
+			UE_LOG(LogHuoguo, Warning, TEXT("도착 태그 '%s'인 HGExplorerStart가 없어서 다른 시작점을 쓴다"), *ArrivalTag.ToString());
+		}
+	}
+
+	FTransform StartTransform(FVector(0.f, 0.f, 120.f));
+	bool bSpaceSuit = false;
+	if (Start)
+	{
+		StartTransform = Start->GetActorTransform();
+		StartTransform.SetScale3D(FVector::OneVector);
+		bSpaceSuit = Start->bSpaceSuit;
+	}
+	else
+	{
+		UE_LOG(LogHuoguo, Warning, TEXT("맵에 HGExplorerStart가 없다. 원점에 사장님을 만든다"));
+	}
+
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-	Explorer = GetWorld()->SpawnActor<AHGExplorerCharacter>(AHGExplorerCharacter::StaticClass(), Layout.ExplorerStart, Params);
+	Explorer = World->SpawnActor<AHGExplorerCharacter>(AHGExplorerCharacter::StaticClass(), StartTransform, Params);
+	Explorer->SetSuitVisible(bSpaceSuit);
 
-	// 3) 경영 모드로 시작. 처음에는 블렌드 없이 바로 경영 카메라를 쓴다.
-	PlayMode = EHGPlayMode::Shop;
-	SetViewTarget(ShopPawn);
+	// 3) 경영 카메라: 기준점이 배치된 맵에만 만든다.
+	AHGShopCameraAnchor* Anchor = nullptr;
+	for (TActorIterator<AHGShopCameraAnchor> It(World); It; ++It)
+	{
+		Anchor = *It;
+		break;
+	}
+	if (Anchor)
+	{
+		ShopPawn = World->SpawnActor<AHGShopCameraPawn>(AHGShopCameraPawn::StaticClass(), FTransform(Anchor->GetActorLocation()));
+		ShopPawn->SnapTo(Anchor->GetActorLocation(), Anchor->GetActorRotation().Yaw, Anchor->PanRadius);
+	}
+
+	// 4) 시작 모드: 가게가 있고 발판을 타고 온 것이 아니면 경영, 그 밖에는 탐험.
+	if (ShopPawn && !bArrivedByTravel)
+	{
+		PlayMode = EHGPlayMode::Shop;
+		Possess(ShopPawn);
+		SetViewTarget(ShopPawn);
+	}
+	else
+	{
+		PlayMode = EHGPlayMode::Explore;
+		Possess(Explorer);
+		SetControlRotation(FRotator(-12.f, StartTransform.Rotator().Yaw, 0.f));
+		SetViewTarget(Explorer);
+	}
 	ApplyMappingContexts();
+	UpdateControlsHint();
 
-	ShowMessage(TEXT("경영 모드. WASD 이동, Q/E 회전, 휠 확대. Tab으로 사장님 조작"), FColor::White);
-	UE_LOG(LogHuoguo, Log, TEXT("모드 초기화 완료: 경영 모드로 시작"));
+	// 발판을 타고 왔다면 이전 맵에서 어두워진 화면을 다시 밝힌다.
+	if (bArrivedByTravel && PlayerCameraManager)
+	{
+		PlayerCameraManager->StartCameraFade(1.f, 0.f, 0.5f, FLinearColor::Black, false, false);
+	}
+
+	UE_LOG(LogHuoguo, Log, TEXT("맵 초기화 완료: %s, 시작 모드 %s, 시작점 %s, 경영 화면 %s"),
+		*World->GetMapName(), PlayMode == EHGPlayMode::Shop ? TEXT("경영") : TEXT("탐험"),
+		*GetNameSafe(Start), ShopPawn ? TEXT("있음") : TEXT("없음"));
 }
 
 void AHGPlayerController::SetPlayMode(EHGPlayMode NewMode)
 {
-	if (!ShopPawn || !Explorer || NewMode == PlayMode)
+	if (!Explorer || NewMode == PlayMode)
 	{
+		return;
+	}
+	if (!ShopPawn)
+	{
+		// 경영 카메라는 가게만 비춘다. 가게가 없는 맵(파밍지)에서는 먼저 정거장으로 돌아가야 한다.
+		ShowMessage(TEXT("여기서는 경영 화면을 열 수 없다. 금색 귀환 발판으로 정거장에 돌아가자"), FColor(255, 90, 79));
 		return;
 	}
 
@@ -134,7 +205,6 @@ void AHGPlayerController::SetPlayMode(EHGPlayMode NewMode)
 		SetControlRotation(FRotator(-15.f, Yaw, 0.f));
 		Explorer->SetActorRotation(FRotator(0.f, Yaw, 0.f));
 		SetViewTargetWithBlend(Explorer, ModeBlendTime, VTBlend_EaseInOut, ModeBlendExp);
-		ShowMessage(TEXT("탐험 모드. WASD 이동, 마우스 시점, Space 점프. 에어록 발판으로 우주에 나간다"), FColor::White);
 	}
 	else
 	{
@@ -142,10 +212,11 @@ void AHGPlayerController::SetPlayMode(EHGPlayMode NewMode)
 		ShopPawn->FocusOn(Explorer->GetActorLocation());
 		Possess(ShopPawn);
 		SetViewTargetWithBlend(ShopPawn, ModeBlendTime, VTBlend_EaseInOut, ModeBlendExp);
-		ShowMessage(TEXT("경영 모드"), FColor::White);
 	}
 
 	ApplyMappingContexts();
+	UpdateControlsHint();
+	UE_LOG(LogHuoguo, Log, TEXT("모드 전환: %s"), NewMode == EHGPlayMode::Shop ? TEXT("경영") : TEXT("탐험"));
 }
 
 void AHGPlayerController::RequestTravel(AHGTravelPad* Pad)
@@ -163,12 +234,28 @@ void AHGPlayerController::RequestTravel(AHGTravelPad* Pad)
 	}
 	ShowMessage(FString::Printf(TEXT("이동 중: %s"), *Pad->DestinationName.ToString()));
 
-	// 완전히 어두워진 뒤에 위치를 옮긴다. 람다에 값으로 복사해 넘겨서 발판이 사라져도 안전하게 한다.
-	const FTransform Destination = Pad->Destination;
-	const bool bToSpace = Pad->bLeadsToSpace;
-	GetWorldTimerManager().SetTimer(TravelTimer, FTimerDelegate::CreateWeakLambda(this, [this, Destination, bToSpace]()
+	if (Pad->DestinationLevel.IsNull())
 	{
-		FinishTravel(Destination, bToSpace);
+		UE_LOG(LogHuoguo, Error, TEXT("%s 발판에 DestinationLevel이 비어 있다"), *GetNameSafe(Pad));
+		bTraveling = false;
+		return;
+	}
+
+	// 완전히 어두워진 뒤에 맵을 연다. 도착 태그는 맵이 바뀌어도 남는 GameInstance에 맡긴다.
+	// 람다에는 값만 복사해 넘긴다. 맵이 바뀌면 발판 액터는 사라지기 때문이다.
+	const TSoftObjectPtr<UWorld> Level = Pad->DestinationLevel;
+	const FName ArrivalTag = Pad->ArrivalTag;
+	GetWorldTimerManager().SetTimer(TravelTimer, FTimerDelegate::CreateWeakLambda(this, [this, Level, ArrivalTag]()
+	{
+		if (UHGGameInstance* GI = GetGameInstance<UHGGameInstance>())
+		{
+			GI->SetPendingArrival(ArrivalTag);
+		}
+		else
+		{
+			UE_LOG(LogHuoguo, Warning, TEXT("GameInstance가 UHGGameInstance가 아니라서 도착 위치를 넘기지 못한다"));
+		}
+		UGameplayStatics::OpenLevelBySoftObjectPtr(this, Level);
 	}), TravelFadeTime + 0.05f, false);
 }
 
@@ -181,39 +268,48 @@ void AHGPlayerController::HGMode(const FString& Mode)
 
 void AHGPlayerController::HGTravel(const FString& Where)
 {
-	const bool bWantSpace = Where.Equals(TEXT("space"), ESearchCase::IgnoreCase);
 	if (PlayMode != EHGPlayMode::Explore)
 	{
 		HGMode(TEXT("explore"));
 	}
 
-	// 월드의 발판 중 원하는 방향으로 가는 것을 찾아서 밟은 것처럼 처리한다.
+	// 이 맵의 발판 중 목적지 맵 경로에 입력한 글자가 들어간 것을 찾아서 밟은 것처럼 처리한다.
 	for (TActorIterator<AHGTravelPad> It(GetWorld()); It; ++It)
 	{
-		if (It->bLeadsToSpace == bWantSpace)
+		if (Where.IsEmpty() || It->DestinationLevel.ToString().Contains(Where, ESearchCase::IgnoreCase))
 		{
 			RequestTravel(*It);
 			return;
 		}
 	}
-	ShowMessage(TEXT("이동 발판을 찾지 못했다"), FColor::Red);
+	ShowMessage(FString::Printf(TEXT("'%s'(으)로 가는 이동 발판을 찾지 못했다"), *Where), FColor::Red);
 }
 
-void AHGPlayerController::FinishTravel(FTransform Destination, bool bToSpace)
+void AHGPlayerController::HGSimKey(const FString& KeyName, float HoldSeconds)
 {
-	if (Explorer)
+	const FKey Key(*KeyName);
+	if (!Key.IsValid())
 	{
-		Explorer->TeleportWithCamera(Destination);
-		Explorer->SetSuitVisible(bToSpace);
-		SetControlRotation(FRotator(-12.f, Destination.Rotator().Yaw, 0.f));
+		ShowMessage(FString::Printf(TEXT("알 수 없는 키: %s"), *KeyName), FColor::Red);
+		return;
 	}
-	bExplorerInSpace = bToSpace;
 
-	if (PlayerCameraManager)
+	// 매핑 컨텍스트를 바꾼 직후에는 이미 눌려 있던 키를 무시하므로, 재구성이 끝나도록 잠깐 기다렸다가 누른다.
+	GetWorldTimerManager().SetTimer(SimKeyTimer, FTimerDelegate::CreateWeakLambda(this, [this, Key, HoldSeconds]()
 	{
-		PlayerCameraManager->StartCameraFade(1.f, 0.f, TravelFadeTime, FLinearColor::Black, false, false);
-	}
-	bTraveling = false;
+		const FVector Start = Explorer ? Explorer->GetActorLocation() : FVector::ZeroVector;
+		MoveEventCount = 0;
+		InputKey(FInputKeyEventArgs::CreateSimulated(Key, IE_Pressed, 1.f));
+		UE_LOG(LogHuoguo, Log, TEXT("[SimKey] %s 누름 (모드 %d)"), *Key.ToString(), static_cast<int32>(PlayMode));
+
+		GetWorldTimerManager().SetTimer(SimKeyTimer, FTimerDelegate::CreateWeakLambda(this, [this, Key, Start]()
+		{
+			InputKey(FInputKeyEventArgs::CreateSimulated(Key, IE_Released, 0.f));
+			const FVector End = Explorer ? Explorer->GetActorLocation() : FVector::ZeroVector;
+			UE_LOG(LogHuoguo, Log, TEXT("[SimKey] %s 뗌. Move 이벤트 %d회, 사장님 이동 거리 %.1f, 빙의 대상 %s, 경영 카메라 방향 %.1f"),
+				*Key.ToString(), MoveEventCount, FVector::Dist2D(Start, End), *GetNameSafe(GetPawn()), ShopPawn ? ShopPawn->GetViewYaw() : 0.f);
+		}), FMath::Max(HoldSeconds, 0.1f), false);
+	}), 0.3f, false);
 }
 
 void AHGPlayerController::SetupInputComponent()
@@ -311,12 +407,6 @@ void AHGPlayerController::ApplyMappingContexts()
 
 void AHGPlayerController::OnToggleMode(const FInputActionValue& Value)
 {
-	if (PlayMode == EHGPlayMode::Explore && bExplorerInSpace)
-	{
-		// 경영 카메라는 가게만 비춘다. 우주에 있는 동안에는 먼저 귀환해야 한다.
-		ShowMessage(TEXT("우주에서는 경영 화면으로 바꿀 수 없다. 금색 귀환 발판으로 돌아가자"), FColor(255, 90, 79));
-		return;
-	}
 	SetPlayMode(PlayMode == EHGPlayMode::Shop ? EHGPlayMode::Explore : EHGPlayMode::Shop);
 }
 
@@ -350,6 +440,7 @@ void AHGPlayerController::OnShopRotate(const FInputActionValue& Value)
 
 void AHGPlayerController::OnMove(const FInputActionValue& Value)
 {
+	++MoveEventCount;
 	if (Explorer && PlayMode == EHGPlayMode::Explore && !bTraveling)
 	{
 		Explorer->Move(Value.Get<FVector2D>());
@@ -388,4 +479,30 @@ void AHGPlayerController::ShowMessage(const FString& Text, const FColor& Color) 
 		GEngine->AddOnScreenDebugMessage(-1, 4.f, Color, Text);
 	}
 	UE_LOG(LogHuoguo, Log, TEXT("%s"), *Text);
+}
+
+void AHGPlayerController::UpdateControlsHint() const
+{
+	if (!GEngine)
+	{
+		return;
+	}
+
+	// 같은 Key로 다시 부르면 새 줄을 쌓지 않고 기존 줄의 내용만 바뀐다. 표시 시간을 길게 잡아 계속 떠 있게 한다.
+	// 정식 UI(UMG)가 생기면 이 함수만 위젯 갱신으로 바꾸면 된다.
+	constexpr uint64 HintKey = 0x4847'0001;
+	FString Hint;
+	if (PlayMode == EHGPlayMode::Shop)
+	{
+		Hint = TEXT("[경영] WASD 카메라 이동 | Q/E 회전 | 휠 확대 | Tab 사장님 조작");
+	}
+	else if (ShopPawn)
+	{
+		Hint = TEXT("[탐험] WASD 이동 | 마우스 시점 | Space 점프 | 청록 발판 = 우주로 | Tab 경영 화면");
+	}
+	else
+	{
+		Hint = TEXT("[탐험] WASD 이동 | 마우스 시점 | Space 점프 | 금색 발판 = 정거장으로 귀환");
+	}
+	GEngine->AddOnScreenDebugMessage(HintKey, 100000.f, FColor(82, 214, 232), Hint);
 }

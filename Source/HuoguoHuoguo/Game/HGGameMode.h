@@ -2,16 +2,14 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
-#include "Game/HGWorldLayout.h"
 #include "HGGameMode.generated.h"
 
 /**
- * 훠궈훠궈 기본 게임 모드.
+ * 훠궈훠궈 기본 게임 모드. 정거장 맵과 파밍지 맵 모두 이 게임 모드를 쓴다.
  *
- * 시작 순서:
- *   레벨이 열리면 플레이어 컨트롤러와 기본 Pawn(경영 카메라)이 먼저 만들어지고, 그다음 StartPlay가 불린다.
- *   StartPlay에서 회색 박스 월드를 만든 뒤 각 컨트롤러에 시작 위치를 넘겨 모드를 초기화한다.
- *   그 후 Super::StartPlay가 모든 액터의 BeginPlay를 호출한다.
+ * 기본 Pawn을 두지 않는다(DefaultPawnClass = null). 맵마다 필요한 Pawn이 다르기 때문에
+ * (가게가 있으면 경영 카메라 + 사장님, 파밍지면 사장님만) 플레이어 컨트롤러가 맵에 배치된
+ * 표식(AHGShopCameraAnchor, AHGExplorerStart)을 보고 직접 만든다.
  */
 UCLASS()
 class HUOGUOHUOGUO_API AHGGameMode : public AGameModeBase
@@ -21,15 +19,7 @@ class HUOGUOHUOGUO_API AHGGameMode : public AGameModeBase
 public:
 	AHGGameMode();
 
-	virtual void StartPlay() override;
-
-	const FHGWorldLayout& GetLayout() const { return Layout; }
-
-protected:
-	// true면 시작할 때 개발용 회색 박스 월드를 만든다. 정식 레벨에서는 꺼 둔다.
-	UPROPERTY(EditAnywhere, Category = "Dev")
-	bool bBuildGreybox = true;
-
-private:
-	FHGWorldLayout Layout;
+	// 엔진 기본 동작은 접속한 플레이어에게 DefaultPawnClass를 스폰해 빙의시키는 것이다.
+	// 이 게임은 컨트롤러가 Pawn을 직접 만들므로 아무것도 하지 않는다 (클래스 없이 스폰하려다 나는 오류 로그 방지).
+	virtual void RestartPlayer(AController* NewPlayer) override {}
 };

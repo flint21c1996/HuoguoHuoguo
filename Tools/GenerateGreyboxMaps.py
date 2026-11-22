@@ -1,0 +1,278 @@
+"""회색 박스(블록아웃) 맵과 단색 머티리얼 인스턴스를 생성한다.
+
+실행: Tools/Invoke-HGMapGen.ps1 (에디터를 닫은 상태에서 커맨드렛으로 실행)
+
+- 만드는 것
+  /Game/HG/Materials/Greybox/MI_GB_*   엔진 BasicShapeMaterial을 부모로 한 단색 머티리얼 인스턴스
+  /Game/HG/Maps/L_Station             허브 정거장 훠궈집 (경영 + 탐험 시작 지점)
+  /Game/HG/Maps/L_Asteroid_Krak7      첫 파밍지 크락-7 소행성
+- 이미 있는 맵과 머티리얼은 건드리지 않는다. 사람이 에디터에서 고친 배치를 덮어쓰지 않기 위해서이다.
+  다시 만들고 싶으면 환경 변수 HG_MAPGEN_FORCE=1을 주고 실행한다 (기존 맵을 지우고 새로 만든다).
+- 이 스크립트는 처음 배치를 잡아 주는 용도이다. 이후의 배치 수정은 에디터에서 맵을 직접 고치는 것이 기준이다.
+
+좌표 단위는 언리얼 유닛(1 = 1cm)이다. 엔진 기본 도형(Cube, Cylinder, Sphere)은 Scale 1일 때 1m 크기이고 중심이 원점이다.
+"""
+import os
+import unreal
+
+FORCE = os.environ.get("HG_MAPGEN_FORCE") == "1"
+
+MAP_DIR = "/Game/HG/Maps"
+MAT_DIR = "/Game/HG/Materials/Greybox"
+STATION_MAP = MAP_DIR + "/L_Station"
+ASTEROID_MAP = MAP_DIR + "/L_Asteroid_Krak7"
+
+asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
+asset_lib = unreal.EditorAssetLibrary
+actor_sub = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+
+MESH = {
+    "cube": unreal.load_asset("/Engine/BasicShapes/Cube.Cube"),
+    "cylinder": unreal.load_asset("/Engine/BasicShapes/Cylinder.Cylinder"),
+    "sphere": unreal.load_asset("/Engine/BasicShapes/Sphere.Sphere"),
+}
+
+# 색상 팔레트. 웹 프로토타입의 색(마라 빨강, 등불 금색, 산소 청록, 정거장 남색)을 그대로 가져왔다.
+PALETTE = {
+    "Floor": (0.70, 0.58, 0.45),
+    "Wall": (0.10, 0.14, 0.24),
+    "WallDark": (0.05, 0.07, 0.13),
+    "Broth": (0.80, 0.12, 0.06),
+    "BrothWhite": (0.92, 0.86, 0.72),
+    "Lantern": (0.95, 0.62, 0.15),
+    "Oxygen": (0.25, 0.80, 0.88),
+    "Steel": (0.55, 0.58, 0.62),
+    "Wood": (0.38, 0.14, 0.09),
+    "Rock": (0.36, 0.33, 0.30),
+    "RockDark": (0.22, 0.20, 0.19),
+    "Mushroom": (0.55, 0.40, 0.95),
+    "Kelp": (0.30, 0.85, 0.65),
+    "Chili": (0.95, 0.25, 0.15),
+    "GasPlanet": (0.75, 0.38, 0.22),
+}
+
+
+# ---------------------------------------------------------------------------
+# 머티리얼
+# ---------------------------------------------------------------------------
+def ensure_materials():
+    """색마다 MI_GB_<이름> 머티리얼 인스턴스를 만든다. 부모 셰이더를 공유하므로 셰이더를 새로 컴파일하지 않는다."""
+    parent = unreal.load_asset("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")
+    materials = {}
+    for name, (r, g, b) in PALETTE.items():
+        asset_name = "MI_GB_" + name
+        path = MAT_DIR + "/" + asset_name
+        if asset_lib.does_asset_exist(path):
+            materials[name] = unreal.load_asset(path)
+            continue
+        mi = asset_tools.create_asset(asset_name, MAT_DIR, unreal.MaterialInstanceConstant,
+                                      unreal.MaterialInstanceConstantFactoryNew())
+        unreal.MaterialEditingLibrary.set_material_instance_parent(mi, parent)
+        unreal.MaterialEditingLibrary.set_material_instance_vector_parameter_value(
+            mi, "Color", unreal.LinearColor(r, g, b, 1.0))
+        asset_lib.save_loaded_asset(mi)
+        materials[name] = mi
+        unreal.log("[MapGen] 머티리얼 생성: " + path)
+    return materials
+
+
+# ---------------------------------------------------------------------------
+# 맵 생성과 배치 도우미
+# ---------------------------------------------------------------------------
+def create_empty_map(map_path):
+    """빈 맵 에셋을 만든다. 이미 있으면 FORCE일 때만 지우고 새로 만든다. 새로 만들었으면 True."""
+    if asset_lib.does_asset_exist(map_path):
+        if not FORCE:
+            unreal.log("[MapGen] 이미 있는 맵이라 건너뜀: " + map_path)
+            return False
+        asset_lib.delete_asset(map_path)
+    package_path, asset_name = map_path.rsplit("/", 1)
+    world = asset_tools.create_asset(asset_name, package_path, unreal.World, unreal.WorldFactory())
+    asset_lib.save_loaded_asset(world)
+    unreal.log("[MapGen] 빈 맵 생성: " + map_path)
+    return True
+
+
+def rot(pitch=0.0, yaw=0.0, roll=0.0):
+    # unreal.Rotator의 위치 인자 순서는 (roll, pitch, yaw)라서 헷갈리지 않게 이름으로 넘긴다.
+    return unreal.Rotator(roll=roll, pitch=pitch, yaw=yaw)
+
+
+def label(actor, name, folder):
+    actor.set_actor_label(name)
+    actor.set_folder_path(folder)
+    return actor
+
+
+def shape(kind, name, folder, loc, scale, mat, rotation=None, collide=True):
+    """기본 도형 하나를 StaticMeshActor로 배치한다. scale 1 = 1m."""
+    actor = actor_sub.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(*loc), rotation or rot())
+    comp = actor.static_mesh_component
+    comp.set_static_mesh(MESH[kind])
+    comp.set_material(0, MATS[mat])
+    actor.set_actor_scale3d(unreal.Vector(*scale))
+    if not collide:
+        comp.set_collision_profile_name("NoCollision")
+    return label(actor, name, folder)
+
+
+def spawn(cls, name, folder, loc, rotation=None):
+    actor = actor_sub.spawn_actor_from_class(cls, unreal.Vector(*loc), rotation or rot())
+    return label(actor, name, folder)
+
+
+def add_lighting():
+    """해(방향광), 하늘 대기, 실시간 캡처 스카이 라이트. 우주 배경으로 바꾸는 것은 아트 단계에서 한다."""
+    sun = spawn(unreal.DirectionalLight, "Sun", "Lighting", (0, 0, 800), rot(pitch=-48, yaw=35))
+    sun_comp = sun.get_component_by_class(unreal.DirectionalLightComponent)
+    sun_comp.set_mobility(unreal.ComponentMobility.MOVABLE)
+    sun_comp.set_intensity(8.0)
+    sun_comp.set_editor_property("atmosphere_sun_light", True)
+
+    spawn(unreal.SkyAtmosphere, "SkyAtmosphere", "Lighting", (0, 0, 0))
+
+    # 스카이 라이트: 하늘 전체에서 오는 간접광. 이것이 없으면 해가 비추지 않는 면이 완전히 검게 나온다.
+    sky = spawn(unreal.SkyLight, "SkyLight", "Lighting", (0, 0, 600))
+    sky_comp = sky.get_component_by_class(unreal.SkyLightComponent)
+    sky_comp.set_mobility(unreal.ComponentMobility.MOVABLE)
+    sky_comp.set_editor_property("real_time_capture", True)
+    sky_comp.set_intensity(1.2)
+
+
+def set_travel(pad, dest_map, tag, display_name, color):
+    pad.set_editor_property("destination_level", unreal.load_asset(dest_map))
+    pad.set_editor_property("arrival_tag", tag)
+    pad.set_editor_property("destination_name", display_name)
+    pad.set_editor_property("pad_color", unreal.LinearColor(*PALETTE[color], 1.0))
+
+
+def explorer_start(name, loc, yaw, tag, space_suit):
+    # 캡슐 반높이가 92이므로 중심을 바닥 + 93에 두면 발이 바닥에 닿는다.
+    start = spawn(unreal.HGExplorerStart, name, "Gameplay", (loc[0], loc[1], 93), rot(yaw=yaw))
+    start.set_editor_property("start_tag", tag)
+    start.set_editor_property("space_suit", space_suit)
+    return start
+
+
+# ---------------------------------------------------------------------------
+# L_Station: 허브 정거장 훠궈집 (12m x 10m, 바닥 윗면 Z = 0, 가게 중심 = 원점)
+# ---------------------------------------------------------------------------
+HX, HY, WALL_H = 600.0, 500.0, 340.0
+
+
+def build_station():
+    add_lighting()
+    w, d = HX * 2 / 100, HY * 2 / 100
+
+    # 바닥판과 그 아래 받침대. 받침대는 정거장에서 잘라 낸 한 칸을 디오라마처럼 보여 주는 장치이다.
+    f = "Shop/Structure"
+    shape("cube", "Floor", f, (0, 0, -15), (w, d, 0.3), "Floor")
+    shape("cube", "Plinth", f, (0, 0, -150), (w + 0.6, d + 0.6, 2.4), "WallDark")
+
+    # 벽: 기본 카메라 방향(45도)에서 먼 쪽 두 면(+X, +Y)은 높게, 카메라 쪽 두 면은 발목 높이로 낮게 둔다.
+    shape("cube", "Wall_East", f, (HX + 15, 0, WALL_H / 2), (0.3, d, WALL_H / 100), "Wall")
+    shape("cube", "Wall_North", f, (0, HY + 15, WALL_H / 2), (w + 0.6, 0.3, WALL_H / 100), "Wall")
+    shape("cube", "Curb_West", f, (-HX - 15, 0, 20), (0.3, d, 0.4), "Wall")
+    shape("cube", "Curb_South", f, (0, -HY - 15, 20), (w + 0.6, 0.3, 0.4), "Wall")
+    shape("cube", "Trim_East", f, (HX - 2, 0, 35), (0.05, d, 0.06), "Oxygen", collide=False)
+    shape("cube", "Trim_North", f, (0, HY - 2, 35), (w, 0.05, 0.06), "Oxygen", collide=False)
+
+    # 주방: 카운터와 화구 2개. 냄비 위에 마라탕(빨강)과 백탕(흰색) 반원판을 얹는다.
+    f = "Shop/Kitchen"
+    shape("cube", "Counter", f, (100, 400, 45), (4.8, 1.0, 0.9), "Broth")
+    shape("cube", "Counter_Top", f, (100, 400, 93), (4.9, 1.1, 0.08), "Steel")
+    for i, x in enumerate((0, 220)):
+        shape("cylinder", "Burner_%d_Pot" % i, f, (x, 400, 111), (0.8, 0.8, 0.28), "Steel")
+        shape("cylinder", "Burner_%d_Mala" % i, f, (x - 10, 400, 126), (0.36, 0.72, 0.03), "Broth", collide=False)
+        shape("cylinder", "Burner_%d_Baitang" % i, f, (x + 10, 400, 126), (0.36, 0.72, 0.03), "BrothWhite", collide=False)
+
+    # 홀: 손님 테이블 4개와 의자.
+    f = "Shop/Hall"
+    for i, (x, y) in enumerate(((-300, -250), (100, -250), (-300, 50), (100, 50))):
+        shape("cylinder", "Table_%d_Top" % i, f, (x, y, 78), (1.56, 1.56, 0.08), "Wood")
+        shape("cylinder", "Table_%d_Leg" % i, f, (x, y, 38), (0.2, 0.2, 0.76), "Steel")
+        shape("cylinder", "Table_%d_Pot" % i, f, (x, y, 92), (0.6, 0.6, 0.2), "Steel", collide=False)
+        shape("cylinder", "Table_%d_Seat" % i, f, (x, y - 105, 22), (0.56, 0.56, 0.45), "BrothWhite")
+
+    # 재료 진열대와 도착 전광판 (+X 벽).
+    f = "Shop/Props"
+    shape("cube", "IngredientShelf", f, (510, -330, 75), (1.0, 1.3, 1.5), "Steel")
+    for i, mat in enumerate(("Mushroom", "Kelp", "Chili", "Lantern")):
+        shape("cube", "IngredientShelf_Slot_%d" % i, f, (455, -330, 40 + i * 28), (0.1, 0.9, 0.2), mat, collide=False)
+    shape("cube", "ArrivalBoard", f, (HX - 4, 0, 235), (0.05, 3.2, 1.8), "WallDark", collide=False)
+    shape("cube", "ArrivalBoard_Header", f, (HX - 6, 0, 310), (0.05, 3.0, 0.12), "Lantern", collide=False)
+    for i in range(4):
+        shape("sphere", "Lantern_%d" % i, f, (-360 + i * 240, 250, 300), (0.5, 0.5, 0.42), "Broth", collide=False)
+
+    # 에어록 문 (+Y 벽 왼쪽 구석).
+    shape("cube", "Airlock_Door", f, (-450, HY - 5, 125), (1.7, 0.2, 2.5), "Steel", collide=False)
+    shape("cube", "Airlock_Light", f, (-450, HY - 18, 245), (1.4, 0.06, 0.1), "Oxygen", collide=False)
+
+    # 게임플레이 표식
+    anchor = spawn(unreal.HGShopCameraAnchor, "ShopCameraAnchor", "Gameplay", (0, 0, 0), rot(yaw=45))
+    anchor.set_editor_property("pan_radius", 900.0)
+    explorer_start("ExplorerStart_Default", (-100, 220), 90, "Default", False)
+    explorer_start("ExplorerStart_FromAsteroid", (-450, 250), -90, "FromAsteroid", False)
+
+    pad = spawn(unreal.HGTravelPad, "TravelPad_Airlock", "Gameplay", (-450, 400, 60))
+    set_travel(pad, ASTEROID_MAP, "FromStation", "크락-7 소행성", "Oxygen")
+
+
+# ---------------------------------------------------------------------------
+# L_Asteroid_Krak7: 첫 파밍지 (지름 40m 원판, 윗면 Z = 0)
+# ---------------------------------------------------------------------------
+def build_asteroid():
+    add_lighting()
+
+    # 지형: 구형 중력은 다음 단계에서 넣는다. 지금은 납작한 원판 위를 걷는다.
+    f = "Asteroid/Ground"
+    shape("cylinder", "Ground", f, (0, 0, -50), (40, 40, 1), "Rock")
+    shape("cylinder", "Ground_Under", f, (0, 0, -350), (34, 34, 5), "RockDark", collide=False)
+
+    # 바위: 난수 시드를 고정해서 다시 생성해도 같은 배치가 나오게 한다.
+    import math
+    import random
+    rng = random.Random(7)
+    f = "Asteroid/Rocks"
+    for i in range(26):
+        angle = rng.uniform(0, 2 * math.pi)
+        radius = rng.uniform(500, 1850)
+        s = rng.uniform(0.8, 3.2)
+        loc = (math.cos(angle) * radius, math.sin(angle) * radius, s * 30)
+        r = rot(pitch=rng.uniform(-25, 25), yaw=rng.uniform(0, 360), roll=rng.uniform(-25, 25))
+        shape("cube" if i % 3 == 0 else "sphere", "Rock_%02d" % i, f, loc, (s, s * 0.9, s * 0.7), "Rock", r)
+
+    # 재료 표식: 아직 채집 기능은 없고 위치만 표시한다.
+    f = "Asteroid/Ingredients"
+    kinds = ("Mushroom", "Kelp", "Chili")
+    for i in range(9):
+        angle = rng.uniform(0, 2 * math.pi)
+        radius = rng.uniform(400, 1700)
+        loc = (math.cos(angle) * radius, math.sin(angle) * radius, 25)
+        shape("sphere", "Ingredient_%s_%d" % (kinds[i % 3], i), f, loc, (0.4, 0.4, 0.4), kinds[i % 3], collide=False)
+
+    shape("sphere", "GasPlanet", "Backdrop", (90000, 60000, 15000), (600, 600, 600), "GasPlanet", collide=False)
+
+    explorer_start("ExplorerStart_FromStation", (-1300, 0), 0, "FromStation", True)
+    pad = spawn(unreal.HGTravelPad, "TravelPad_Return", "Gameplay", (-1600, 0, 60))
+    set_travel(pad, STATION_MAP, "FromAsteroid", "훠궈훠궈 (허브 정거장)", "Lantern")
+
+
+# ---------------------------------------------------------------------------
+# 실행
+# ---------------------------------------------------------------------------
+MATS = ensure_materials()
+
+# 맵끼리 서로 참조(이동 발판의 목적지)하므로 빈 맵을 먼저 모두 만들고 나서 채운다.
+targets = []
+for map_path, builder in ((STATION_MAP, build_station), (ASTEROID_MAP, build_asteroid)):
+    if create_empty_map(map_path):
+        targets.append((map_path, builder))
+
+for map_path, builder in targets:
+    world = unreal.EditorLoadingAndSavingUtils.load_map(map_path)
+    builder()
+    unreal.EditorLoadingAndSavingUtils.save_map(world, map_path)
+    unreal.log("[MapGen] 맵 저장: " + map_path)
+
+unreal.log("[MapGen] 완료. 새로 만든 맵 %d개" % len(targets))

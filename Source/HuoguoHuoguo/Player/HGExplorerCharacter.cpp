@@ -1,4 +1,4 @@
-﻿#include "Explore/HGExplorerCharacter.h"
+﻿#include "Player/HGExplorerCharacter.h"
 
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -6,8 +6,7 @@
 #include "Engine/StaticMesh.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
-#include "Dev/HGPlaceholderPaint.h"
-#include "TimerManager.h"
+#include "Debug/HGPlaceholderPaint.h"
 #include "UObject/ConstructorHelpers.h"
 
 AHGExplorerCharacter::AHGExplorerCharacter()
@@ -115,25 +114,6 @@ void AHGExplorerCharacter::Look(const FVector2D& Input)
 	// 되도록 Pitch 입력에는 부호를 뒤집어 넣는다.
 	AddControllerYawInput(Input.X * LookSensitivity);
 	AddControllerPitchInput(-Input.Y * LookSensitivity);
-}
-
-void AHGExplorerCharacter::TeleportWithCamera(const FTransform& Destination)
-{
-	// 카메라 지연은 "이전 프레임 카메라 위치"에서 목표 위치로 조금씩 다가가는 방식이다.
-	// 수만 유닛을 순간 이동하면 카메라가 그 거리를 날아오는 것이 보이므로, 이동하는 동안만 지연을 끈다.
-	// 다음 틱에 다시 켜면 그 시점의 위치가 새 기준점이 된다.
-	Boom->bEnableCameraLag = false;
-	SetActorLocationAndRotation(Destination.GetLocation(), Destination.GetRotation(), false, nullptr, ETeleportType::TeleportPhysics);
-	GetCharacterMovement()->StopMovementImmediately();
-
-	TWeakObjectPtr<USpringArmComponent> WeakBoom = Boom;
-	GetWorldTimerManager().SetTimerForNextTick([WeakBoom]()
-	{
-		if (WeakBoom.IsValid())
-		{
-			WeakBoom->bEnableCameraLag = true;
-		}
-	});
 }
 
 void AHGExplorerCharacter::SetSuitVisible(bool bVisible)

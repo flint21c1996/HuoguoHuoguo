@@ -37,9 +37,6 @@ public:
 	// 탐험 장비(헬멧)를 보이거나 숨긴다. 가게 안에서는 앞치마 차림, 우주에서는 우주복 차림이다.
 	void SetSuitVisible(bool bVisible);
 
-	// 먼 곳으로 순간 이동한다. 카메라 지연(lag)이 이전 위치에서 새 위치까지 날아가는 것을 막는다.
-	void TeleportWithCamera(const FTransform& Destination);
-
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Camera")
 	TObjectPtr<USpringArmComponent> Boom;

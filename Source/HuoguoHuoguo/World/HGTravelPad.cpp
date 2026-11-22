@@ -2,10 +2,10 @@
 
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Debug/HGPlaceholderPaint.h"
 #include "Engine/StaticMesh.h"
-#include "Explore/HGExplorerCharacter.h"
 #include "Game/HGPlayerController.h"
-#include "Dev/HGPlaceholderPaint.h"
+#include "Player/HGExplorerCharacter.h"
 #include "UObject/ConstructorHelpers.h"
 
 AHGTravelPad::AHGTravelPad()
@@ -13,13 +13,14 @@ AHGTravelPad::AHGTravelPad()
 	PrimaryActorTick.bCanEverTick = false;
 
 	// 트리거 상자: 눈에 보이지 않는 감지 영역. 폰(캐릭터)과의 겹침만 감지한다.
+	// 상자의 중심이 바닥에서 60 위에 오도록, 발판 액터는 바닥 높이 + 60에 배치한다.
 	Trigger = CreateDefaultSubobject<UBoxComponent>(TEXT("Trigger"));
 	Trigger->SetBoxExtent(FVector(70.f, 70.f, 60.f));
 	Trigger->SetCollisionProfileName(TEXT("Trigger"));
 	Trigger->SetGenerateOverlapEvents(true);
 	SetRootComponent(Trigger);
 
-	// 바닥에 깔리는 얇은 판. 충돌은 없고 위치 표시만 한다.
+	// 바닥에 깔리는 얇은 원판. 충돌은 없고 위치 표시만 한다.
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	PadMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PadMesh"));
 	PadMesh->SetupAttachment(Trigger);
@@ -34,9 +35,12 @@ AHGTravelPad::AHGTravelPad()
 	Trigger->OnComponentBeginOverlap.AddDynamic(this, &AHGTravelPad::HandleBeginOverlap);
 }
 
-void AHGTravelPad::SetPadColor(const FLinearColor& Color)
+void AHGTravelPad::OnConstruction(const FTransform& Transform)
 {
-	HGPlaceholder::Paint(PadMesh, Color);
+	Super::OnConstruction(Transform);
+
+	// 에디터에서 PadColor를 바꾸면 바로 색이 바뀌도록 생성 스크립트 단계에서 칠한다.
+	HGPlaceholder::Paint(PadMesh, PadColor);
 }
 
 void AHGTravelPad::HandleBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp,
