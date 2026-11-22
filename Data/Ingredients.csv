@@ -1,0 +1,4 @@
+﻿Name,DisplayName,Color,Price,HomeBiome
+SporeMushroom,포자버섯,"(R=0.55,G=0.40,B=0.95,A=1.0)",12,Fungal
+FrostKelp,서리다시마,"(R=0.30,G=0.85,B=0.65,A=1.0)",10,Ice
+EmberChili,불씨고추,"(R=0.95,G=0.25,B=0.15,A=1.0)",15,Rock

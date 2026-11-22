@@ -5,6 +5,7 @@
 #include "EngineUtils.h"
 #include "EnhancedInputComponent.h"
 #include "Explore/HGExplorerCharacter.h"
+#include "Game/HGGameInstance.h"
 #include "HuoguoHuoguo.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
@@ -71,7 +72,7 @@ void AHGExplorePlayerController::InitializeFromLevel()
 	bShowMouseCursor = false;
 	SetInputMode(FInputModeGameOnly());
 
-	SetControlsHint(TEXT("[탐험] WASD 이동 | 마우스 시점 | Space 점프 | 금색 발판 = 정거장으로 귀환"));
+	SetControlsHint(TEXT("[탐험] WASD 이동 | 마우스 시점 | Space 점프 | E 재료 채집 | 금색 발판 = 정거장으로 귀환"));
 	if (!ArrivalTag.IsNone())
 	{
 		FadeInAfterTravel();
@@ -138,6 +139,95 @@ void AHGExplorePlayerController::SetupInputComponent()
 	Input->BindAction(LookAction, ETriggerEvent::Triggered, this, &AHGExplorePlayerController::OnLook);
 	Input->BindAction(JumpAction, ETriggerEvent::Started, this, &AHGExplorePlayerController::OnJumpStarted);
 	Input->BindAction(JumpAction, ETriggerEvent::Completed, this, &AHGExplorePlayerController::OnJumpCompleted);
+	Input->BindAction(InteractAction, ETriggerEvent::Started, this, &AHGExplorePlayerController::OnInteract);
+}
+
+void AHGExplorePlayerController::PlayerTick(float DeltaTime)
+{
+	Super::PlayerTick(DeltaTime);
+	UpdateHarvestTarget();
+}
+
+void AHGExplorePlayerController::UpdateHarvestTarget()
+{
+	NearestMarker = INDEX_NONE;
+	if (Planet && Explorer && !bTraveling)
+	{
+		NearestMarker = Planet->FindNearestIngredient(Explorer->GetActorLocation(), HarvestRadius);
+	}
+
+	FString Prompt;
+	if (NearestMarker != INDEX_NONE)
+	{
+		UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
+		const FName Id = Planet->GetMarkerIngredient(NearestMarker);
+		Prompt = FString::Printf(TEXT("[E] 채집: %s"), GI ? *GI->GetIngredientName(Id) : *Id.ToString());
+	}
+	SetPrompt(Prompt);
+}
+
+void AHGExplorePlayerController::OnInteract(const FInputActionValue& Value)
+{
+	if (bTraveling)
+	{
+		return;
+	}
+	// 누른 순간의 위치로 다시 찾는다. 안내가 뜬 뒤 한 프레임 사이에 움직였을 수 있기 때문이다.
+	UpdateHarvestTarget();
+	if (NearestMarker == INDEX_NONE)
+	{
+		return;
+	}
+
+	const int32 MarkerId = NearestMarker;
+	const FName Id = Planet->HarvestIngredient(MarkerId);
+	if (Id.IsNone())
+	{
+		return;
+	}
+
+	UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
+	if (GI)
+	{
+		GI->AddToBag(Id, 1);
+	}
+	ShowMessage(FString::Printf(TEXT("채집: %s +1 (가방에 %d개, 이 행성 남은 재료 %d)"),
+		GI ? *GI->GetIngredientName(Id) : *Id.ToString(), GI ? GI->GetBagCount(Id) : 1, Planet->GetRemainingIngredientCount()));
+	UE_LOG(LogHuoguo, Log, TEXT("[Harvest] 표식 %d (%s), 사장님과 거리 %.0f"), MarkerId, *Id.ToString(),
+		FVector::Dist(Explorer->GetActorLocation(), Planet->GetMarkerLocation(MarkerId)));
+
+	UpdateHarvestTarget();
+}
+
+void AHGExplorePlayerController::HGWarpToIngredient()
+{
+	if (!Planet || !Explorer)
+	{
+		ShowMessage(TEXT("행성 맵이 아니다"), FColor::Red);
+		return;
+	}
+	const int32 MarkerId = Planet->FindNearestIngredient(Explorer->GetActorLocation(), TNumericLimits<float>::Max());
+	if (MarkerId == INDEX_NONE)
+	{
+		ShowMessage(TEXT("남은 재료가 없다"), FColor::Red);
+		return;
+	}
+
+	// 표식에서 행성 바깥쪽(위)으로 조금 띄운 곳에 옆으로 1m 비켜 세운다. 중력이 지표로 끌어내린다.
+	const FVector MarkerLocation = Planet->GetMarkerLocation(MarkerId);
+	const FVector Up = (MarkerLocation - Planet->GetGravityCenter()).GetSafeNormal();
+	const FVector Side = FVector::CrossProduct(Up, FMath::Abs(Up.Z) < 0.9 ? FVector::UpVector : FVector::ForwardVector).GetSafeNormal();
+	Explorer->TeleportTo(MarkerLocation + Side * 100.f + Up * 150.f, Explorer->GetActorRotation(), false, true);
+	UE_LOG(LogHuoguo, Log, TEXT("[Harvest] 표식 %d (%s) 옆으로 이동"), MarkerId, *Planet->GetMarkerIngredient(MarkerId).ToString());
+}
+
+void AHGExplorePlayerController::HGIngredients()
+{
+	if (Planet)
+	{
+		UE_LOG(LogHuoguo, Log, TEXT("[Harvest] %s: 남은 재료 표식 %d"), *Planet->GetPlanet().Name, Planet->GetRemainingIngredientCount());
+	}
+	HGBag();
 }
 
 void AHGExplorePlayerController::BuildInputObjects()
@@ -150,11 +240,14 @@ void AHGExplorePlayerController::BuildInputObjects()
 	MoveAction = MakeAction(TEXT("IA_Explore_Move"), EInputActionValueType::Axis2D);
 	LookAction = MakeAction(TEXT("IA_Explore_Look"), EInputActionValueType::Axis2D);
 	JumpAction = MakeAction(TEXT("IA_Explore_Jump"), EInputActionValueType::Boolean);
+	InteractAction = MakeAction(TEXT("IA_Explore_Interact"), EInputActionValueType::Boolean);
 
 	ExploreContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Explore"));
 	MapWASD(ExploreContext, MoveAction);
 	ExploreContext->MapKey(LookAction, EKeys::Mouse2D);
 	ExploreContext->MapKey(JumpAction, EKeys::SpaceBar);
+	// 상호작용(채집). 나중에 IMC_ 에셋으로 옮기면 키를 바꿀 수 있다.
+	ExploreContext->MapKey(InteractAction, EKeys::E);
 }
 
 void AHGExplorePlayerController::OnMove(const FInputActionValue& Value)

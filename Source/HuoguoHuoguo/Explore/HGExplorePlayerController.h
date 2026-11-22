@@ -14,7 +14,8 @@ class AHGPlanetGenerator;
  *   AHGPlanetGenerator가 있으면 행성 맵이다. 지형을 먼저 만들게 한 뒤 착륙 지점(북극)에 사장님을 만들고 구형 중력을 켠다.
  *   없으면 평면 맵으로 보고 도착 태그에 맞는 AHGExplorerStart에 만든다.
  *
- * 조작: WASD 이동(카메라 기준), 마우스 시점, Space 점프. 커서는 숨긴다.
+ * 조작: WASD 이동(카메라 기준), 마우스 시점, Space 점프, E 채집. 커서는 숨긴다.
+ * 재료 표식 가까이(HarvestRadius 안) 가면 "E 채집: <재료>" 안내가 뜨고, E를 누르면 가장 가까운 표식을 캐서 가방에 넣는다.
  * 정거장으로 돌아가는 길은 착륙 지점 옆의 금색 귀환 발판뿐이다. 경영 화면으로 바로 전환하는 키는 없다.
  */
 UCLASS()
@@ -22,9 +23,25 @@ class HUOGUOHUOGUO_API AHGExplorePlayerController : public AHGPlayerControllerBa
 {
 	GENERATED_BODY()
 
+public:
+	// HGWarpToIngredient : 시험용. 가장 가까운 캐지 않은 재료 표식 바로 옆으로 사장님을 옮긴다.
+	UFUNCTION(Exec)
+	void HGWarpToIngredient();
+
+	// HGIngredients : 이 행성의 남은 재료 표식 수와 가방 내용을 로그로 낸다.
+	UFUNCTION(Exec)
+	void HGIngredients();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
+
+	// 매 프레임 가까운 재료 표식을 찾아 채집 안내를 갱신한다.
+	virtual void PlayerTick(float DeltaTime) override;
+
+	// 재료를 캘 수 있는 거리(cm, 사장님 캡슐 중심에서 표식 중심까지). 캡슐 중심이 바닥에서 약 92 위라서 바로 옆에 서면 100 안팎이다.
+	UPROPERTY(EditAnywhere, Category = "Harvest")
+	float HarvestRadius = 220.f;
 
 	/**
 	 * 시점 회전 처리. 행성 위에서는 중력 기준 좌표계 안에서 처리한다.
@@ -42,6 +59,13 @@ private:
 	UPROPERTY() TObjectPtr<UInputAction> MoveAction;
 	UPROPERTY() TObjectPtr<UInputAction> LookAction;
 	UPROPERTY() TObjectPtr<UInputAction> JumpAction;
+	UPROPERTY() TObjectPtr<UInputAction> InteractAction;
+
+	// 지금 캘 수 있는 가장 가까운 표식 번호 (PlayerTick에서 갱신). 없으면 INDEX_NONE.
+	int32 NearestMarker = INDEX_NONE;
+
+	// 가장 가까운 표식을 다시 찾고 안내 문구를 맞춘다.
+	void UpdateHarvestTarget();
 
 	UPROPERTY() TObjectPtr<AHGExplorerCharacter> Explorer;
 
@@ -59,4 +83,5 @@ private:
 	void OnLook(const FInputActionValue& Value);
 	void OnJumpStarted(const FInputActionValue& Value);
 	void OnJumpCompleted(const FInputActionValue& Value);
+	void OnInteract(const FInputActionValue& Value);
 };

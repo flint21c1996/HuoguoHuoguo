@@ -8,6 +8,16 @@
 class UProceduralMeshComponent;
 class UInstancedStaticMeshComponent;
 class UBillboardComponent;
+class UStaticMesh;
+
+// 행성 위 재료 표식 하나. 번호(배열 순서)는 시드로 정해지므로 같은 행성이면 언제나 같은 표식을 가리킨다.
+struct FHGIngredientMarker
+{
+	int32 Kind = 0;               // IngredientIds/IngredientMarkers의 몇 번째 재료인지
+	int32 Instance = INDEX_NONE;  // 그 재료 인스턴스 메시 안의 인스턴스 번호
+	FVector Location = FVector::ZeroVector; // 월드 위치
+	bool bHarvested = false;
+};
 
 /**
  * 행성 표면 맵(L_PlanetSurface)에 하나 배치하는 절차적 행성.
@@ -48,6 +58,22 @@ public:
 
 	// 중심에서 Dir(단위 벡터) 방향으로 지표까지의 거리. 지형 메시와 배치가 모두 이 함수 하나를 쓴다.
 	float SurfaceRadiusAt(const FVector& Dir) const;
+
+	// ---- 재료 채집 ----
+
+	// From에서 MaxDistance 안에 있는 가장 가까운 캐지 않은 재료 표식 번호. 없으면 INDEX_NONE.
+	int32 FindNearestIngredient(const FVector& From, float MaxDistance) const;
+
+	// 표식의 재료 ID(DataTable 행 이름)와 위치. 번호가 틀리면 NAME_None / 원점.
+	FName GetMarkerIngredient(int32 MarkerId) const;
+	FVector GetMarkerLocation(int32 MarkerId) const;
+
+	// 표식을 캔다: 표식을 숨기고 GameInstance에 "이 행성의 이 번호는 캤음"을 남긴다. 캔 재료 ID를 돌려준다.
+	// 이미 캤거나 번호가 틀리면 NAME_None.
+	FName HarvestIngredient(int32 MarkerId);
+
+	// 남은(캐지 않은) 재료 표식 수.
+	int32 GetRemainingIngredientCount() const;
 
 protected:
 	virtual void BeginPlay() override;
@@ -91,8 +117,16 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Planet")
 	TObjectPtr<UInstancedStaticMeshComponent> BlockRocks;
 
-	// 재료 표식. 0 = 버섯, 1 = 해초, 2 = 고추. 아직 채집 기능은 없고 위치만 보여 준다.
-	UPROPERTY(VisibleAnywhere, Category = "Planet")
+	// 재료 표식 모양 (구). 재료 종류마다 이 모양의 인스턴스 메시를 실행 중에 하나씩 만들고 재료 색으로 칠한다.
+	UPROPERTY(EditAnywhere, Category = "Planet|Ingredients")
+	TObjectPtr<UStaticMesh> MarkerMesh;
+
+	// 재료 표식 크기 배율 (1 = 지름 1m).
+	UPROPERTY(EditAnywhere, Category = "Planet|Ingredients")
+	float MarkerScale = 0.4f;
+
+	// 재료 종류별 인스턴스 메시. IngredientIds와 같은 순서이고, 재료 DataTable의 행 순서를 따른다.
+	UPROPERTY(Transient, VisibleInstanceOnly, Category = "Planet|Ingredients")
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> IngredientMarkers;
 
 #if WITH_EDITORONLY_DATA
@@ -106,6 +140,13 @@ private:
 
 	// 시드마다 노이즈 공간의 다른 곳을 읽도록 옮기는 값. 같은 노이즈 함수로 서로 다른 지형을 얻는다.
 	FVector NoiseOffset = FVector::ZeroVector;
+
+	// 재료 종류 ID (IngredientMarkers와 같은 순서)와 표식 전체.
+	TArray<FName> IngredientIds;
+	TArray<FHGIngredientMarker> Markers;
+
+	// 표식 하나를 안 보이게 한다 (인스턴스 크기를 0으로). 인스턴스를 지우면 뒤 번호가 당겨지므로 지우지 않는다.
+	void HideMarker(int32 MarkerId);
 
 	void ChoosePlanet();
 	void BuildTerrain();

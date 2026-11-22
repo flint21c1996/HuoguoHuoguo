@@ -31,6 +31,12 @@ void AHGPlayerControllerBase::BeginPlay()
 	}
 }
 
+void AHGPlayerControllerBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	SetPrompt(FString());
+	Super::EndPlay(EndPlayReason);
+}
+
 void AHGPlayerControllerBase::HGSeq(const FString& Commands)
 {
 	UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
@@ -240,6 +246,37 @@ void AHGPlayerControllerBase::SetControlsHint(const FString& Hint) const
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(HintKey, 100000.f, FColor(82, 214, 232), Hint);
+	}
+}
+
+void AHGPlayerControllerBase::SetPrompt(const FString& Prompt)
+{
+	if (Prompt == CurrentPrompt)
+	{
+		return;
+	}
+	CurrentPrompt = Prompt;
+
+	// 조작 안내(0x48470001), 행성 목록(0x48470002)과 겹치지 않는 고정 키. 정식 UI가 생기면 화면 가운데 아래 위젯으로 옮긴다.
+	constexpr uint64 PromptKey = 0x4847'0003;
+	if (GEngine)
+	{
+		if (Prompt.IsEmpty())
+		{
+			GEngine->RemoveOnScreenDebugMessage(PromptKey);
+		}
+		else
+		{
+			GEngine->AddOnScreenDebugMessage(PromptKey, 100000.f, FColor(150, 255, 150), Prompt);
+		}
+	}
+}
+
+void AHGPlayerControllerBase::HGBag()
+{
+	if (UHGGameInstance* GI = GetGameInstance<UHGGameInstance>())
+	{
+		ShowMessage(FString::Printf(TEXT("가방: %s"), *GI->DescribeBag()));
 	}
 }
 

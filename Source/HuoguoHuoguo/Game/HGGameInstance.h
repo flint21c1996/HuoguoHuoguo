@@ -5,6 +5,9 @@
 #include "Planet/HGPlanetTypes.h"
 #include "HGGameInstance.generated.h"
 
+class UDataTable;
+struct FHGIngredientRow;
+
 /**
  * 정거장 가게에 놓인 가구 하나의 기록.
  * 가구 클래스는 경영 파트(Shop/) 것이지만 공통 폴더가 경영 파트를 include하지 않도록 AActor 클래스로 들고 있는다.
@@ -39,6 +42,8 @@ class HUOGUOHUOGUO_API UHGGameInstance : public UGameInstance
 	GENERATED_BODY()
 
 public:
+	UHGGameInstance();
+
 	// 이동 발판이 맵을 열기 직전에 도착 태그를 맡겨 둔다.
 	void SetPendingArrival(FName ArrivalTag) { PendingArrivalTag = ArrivalTag; }
 
@@ -85,7 +90,53 @@ public:
 	// 개발 명령 HGSeq가 아직 실행하지 않은 명령들. 맵을 옮겨도 남아서 새 맵의 컨트롤러가 이어서 실행한다.
 	TArray<FString>& GetDevSequence() { return DevSequence; }
 
+	// ---- 재료 ----
+
+	// 재료 DataTable (처음 부를 때 불러온다). 에셋이 없으면 nullptr이고 에러 로그를 한 번 남긴다.
+	const UDataTable* GetIngredientTable();
+
+	// 재료 ID(DataTable 행 이름)로 한 줄을 찾는다. 없으면 nullptr.
+	const FHGIngredientRow* FindIngredient(FName IngredientId);
+
+	// 화면에 쓸 재료 이름. 표에 없으면 ID 그대로.
+	FString GetIngredientName(FName IngredientId);
+
+	// 가방: 재료 ID -> 개수. 맵을 옮겨도 남는다 (행성에서 캐서 정거장으로 가져간다).
+	void AddToBag(FName IngredientId, int32 Count = 1);
+	int32 GetBagCount(FName IngredientId) const;
+	const TMap<FName, int32>& GetBag() const { return Bag; }
+
+	// "포자버섯 3, 서리다시마 1" 처럼 한 줄로. 비었으면 "비어 있음". 순서는 DataTable 행 순서.
+	FString DescribeBag();
+
+	/**
+	 * 캔 재료 표식 기록. 행성 시드별로 표식 번호(생성기가 시드로 만든 순서)를 모은다.
+	 * 같은 행성에 다시 내려가면 생성기가 이 번호의 표식을 숨긴다. 행성은 시드로 매번 같은 자리에 같은 표식을 만들기 때문에
+	 * "무엇을 캤는지"만 남기면 된다. 행성이 정거장을 떠나면(궤도 주기가 넘어가 목록에서 빠지면) 그 행성 기록은 지운다.
+	 */
+	bool IsMarkerHarvested(int32 PlanetSeed, int32 MarkerId) const;
+	void MarkHarvested(int32 PlanetSeed, int32 MarkerId);
+	int32 GetHarvestedCount(int32 PlanetSeed) const;
+
+protected:
+	// 재료 DataTable 경로. 기본값은 /Game/HG/Data/DT_Ingredients (Tools/GenerateGreyboxMaps.py가 Data/Ingredients.csv로 만든다).
+	UPROPERTY(EditDefaultsOnly, Category = "Data")
+	TSoftObjectPtr<UDataTable> IngredientTable;
+
 private:
+	UPROPERTY()
+	TObjectPtr<UDataTable> LoadedIngredientTable;
+
+	bool bIngredientTableMissingLogged = false;
+
+	UPROPERTY()
+	TMap<FName, int32> Bag;
+
+	TMap<int32, TSet<int32>> HarvestedByPlanet;
+
+	// 지금 접근 목록에 없는 행성의 캔 재료 기록을 지운다.
+	void ForgetDepartedPlanets();
+
 	UPROPERTY()
 	TArray<FHGPlacedFurniture> ShopLayout;
 

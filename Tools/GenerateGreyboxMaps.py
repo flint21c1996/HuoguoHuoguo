@@ -388,8 +388,51 @@ def upgrade_station():
 
 
 # ---------------------------------------------------------------------------
+# 데이터 표: 저장소의 CSV(Data/*.csv)를 DataTable 에셋으로 읽어 들인다
+# ---------------------------------------------------------------------------
+DATA_DIR = "/Game/HG/Data"
+
+# (에셋 이름, CSV 파일, 행 구조체). CSV가 원본이고 DataTable은 매번 CSV 내용으로 다시 채운다.
+# 그래서 재료 값을 바꿀 때는 CSV만 고치고 이 스크립트를 다시 돌린다. 에디터에서 DataTable을 직접 고치지 않는다.
+DATA_TABLES = (
+    ("DT_Ingredients", "Data/Ingredients.csv", "HGIngredientRow"),
+)
+
+
+def ensure_data_tables():
+    project_dir = unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir())
+    asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
+    for asset_name, csv_rel, struct_name in DATA_TABLES:
+        csv_path = os.path.join(project_dir, csv_rel)
+        if not os.path.isfile(csv_path):
+            unreal.log_error("[MapGen] CSV 없음: " + csv_path)
+            continue
+        asset_path = "%s/%s" % (DATA_DIR, asset_name)
+        row_struct = getattr(unreal, struct_name).static_struct()
+        if unreal.EditorAssetLibrary.does_asset_exist(asset_path):
+            table = unreal.load_asset(asset_path)
+        else:
+            factory = unreal.DataTableFactory()
+            factory.set_editor_property("struct", row_struct)
+            table = asset_tools.create_asset(asset_name, DATA_DIR, unreal.DataTable, factory)
+        # CSV 내용과 이미 같으면 저장하지 않는다 (바이너리 에셋이 괜히 바뀌지 않게).
+        before = unreal.DataTableFunctionLibrary.export_data_table_to_csv_string(table)
+        if not unreal.DataTableFunctionLibrary.fill_data_table_from_csv_file(table, csv_path, row_struct):
+            unreal.log_error("[MapGen] CSV를 읽지 못했다: " + csv_path)
+            continue
+        after = unreal.DataTableFunctionLibrary.export_data_table_to_csv_string(table)
+        rows = unreal.DataTableFunctionLibrary.get_data_table_row_names(table)
+        if before != after:
+            unreal.EditorAssetLibrary.save_loaded_asset(table, False)
+            unreal.log("[MapGen] %s <- %s (%d행) 저장" % (asset_path, csv_rel, len(rows)))
+        else:
+            unreal.log("[MapGen] %s 는 CSV와 같아서 저장하지 않음 (%d행)" % (asset_path, len(rows)))
+
+
+# ---------------------------------------------------------------------------
 # 실행
 # ---------------------------------------------------------------------------
+ensure_data_tables()
 MATS = ensure_materials()
 
 # 맵끼리 서로 참조(이동 발판의 목적지)하므로 빈 맵을 먼저 모두 만들고 나서 채운다.

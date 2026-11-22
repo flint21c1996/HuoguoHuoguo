@@ -81,6 +81,9 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 
+	// 정거장을 떠날 때 접근 행성 목록 메시지를 지운다 (화면 디버그 메시지는 엔진 전역이라 행성 맵까지 남는다).
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 	// 배치 모드에서 매 프레임 커서 위치로 유령 가구를 옮긴다.
 	virtual void PlayerTick(float DeltaTime) override;
 

@@ -29,6 +29,21 @@ void AHGShopPlayerController::BeginPlay()
 	}
 }
 
+namespace
+{
+	// 정거장 화면에 계속 떠 있는 접근 행성 목록의 고정 메시지 키.
+	constexpr uint64 PlanetBoardKey = 0x4847'0002;
+}
+
+void AHGShopPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (GEngine)
+	{
+		GEngine->RemoveOnScreenDebugMessage(PlanetBoardKey);
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
 void AHGShopPlayerController::InitializeFromLevel()
 {
 	UWorld* World = GetWorld();
@@ -82,6 +97,8 @@ void AHGShopPlayerController::InitializeFromLevel()
 	if (bArrivedByTravel)
 	{
 		FadeInAfterTravel();
+		// 행성에서 가져온 재료를 알려 준다. 진열대/창고 UI가 생기면 그쪽으로 옮긴다.
+		HGBag();
 	}
 
 	UE_LOG(LogHuoguo, Log, TEXT("경영 파트 시작: %s, 시작점 %s, 카메라 Yaw %.1f"), *World->GetMapName(), *GetNameSafe(Start), Yaw);
@@ -427,14 +444,13 @@ void AHGShopPlayerController::UpdatePlanetBoard() const
 	}
 
 	// 정거장의 "도착 전광판" 임시판. 정식 UI가 생기면 이 내용을 위젯으로 옮긴다.
-	constexpr uint64 BoardKey = 0x4847'0002;
 	FString Board = FString::Printf(TEXT("== 접근 중인 행성 (궤도 주기 %d) | 숫자 키로 선택, 청록 발판으로 다이빙 =="), GI->GetOrbitCycle());
 	const TArray<FHGPlanetSeed>& Planets = GI->GetApproachingPlanets();
 	for (int32 i = 0; i < Planets.Num(); ++i)
 	{
 		Board += FString::Printf(TEXT("\n%s %d) %s"), i == GI->GetSelectedPlanetIndex() ? TEXT(">>") : TEXT("  "), i + 1, *Planets[i].Describe());
 	}
-	GEngine->AddOnScreenDebugMessage(BoardKey, 100000.f, FColor(244, 178, 62), Board);
+	GEngine->AddOnScreenDebugMessage(PlanetBoardKey, 100000.f, FColor(244, 178, 62), Board);
 }
 
 FString AHGShopPlayerController::DescribeForSimKey() const

@@ -28,7 +28,7 @@
   - HGPlaceholderPaint (.h/.cpp)
 - 알려진 문제와 다음 할 일
 
-### [Explore - 탐험 파트 (3인칭으로 행성을 걷는다)](Source/Explore.md)
+### [Explore - 탐험 파트 (3인칭으로 행성을 걷고 재료를 캔다)](Source/Explore.md)
 
 - 역할
 - 파일
@@ -38,13 +38,14 @@
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
 
-### [Game - 두 파트의 공통 부모(게임 모드, 컨트롤러)와 GameInstance](Source/Game.md)
+### [Game - 두 파트의 공통 부모(게임 모드, 컨트롤러), GameInstance, 재료 데이터 구조](Source/Game.md)
 
 - 역할
 - 파일
   - HGGameModeBase (.h/.cpp)
   - HGPlayerControllerBase (.h/.cpp)
   - HGGameInstance (.h/.cpp)
+  - HGIngredientTypes.h
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
 
@@ -96,6 +97,15 @@
 
 ## Content
 
+### [Data - 밸런스 데이터 (CSV 원본과 DataTable 에셋)](Content/Data.md)
+
+- 역할
+- 파일
+  - Data/Ingredients.csv - 재료
+  - Content/HG/Data/DT_Ingredients - 재료 DataTable
+- 흐름 / 규칙
+- 알려진 문제와 다음 할 일
+
 ### [Maps - 맵 에셋](Content/Maps.md)
 
 - 역할
@@ -119,7 +129,7 @@
 - 스크립트
   - Invoke-HGBuild.ps1 - C++ 빌드
   - Invoke-HGMapGen.ps1 - 블록아웃 맵 생성
-  - GenerateGreyboxMaps.py - 맵/머티리얼 생성 내용
+  - GenerateGreyboxMaps.py - 맵/머티리얼/데이터 표 생성 내용
   - Update-HGDocsIndex.ps1 - 문서 색인 생성
 - 기타 명령
 - 알려진 문제와 다음 할 일

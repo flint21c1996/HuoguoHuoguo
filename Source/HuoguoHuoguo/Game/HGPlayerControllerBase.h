@@ -50,8 +50,15 @@ public:
 	UFUNCTION(Exec)
 	void HGSeq(const FString& Commands);
 
+	// HGBag : 가방(캔 재료) 내용을 로그와 화면에 낸다.
+	UFUNCTION(Exec)
+	void HGBag();
+
 protected:
 	virtual void BeginPlay() override;
+
+	// 맵을 떠날 때 상호작용 안내를 지운다. 화면 디버그 메시지는 엔진 전역이라 맵이 바뀌어도 남기 때문이다.
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	UPROPERTY(EditAnywhere, Category = "Debug")
 	float DevSequenceInterval = 1.5f;
@@ -85,6 +92,9 @@ protected:
 	// 화면 위쪽에 계속 떠 있는 조작 안내 한 줄.
 	void SetControlsHint(const FString& Hint) const;
 
+	// 상호작용 안내 한 줄 ("E 채집: 포자버섯"). 빈 문자열이면 지운다. 같은 내용이면 다시 그리지 않는다.
+	void SetPrompt(const FString& Prompt);
+
 	// HGSimKey 결과 로그에 덧붙일 파트별 정보 (카메라 방향, 행성 중심 거리 등).
 	virtual FString DescribeForSimKey() const { return FString(); }
 
@@ -111,6 +121,7 @@ private:
 	FTimerHandle TravelTimer;
 	FTimerHandle SimKeyTimer;
 	FTimerHandle DevSequenceTimer;
+	FString CurrentPrompt;
 
 	// HGSeq 대기열에서 명령 하나를 꺼내 실행한다. 비었으면 타이머를 멈춘다.
 	void RunNextDevCommand();

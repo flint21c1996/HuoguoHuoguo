@@ -33,7 +33,8 @@ B로 가구 배치 모드에 들어가 식탁과 의자를 놓고, 옮기고, �
   - `PlayerTick`에서 매 프레임 `UHGFurniturePlacer::UpdateCursor`를 부른다. 조작 안내 줄에 손에 든 가구를 표시한다.
 - `UpdateRotation`: 기본 처리 뒤 Pitch를 `CameraPitch`로, Roll을 0으로 되돌린다. 회전은 Z축 기준 Yaw만 남는다.
 - 접근 행성 목록: 화면 고정 메시지(키 `0x48470002`), 고른 행성 앞에 `>>`.
-- 맵 시작 때 `FurniturePlacer->RestoreLayout()`으로 가구 배치를 되돌린다.
+- 맵 시작 때 `FurniturePlacer->RestoreLayout()`으로 가구 배치를 되돌린다. 이동해 왔으면(행성에서 귀환) 가방 내용을 메시지로 보여 준다 (`HGBag`).
+- `EndPlay`: 접근 행성 목록 메시지(`0x48470002`)를 지운다. 지우지 않으면 행성 맵 화면에도 남았다.
 - 개발 명령: `HGPlanets`, `HGSelectPlanet <번호>`, `HGDive [번호]`, `HGNextCycle`, `HGRotate <도>`,
   `HGBuild`(배치 모드 전환), `HGBuildSelect <번호>`, `HGCursorAt <X> <Y>`(시험용 커서를 바닥 지점에), `HGCursorClear`, `HGFurniture`(배치 기록과 커서 상태 로그).
 - `DescribeForSimKey`: 카메라 Yaw/Pitch.

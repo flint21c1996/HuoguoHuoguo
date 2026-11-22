@@ -3,9 +3,11 @@
 #include "Components/BillboardComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Debug/HGPlaceholderPaint.h"
+#include "Engine/DataTable.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Game/HGGameInstance.h"
+#include "Game/HGIngredientTypes.h"
 #include "HuoguoHuoguo.h"
 #include "HAL/PlatformTime.h"
 #include "Math/RandomStream.h"
@@ -84,9 +86,9 @@ AHGPlanetGenerator::AHGPlanetGenerator()
 	};
 	RoundRocks = MakeIsm(TEXT("RoundRocks"), SphereMesh.Object, true);
 	BlockRocks = MakeIsm(TEXT("BlockRocks"), CubeMesh.Object, true);
-	IngredientMarkers.Add(MakeIsm(TEXT("Ingredient_Mushroom"), SphereMesh.Object, false));
-	IngredientMarkers.Add(MakeIsm(TEXT("Ingredient_Kelp"), SphereMesh.Object, false));
-	IngredientMarkers.Add(MakeIsm(TEXT("Ingredient_Chili"), SphereMesh.Object, false));
+
+	// 재료 표식 인스턴스 메시는 재료 DataTable을 읽은 뒤 종류 수만큼 실행 중에 만든다 (ScatterProps).
+	MarkerMesh = SphereMesh.Object;
 
 #if WITH_EDITORONLY_DATA
 	EditorIcon = CreateEditorOnlyDefaultSubobject<UBillboardComponent>(TEXT("EditorIcon"));
@@ -302,26 +304,144 @@ void AHGPlanetGenerator::ScatterProps()
 		(i % 3 == 0 ? BlockRocks : RoundRocks)->AddInstance(T);
 	}
 
-	// 재료: 생물 군계에 맞는 재료가 절반, 나머지는 고르게 섞는다.
-	const int32 Favored = Planet.Biome == EHGPlanetBiome::Fungal ? 0 : (Planet.Biome == EHGPlanetBiome::Ice ? 1 : 2);
-	for (UInstancedStaticMeshComponent* Ism : IngredientMarkers)
-	{
-		Ism->ClearInstances();
-	}
-	for (int32 i = 0; i < IngredientCount; ++i)
-	{
-		const int32 Kind = Rng.FRand() < 0.5f ? Favored : Rng.RandRange(0, 2);
-		const FVector Dir = RandomDir();
-		IngredientMarkers[Kind]->AddInstance(SurfaceTransform(Dir, -22.f, FVector(0.4f)));
-	}
-
 	HGPlaceholder::Paint(RoundRocks, HGPlanet::RockColor(Planet.Biome));
 	HGPlaceholder::Paint(BlockRocks, HGPlanet::RockColor(Planet.Biome) * 0.8f);
-	HGPlaceholder::Paint(IngredientMarkers[0], FLinearColor(0.55f, 0.40f, 0.95f));
-	HGPlaceholder::Paint(IngredientMarkers[1], FLinearColor(0.30f, 0.85f, 0.65f));
-	HGPlaceholder::Paint(IngredientMarkers[2], FLinearColor(0.95f, 0.25f, 0.15f));
 
-	UE_LOG(LogHuoguo, Log, TEXT("행성 배치: 바위 %d, 재료 %d"), RockCount, IngredientCount);
+	// 재료: 재료 DataTable의 종류마다 인스턴스 메시를 하나 만든다.
+	for (UInstancedStaticMeshComponent* Ism : IngredientMarkers)
+	{
+		if (Ism)
+		{
+			Ism->DestroyComponent();
+		}
+	}
+	IngredientMarkers.Reset();
+	IngredientIds.Reset();
+	Markers.Reset();
+
+	UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
+	const UDataTable* Table = GI ? GI->GetIngredientTable() : nullptr;
+	if (!Table || Table->GetRowNames().IsEmpty())
+	{
+		UE_LOG(LogHuoguo, Log, TEXT("행성 배치: 바위 %d, 재료 없음 (재료 DataTable이 없거나 비었다)"), RockCount);
+		return;
+	}
+
+	// 이 행성 군계가 고향(HomeBiome)인 재료 종류들.
+	TArray<int32> NativeKinds;
+	for (const FName& Id : Table->GetRowNames())
+	{
+		const FHGIngredientRow* Row = Table->FindRow<FHGIngredientRow>(Id, TEXT("ScatterProps"));
+		const int32 Kind = IngredientIds.Add(Id);
+
+		UInstancedStaticMeshComponent* Ism = NewObject<UInstancedStaticMeshComponent>(this, *FString::Printf(TEXT("Ingredient_%s"), *Id.ToString()));
+		Ism->SetStaticMesh(MarkerMesh);
+		Ism->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Ism->SetupAttachment(Terrain);
+		Ism->RegisterComponent();
+		HGPlaceholder::Paint(Ism, Row ? Row->Color : FLinearColor::White);
+		IngredientMarkers.Add(Ism);
+
+		if (Row && Row->HomeBiome == Planet.Biome)
+		{
+			NativeKinds.Add(Kind);
+		}
+	}
+
+	// 표식 배치: 절반은 이 군계의 고향 재료, 나머지는 모든 재료에서 고르게.
+	// 표식 번호 i는 이 순서로 정해진다. 같은 시드면 같은 번호에 같은 재료, 같은 자리가 나온다 (캔 기록이 이 번호를 쓴다).
+	const FTransform ToWorld = Terrain->GetComponentTransform();
+	int32 HiddenCount = 0;
+	for (int32 i = 0; i < IngredientCount; ++i)
+	{
+		const bool bNative = !NativeKinds.IsEmpty() && Rng.FRand() < 0.5f;
+		const int32 Kind = bNative ? NativeKinds[Rng.RandRange(0, NativeKinds.Num() - 1)] : Rng.RandRange(0, IngredientIds.Num() - 1);
+		const FVector Dir = RandomDir();
+		// 표식은 지표에서 살짝 떠 있게 한다 (Sink가 음수면 지표 위로 올라간다).
+		const FTransform Local = SurfaceTransform(Dir, -22.f, FVector(MarkerScale));
+
+		FHGIngredientMarker& Marker = Markers.AddDefaulted_GetRef();
+		Marker.Kind = Kind;
+		Marker.Instance = IngredientMarkers[Kind]->AddInstance(Local);
+		Marker.Location = ToWorld.TransformPosition(Local.GetLocation());
+
+		// 이 행성에서 이미 캔 표식은 처음부터 숨긴다.
+		if (GI && GI->IsMarkerHarvested(Planet.Seed, i))
+		{
+			HideMarker(i);
+			++HiddenCount;
+		}
+	}
+
+	UE_LOG(LogHuoguo, Log, TEXT("행성 배치: 바위 %d, 재료 %d (종류 %d, 이미 캔 것 %d개 숨김)"), RockCount, IngredientCount, IngredientIds.Num(), HiddenCount);
+}
+
+void AHGPlanetGenerator::HideMarker(int32 MarkerId)
+{
+	FHGIngredientMarker& Marker = Markers[MarkerId];
+	Marker.bHarvested = true;
+
+	// 크기 0 변환으로 바꿔 그리지 않게 한다. 인스턴스를 지우면(RemoveInstance) 뒤 인스턴스 번호가 당겨져서
+	// 다른 표식이 가리키는 번호가 틀어지므로 지우지 않는다.
+	UInstancedStaticMeshComponent* Ism = IngredientMarkers[Marker.Kind];
+	FTransform Hidden;
+	Ism->GetInstanceTransform(Marker.Instance, Hidden, false);
+	Hidden.SetScale3D(FVector::ZeroVector);
+	Ism->UpdateInstanceTransform(Marker.Instance, Hidden, false, true);
+}
+
+int32 AHGPlanetGenerator::FindNearestIngredient(const FVector& From, float MaxDistance) const
+{
+	int32 Best = INDEX_NONE;
+	double BestDistSq = FMath::Square(static_cast<double>(MaxDistance));
+	for (int32 i = 0; i < Markers.Num(); ++i)
+	{
+		if (Markers[i].bHarvested)
+		{
+			continue;
+		}
+		const double DistSq = FVector::DistSquared(From, Markers[i].Location);
+		if (DistSq <= BestDistSq)
+		{
+			BestDistSq = DistSq;
+			Best = i;
+		}
+	}
+	return Best;
+}
+
+FName AHGPlanetGenerator::GetMarkerIngredient(int32 MarkerId) const
+{
+	return Markers.IsValidIndex(MarkerId) ? IngredientIds[Markers[MarkerId].Kind] : NAME_None;
+}
+
+FVector AHGPlanetGenerator::GetMarkerLocation(int32 MarkerId) const
+{
+	return Markers.IsValidIndex(MarkerId) ? Markers[MarkerId].Location : FVector::ZeroVector;
+}
+
+FName AHGPlanetGenerator::HarvestIngredient(int32 MarkerId)
+{
+	if (!Markers.IsValidIndex(MarkerId) || Markers[MarkerId].bHarvested)
+	{
+		return NAME_None;
+	}
+	HideMarker(MarkerId);
+	if (UHGGameInstance* GI = GetGameInstance<UHGGameInstance>())
+	{
+		GI->MarkHarvested(Planet.Seed, MarkerId);
+	}
+	return IngredientIds[Markers[MarkerId].Kind];
+}
+
+int32 AHGPlanetGenerator::GetRemainingIngredientCount() const
+{
+	int32 Count = 0;
+	for (const FHGIngredientMarker& Marker : Markers)
+	{
+		Count += Marker.bHarvested ? 0 : 1;
+	}
+	return Count;
 }
 
 FTransform AHGPlanetGenerator::GetLandingTransform() const
