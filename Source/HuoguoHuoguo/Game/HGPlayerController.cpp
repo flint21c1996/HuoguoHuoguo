@@ -14,6 +14,7 @@
 #include "InputMappingContext.h"
 #include "InputModifiers.h"
 #include "Kismet/GameplayStatics.h"
+#include "Planet/HGPlanetGenerator.h"
 #include "Player/HGExplorerCharacter.h"
 #include "Player/HGShopCameraPawn.h"
 #include "TimerManager.h"
@@ -92,10 +93,17 @@ void AHGPlayerController::InitializeFromLevel()
 	const bool bArrivedByTravel = !ArrivalTag.IsNone();
 	const FName WantedTag = bArrivedByTravel ? ArrivalTag : FName(TEXT("Default"));
 
-	// 2) 사장님 시작점: 태그가 맞는 것 > "Default" > 아무거나 순서로 고른다.
+	// 행성 표면 맵: 시작점을 맵에 미리 둘 수 없다(지형이 시드마다 다르다). 생성기가 지형을 먼저 만들고 착륙 지점을 알려 준다.
+	for (TActorIterator<AHGPlanetGenerator> It(World); It; ++It)
+	{
+		Planet = *It;
+		break;
+	}
+
+	// 2) 사장님 시작점: 태그가 맞는 것 > "Default" > 아무거나 순서로 고른다. 행성 맵이면 착륙 지점을 쓰므로 찾지 않는다.
 	AHGExplorerStart* Start = nullptr;
 	AHGExplorerStart* Fallback = nullptr;
-	for (TActorIterator<AHGExplorerStart> It(World); It; ++It)
+	for (TActorIterator<AHGExplorerStart> It(World); It && !Planet; ++It)
 	{
 		if (It->StartTag == WantedTag)
 		{
@@ -110,7 +118,7 @@ void AHGPlayerController::InitializeFromLevel()
 	if (!Start)
 	{
 		Start = Fallback;
-		if (bArrivedByTravel)
+		if (bArrivedByTravel && !Planet)
 		{
 			UE_LOG(LogHuoguo, Warning, TEXT("도착 태그 '%s'인 HGExplorerStart가 없어서 다른 시작점을 쓴다"), *ArrivalTag.ToString());
 		}
@@ -118,7 +126,13 @@ void AHGPlayerController::InitializeFromLevel()
 
 	FTransform StartTransform(FVector(0.f, 0.f, 120.f));
 	bool bSpaceSuit = false;
-	if (Start)
+	if (Planet)
+	{
+		Planet->EnsureGenerated();
+		StartTransform = Planet->GetLandingTransform();
+		bSpaceSuit = true;
+	}
+	else if (Start)
 	{
 		StartTransform = Start->GetActorTransform();
 		StartTransform.SetScale3D(FVector::OneVector);
@@ -126,13 +140,17 @@ void AHGPlayerController::InitializeFromLevel()
 	}
 	else
 	{
-		UE_LOG(LogHuoguo, Warning, TEXT("맵에 HGExplorerStart가 없다. 원점에 사장님을 만든다"));
+		UE_LOG(LogHuoguo, Warning, TEXT("맵에 HGExplorerStart도 HGPlanetGenerator도 없다. 원점에 사장님을 만든다"));
 	}
 
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 	Explorer = World->SpawnActor<AHGExplorerCharacter>(AHGExplorerCharacter::StaticClass(), StartTransform, Params);
 	Explorer->SetSuitVisible(bSpaceSuit);
+	if (Planet)
+	{
+		Explorer->SetPlanetGravity(Planet->GetGravityCenter(), Planet->GetPlanet().GravityScale);
+	}
 
 	// 3) 경영 카메라: 기준점이 배치된 맵에만 만든다.
 	AHGShopCameraAnchor* Anchor = nullptr;
@@ -163,6 +181,7 @@ void AHGPlayerController::InitializeFromLevel()
 	}
 	ApplyMappingContexts();
 	UpdateControlsHint();
+	UpdatePlanetBoard();
 
 	// 발판을 타고 왔다면 이전 맵에서 어두워진 화면을 다시 밝힌다.
 	if (bArrivedByTravel && PlayerCameraManager)
@@ -170,9 +189,15 @@ void AHGPlayerController::InitializeFromLevel()
 		PlayerCameraManager->StartCameraFade(1.f, 0.f, 0.5f, FLinearColor::Black, false, false);
 	}
 
-	UE_LOG(LogHuoguo, Log, TEXT("맵 초기화 완료: %s, 시작 모드 %s, 시작점 %s, 경영 화면 %s"),
+	if (Planet)
+	{
+		ShowMessage(FString::Printf(TEXT("착륙: %s"), *Planet->GetPlanet().Describe()));
+	}
+
+	UE_LOG(LogHuoguo, Log, TEXT("맵 초기화 완료: %s, 시작 모드 %s, 시작점 %s, 경영 화면 %s, 행성 %s"),
 		*World->GetMapName(), PlayMode == EHGPlayMode::Shop ? TEXT("경영") : TEXT("탐험"),
-		*GetNameSafe(Start), ShopPawn ? TEXT("있음") : TEXT("없음"));
+		Planet ? TEXT("착륙 지점") : *GetNameSafe(Start), ShopPawn ? TEXT("있음") : TEXT("없음"),
+		Planet ? *Planet->GetPlanet().Name : TEXT("없음"));
 }
 
 void AHGPlayerController::SetPlayMode(EHGPlayMode NewMode)
@@ -225,6 +250,27 @@ void AHGPlayerController::RequestTravel(AHGTravelPad* Pad)
 	{
 		return;
 	}
+	if (Pad->DestinationLevel.IsNull())
+	{
+		UE_LOG(LogHuoguo, Error, TEXT("%s 발판에 DestinationLevel이 비어 있다"), *GetNameSafe(Pad));
+		return;
+	}
+
+	FString DestinationText = Pad->DestinationName.ToString();
+	if (Pad->bDiveToSelectedPlanet)
+	{
+		// 다이빙 발판: 지금 고른 접근 행성을 표면 맵에 넘길 값으로 고정한다. 표면 맵의 생성기가 이것으로 지형을 만든다.
+		UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
+		const FHGPlanetSeed* Selected = GI ? GI->GetSelectedPlanet() : nullptr;
+		if (!Selected)
+		{
+			ShowMessage(TEXT("다이빙할 행성이 없다"), FColor::Red);
+			return;
+		}
+		GI->CommitDiveToSelectedPlanet();
+		DestinationText = FString::Printf(TEXT("%s (다이빙)"), *Selected->Name);
+	}
+
 	bTraveling = true;
 
 	// 화면을 검게 만든다. bHoldWhenFinished = true라서 다음 페이드를 부를 때까지 검은 화면을 유지한다.
@@ -232,14 +278,7 @@ void AHGPlayerController::RequestTravel(AHGTravelPad* Pad)
 	{
 		PlayerCameraManager->StartCameraFade(0.f, 1.f, TravelFadeTime, FLinearColor::Black, false, true);
 	}
-	ShowMessage(FString::Printf(TEXT("이동 중: %s"), *Pad->DestinationName.ToString()));
-
-	if (Pad->DestinationLevel.IsNull())
-	{
-		UE_LOG(LogHuoguo, Error, TEXT("%s 발판에 DestinationLevel이 비어 있다"), *GetNameSafe(Pad));
-		bTraveling = false;
-		return;
-	}
+	ShowMessage(FString::Printf(TEXT("이동 중: %s"), *DestinationText));
 
 	// 완전히 어두워진 뒤에 맵을 연다. 도착 태그는 맵이 바뀌어도 남는 GameInstance에 맡긴다.
 	// 람다에는 값만 복사해 넘긴다. 맵이 바뀌면 발판 액터는 사라지기 때문이다.
@@ -306,10 +345,108 @@ void AHGPlayerController::HGSimKey(const FString& KeyName, float HoldSeconds)
 		{
 			InputKey(FInputKeyEventArgs::CreateSimulated(Key, IE_Released, 0.f));
 			const FVector End = Explorer ? Explorer->GetActorLocation() : FVector::ZeroVector;
-			UE_LOG(LogHuoguo, Log, TEXT("[SimKey] %s 뗌. Move 이벤트 %d회, 사장님 이동 거리 %.1f, 빙의 대상 %s, 경영 카메라 방향 %.1f"),
-				*Key.ToString(), MoveEventCount, FVector::Dist2D(Start, End), *GetNameSafe(GetPawn()), ShopPawn ? ShopPawn->GetViewYaw() : 0.f);
+			// 행성 위에서는 높이 방향도 월드 축과 다르므로 3D 거리로 잰다. 행성 중심에서의 거리도 같이 남겨 땅에 붙어 있는지 확인한다.
+			UE_LOG(LogHuoguo, Log, TEXT("[SimKey] %s 뗌. Move 이벤트 %d회, 사장님 이동 거리 %.1f, 빙의 대상 %s, 경영 카메라 방향 %.1f, 행성 중심 거리 %.1f, 위치 %s"),
+				*Key.ToString(), MoveEventCount, FVector::Dist(Start, End), *GetNameSafe(GetPawn()), ShopPawn ? ShopPawn->GetViewYaw() : 0.f,
+				Planet ? FVector::Dist(End, Planet->GetGravityCenter()) : 0.0, *End.ToCompactString());
 		}), FMath::Max(HoldSeconds, 0.1f), false);
 	}), 0.3f, false);
+}
+
+void AHGPlayerController::HGPlanets()
+{
+	UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
+	if (!GI)
+	{
+		return;
+	}
+	const TArray<FHGPlanetSeed>& Planets = GI->GetApproachingPlanets();
+	for (int32 i = 0; i < Planets.Num(); ++i)
+	{
+		UE_LOG(LogHuoguo, Log, TEXT("[Planets] %s%d) %s, 시드 %d"),
+			i == GI->GetSelectedPlanetIndex() ? TEXT(">") : TEXT(" "), i + 1, *Planets[i].Describe(), Planets[i].Seed);
+	}
+	UpdatePlanetBoard();
+}
+
+void AHGPlayerController::HGSelectPlanet(int32 Number)
+{
+	UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
+	if (!GI || !GI->SelectPlanet(Number - 1))
+	{
+		ShowMessage(FString::Printf(TEXT("%d번 행성은 목록에 없다"), Number), FColor::Red);
+		return;
+	}
+	ShowMessage(FString::Printf(TEXT("다이빙 목적지: %s"), *GI->GetSelectedPlanet()->Describe()));
+	UpdatePlanetBoard();
+}
+
+void AHGPlayerController::HGDive(int32 Number)
+{
+	if (Number > 0)
+	{
+		HGSelectPlanet(Number);
+	}
+	if (PlayMode != EHGPlayMode::Explore)
+	{
+		HGMode(TEXT("explore"));
+	}
+	for (TActorIterator<AHGTravelPad> It(GetWorld()); It; ++It)
+	{
+		if (It->bDiveToSelectedPlanet)
+		{
+			RequestTravel(*It);
+			return;
+		}
+	}
+	ShowMessage(TEXT("이 맵에는 다이빙 발판이 없다"), FColor::Red);
+}
+
+void AHGPlayerController::HGNextCycle()
+{
+	if (UHGGameInstance* GI = GetGameInstance<UHGGameInstance>())
+	{
+		GI->AdvanceOrbitCycle();
+		ShowMessage(FString::Printf(TEXT("궤도 주기 %d: 새 행성들이 접근한다"), GI->GetOrbitCycle()));
+		HGPlanets();
+	}
+}
+
+void AHGPlayerController::UpdateRotation(float DeltaTime)
+{
+	if (!Explorer || GetPawn() != Explorer || !Explorer->HasPlanetGravity())
+	{
+		bHasLastGravityFrame = false;
+		Super::UpdateRotation(DeltaTime);
+		return;
+	}
+
+	const FQuat Frame = Explorer->GetGravityFrame();
+	FQuat ViewWorld = GetControlRotation().Quaternion();
+
+	// 지난 프레임 이후 중력 기준이 돌아간 만큼 시점도 함께 돌린다.
+	// 이게 없으면 행성을 한 바퀴 걷는 동안 카메라는 처음 방향에 머물러서 점점 땅을 파고들거나 하늘만 보게 된다.
+	if (bHasLastGravityFrame)
+	{
+		ViewWorld = Frame * LastGravityFrame.Inverse() * ViewWorld;
+	}
+	LastGravityFrame = Frame;
+	bHasLastGravityFrame = true;
+
+	// 중력 좌표계에서 기본 처리(마우스 입력 더하기, Pitch 제한)를 하고 Roll은 버린 뒤 월드로 돌려놓는다.
+	FRotator ViewLocal = (Frame.Inverse() * ViewWorld).Rotator();
+	FRotator DeltaRot(RotationInput);
+	if (PlayerCameraManager)
+	{
+		PlayerCameraManager->ProcessViewRotation(DeltaTime, ViewLocal, DeltaRot);
+	}
+	ViewLocal.Roll = 0.f;
+	SetControlRotation((Frame * ViewLocal.Quaternion()).Rotator());
+
+	if (APawn* const P = GetPawnOrSpectator())
+	{
+		P->FaceRotation(GetControlRotation(), DeltaTime);
+	}
 }
 
 void AHGPlayerController::SetupInputComponent()
@@ -333,6 +470,7 @@ void AHGPlayerController::SetupInputComponent()
 	Input->BindAction(LookAction, ETriggerEvent::Triggered, this, &AHGPlayerController::OnLook);
 	Input->BindAction(JumpAction, ETriggerEvent::Started, this, &AHGPlayerController::OnJumpStarted);
 	Input->BindAction(JumpAction, ETriggerEvent::Completed, this, &AHGPlayerController::OnJumpCompleted);
+	Input->BindAction(SelectPlanetAction, ETriggerEvent::Started, this, &AHGPlayerController::OnSelectPlanet);
 }
 
 void AHGPlayerController::BuildInputObjects()
@@ -356,10 +494,25 @@ void AHGPlayerController::BuildInputObjects()
 	MoveAction = MakeAction(TEXT("IA_Move"), EInputActionValueType::Axis2D);
 	LookAction = MakeAction(TEXT("IA_Look"), EInputActionValueType::Axis2D);
 	JumpAction = MakeAction(TEXT("IA_Jump"), EInputActionValueType::Boolean);
+	SelectPlanetAction = MakeAction(TEXT("IA_SelectPlanet"), EInputActionValueType::Axis1D);
 
 	// 공용: 어느 모드에서든 살아 있는 키.
 	CommonContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Common"));
 	CommonContext->MapKey(ToggleModeAction, EKeys::Tab);
+
+	// 숫자 키 1~4: 액션 하나에 키 네 개를 매핑하고, 배율 수정자로 키마다 값을 1, 2, 3, 4로 다르게 낸다.
+	// 받는 쪽은 값을 반올림해서 몇 번 행성인지 안다. 키마다 액션을 따로 만들지 않아도 된다.
+	const FKey NumberKeys[] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four };
+	for (int32 i = 0; i < UE_ARRAY_COUNT(NumberKeys); ++i)
+	{
+		FEnhancedActionKeyMapping& Mapping = CommonContext->MapKey(SelectPlanetAction, NumberKeys[i]);
+		if (i > 0)
+		{
+			UInputModifierScalar* Scalar = NewObject<UInputModifierScalar>(this);
+			Scalar->Scalar = FVector(i + 1, 1.0, 1.0);
+			Mapping.Modifiers.Add(Scalar);
+		}
+	}
 
 	// 경영: 카메라 이동, 회전, 확대.
 	ShopContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Shop"));
@@ -471,6 +624,40 @@ void AHGPlayerController::OnJumpCompleted(const FInputActionValue& Value)
 	}
 }
 
+void AHGPlayerController::OnSelectPlanet(const FInputActionValue& Value)
+{
+	// 정거장에서만 고른다. 행성 위에서는 이미 내려와 있으므로 무시한다.
+	if (ShopPawn)
+	{
+		HGSelectPlanet(FMath::RoundToInt(Value.Get<float>()));
+	}
+}
+
+void AHGPlayerController::UpdatePlanetBoard() const
+{
+	if (!GEngine)
+	{
+		return;
+	}
+
+	constexpr uint64 BoardKey = 0x4847'0002;
+	UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
+	if (!ShopPawn || !GI)
+	{
+		GEngine->RemoveOnScreenDebugMessage(BoardKey);
+		return;
+	}
+
+	// 정거장의 "도착 전광판" 임시판. 정식 UI가 생기면 이 내용을 위젯으로 옮긴다.
+	FString Board = FString::Printf(TEXT("== 접근 중인 행성 (궤도 주기 %d) | 숫자 키로 선택, 청록 발판으로 다이빙 =="), GI->GetOrbitCycle());
+	const TArray<FHGPlanetSeed>& Planets = GI->GetApproachingPlanets();
+	for (int32 i = 0; i < Planets.Num(); ++i)
+	{
+		Board += FString::Printf(TEXT("\n%s %d) %s"), i == GI->GetSelectedPlanetIndex() ? TEXT(">>") : TEXT("  "), i + 1, *Planets[i].Describe());
+	}
+	GEngine->AddOnScreenDebugMessage(BoardKey, 100000.f, FColor(244, 178, 62), Board);
+}
+
 void AHGPlayerController::ShowMessage(const FString& Text, const FColor& Color) const
 {
 	// 임시 안내 문구. 정식 UI(UMG)가 생기기 전까지 화면 왼쪽 위 디버그 메시지로 보여 준다.
@@ -494,11 +681,11 @@ void AHGPlayerController::UpdateControlsHint() const
 	FString Hint;
 	if (PlayMode == EHGPlayMode::Shop)
 	{
-		Hint = TEXT("[경영] WASD 카메라 이동 | Q/E 회전 | 휠 확대 | Tab 사장님 조작");
+		Hint = TEXT("[경영] WASD 카메라 이동 | Q/E 회전 | 휠 확대 | 1~4 행성 선택 | Tab 사장님 조작");
 	}
 	else if (ShopPawn)
 	{
-		Hint = TEXT("[탐험] WASD 이동 | 마우스 시점 | Space 점프 | 청록 발판 = 우주로 | Tab 경영 화면");
+		Hint = TEXT("[탐험] WASD 이동 | 마우스 시점 | Space 점프 | 1~4 행성 선택 | 청록 발판 = 다이빙 | Tab 경영 화면");
 	}
 	else
 	{

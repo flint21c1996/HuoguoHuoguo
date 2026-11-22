@@ -10,8 +10,8 @@ class UCapsuleComponent;
 /**
  * 탐험 캐릭터(사장님)가 나타나는 위치. 맵마다 여러 개 둘 수 있고 StartTag로 구분한다.
  *
- * 예) 정거장 맵: "Default"(가게 안), "FromAsteroid"(에어록 앞, 소행성에서 돌아왔을 때)
- *     소행성 맵: "FromStation"(셔틀 착륙 지점)
+ * 예) 정거장 맵: "Default"(가게 안), "FromPlanet"(에어록 앞, 행성에서 돌아왔을 때)
+ *     행성 표면 맵에는 두지 않는다. 지형이 시드마다 달라서 AHGPlanetGenerator가 착륙 지점을 정한다.
  *
  * 이동 발판의 ArrivalTag와 같은 태그를 가진 시작점에 도착한다.
  * 에디터에서 캡슐이 보이므로 캐릭터 크기 그대로 바닥에 맞춰 배치하면 된다.

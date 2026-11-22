@@ -11,7 +11,8 @@
 
 AHGExplorerCharacter::AHGExplorerCharacter()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	// 행성 위에서는 매 프레임 중력 방향을 갱신해야 한다. 정거장에서는 Tick이 바로 끝난다.
+	PrimaryActorTick.bCanEverTick = true;
 
 	// 캡슐: 언리얼 캐릭터의 실제 충돌 몸체. 반지름 40, 반높이 92면 약 1.84m 키다.
 	GetCapsuleComponent()->InitCapsuleSize(40.f, 92.f);
@@ -23,7 +24,8 @@ AHGExplorerCharacter::AHGExplorerCharacter()
 
 	UCharacterMovementComponent* Move = GetCharacterMovement();
 	Move->bOrientRotationToMovement = true;
-	Move->RotationRate = FRotator(0.f, 720.f, 0.f);
+	// Pitch/Roll 회전 속도도 준다. 행성 위에서 중력 방향이 바뀌면 몸을 새 "위"에 맞춰 세워야 하기 때문이다.
+	Move->RotationRate = FRotator(720.f, 720.f, 720.f);
 	Move->MaxWalkSpeed = 520.f;
 	Move->JumpZVelocity = 620.f;
 	// 공중 제어: 점프 중에도 방향을 어느 정도 틀 수 있게 한다. 저중력 행성 느낌은 GravityScale로 따로 조절한다.
@@ -100,9 +102,12 @@ void AHGExplorerCharacter::Move(const FVector2D& Input)
 	}
 
 	// 카메라가 보는 수평 방향을 기준으로 앞/오른쪽을 구한다. 위아래 시선(Pitch)은 이동 방향에 섞지 않는다.
-	const FRotator YawOnly(0.f, Controller->GetControlRotation().Yaw, 0.f);
-	const FVector Forward = FRotationMatrix(YawOnly).GetUnitAxis(EAxis::X);
-	const FVector Right = FRotationMatrix(YawOnly).GetUnitAxis(EAxis::Y);
+	// "수평"은 중력 기준이다. 시점 회전을 중력 좌표계로 옮겨서 Yaw만 남긴 뒤 다시 월드로 돌려놓는다.
+	// 정거장에서는 GravityFrame이 항등 회전이라 월드 Yaw를 그대로 쓰는 것과 같다.
+	const FQuat LocalView = GravityFrame.Inverse() * Controller->GetControlRotation().Quaternion();
+	const FRotator YawOnly(0.f, LocalView.Rotator().Yaw, 0.f);
+	const FVector Forward = GravityFrame.RotateVector(FRotationMatrix(YawOnly).GetUnitAxis(EAxis::X));
+	const FVector Right = GravityFrame.RotateVector(FRotationMatrix(YawOnly).GetUnitAxis(EAxis::Y));
 
 	AddMovementInput(Forward, Input.Y);
 	AddMovementInput(Right, Input.X);
@@ -122,4 +127,38 @@ void AHGExplorerCharacter::SetSuitVisible(bool bVisible)
 	{
 		PlaceholderHelmet->SetVisibility(bVisible);
 	}
+}
+
+void AHGExplorerCharacter::SetPlanetGravity(const FVector& Center, float GravityScale)
+{
+	bPlanetGravity = true;
+	PlanetCenter = Center;
+	GetCharacterMovement()->GravityScale = GravityScale;
+
+	// 처음 한 번은 현재 위치의 "위"에 맞춘 기준을 바로 만든다. 이후로는 Tick에서 변화량만 이어 붙인다.
+	const FVector Up = (GetActorLocation() - PlanetCenter).GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+	GravityFrame = FQuat::FindBetweenNormals(FVector::UpVector, Up);
+	UpdatePlanetGravity();
+}
+
+void AHGExplorerCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (bPlanetGravity)
+	{
+		UpdatePlanetGravity();
+	}
+}
+
+void AHGExplorerCharacter::UpdatePlanetGravity()
+{
+	const FVector Up = (GetActorLocation() - PlanetCenter).GetSafeNormal(UE_SMALL_NUMBER, GravityFrame.GetUpVector());
+
+	// 지난 프레임의 위 방향에서 이번 위 방향으로 돌린 만큼만 기준 좌표계를 돌린다 (평행 이동).
+	// 한 프레임 동안의 변화는 아주 작으므로 FindBetweenNormals가 불안정해지는 반대 방향(180도) 경우가 생기지 않는다.
+	const FQuat Delta = FQuat::FindBetweenNormals(GravityFrame.GetUpVector(), Up);
+	GravityFrame = (Delta * GravityFrame).GetNormalized();
+
+	// 이동 컴포넌트는 같은 프레임 뒤에 틱하므로(캐릭터가 선행 조건) 바뀐 방향이 이번 이동에 바로 쓰인다.
+	GetCharacterMovement()->SetGravityDirection(-Up);
 }

@@ -33,6 +33,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Travel")
 	FText DestinationName;
 
+	// 켜면 다이빙 발판이 된다. 정거장에서 고른 접근 행성을 목적지 맵(행성 표면 맵)에 넘기고, 안내 문구도 그 행성 이름을 쓴다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Travel")
+	bool bDiveToSelectedPlanet = false;
+
 	// 발판 색 (에어록은 청록, 귀환 지점은 금색 등).
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Travel")
 	FLinearColor PadColor = FLinearColor(0.25f, 0.80f, 0.88f);

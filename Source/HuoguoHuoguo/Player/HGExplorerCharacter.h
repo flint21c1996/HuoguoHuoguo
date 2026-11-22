@@ -37,6 +37,26 @@ public:
 	// 탐험 장비(헬멧)를 보이거나 숨긴다. 가게 안에서는 앞치마 차림, 우주에서는 우주복 차림이다.
 	void SetSuitVisible(bool bVisible);
 
+	/**
+	 * 행성 중력을 켠다. 이후 매 프레임 중력 방향을 "내 위치 -> Center"로 바꾼다.
+	 * 캐릭터 이동 컴포넌트(UE 5.4부터)가 임의 중력 방향을 지원하므로, 방향만 바꿔 주면 걷기, 점프, 경사 판정이
+	 * 그 방향 기준으로 동작한다. 몸이 기울어진 지면에 맞춰 서는 것도 이동 컴포넌트가 처리한다.
+	 */
+	void SetPlanetGravity(const FVector& Center, float GravityScale);
+
+	bool HasPlanetGravity() const { return bPlanetGravity; }
+
+	/**
+	 * 중력 기준 좌표계. 이 회전을 적용하면 "중력 기준의 위(Z)"가 월드에서 지표 바깥 방향이 된다.
+	 *
+	 * 매 프레임 바뀐 만큼만 이어서 돌리기 때문에(평행 이동) 행성 어디를 걸어도 기준이 갑자기 뒤집히지 않는다.
+	 * "아래 방향에서 바로 계산"하면 행성 반대편(남극)에서 기준 축이 180도 튀는 특이점이 생긴다.
+	 * 중력이 없으면(정거장) 항등 회전이다.
+	 */
+	FQuat GetGravityFrame() const { return GravityFrame; }
+
+	virtual void Tick(float DeltaSeconds) override;
+
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Camera")
 	TObjectPtr<USpringArmComponent> Boom;
@@ -64,4 +84,11 @@ protected:
 	float LookSensitivity = 1.f;
 
 	virtual void BeginPlay() override;
+
+private:
+	bool bPlanetGravity = false;
+	FVector PlanetCenter = FVector::ZeroVector;
+	FQuat GravityFrame = FQuat::Identity;
+
+	void UpdatePlanetGravity();
 };

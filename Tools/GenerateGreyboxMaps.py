@@ -5,9 +5,12 @@
 - 만드는 것
   /Game/HG/Materials/Greybox/MI_GB_*   엔진 BasicShapeMaterial을 부모로 한 단색 머티리얼 인스턴스
   /Game/HG/Maps/L_Station             허브 정거장 훠궈집 (경영 + 탐험 시작 지점)
-  /Game/HG/Maps/L_Asteroid_Krak7      첫 파밍지 크락-7 소행성
+  /Game/HG/Maps/L_Asteroid_Krak7      (이전 단계의 손배치 소행성. 지금은 어느 발판도 이리로 보내지 않는다)
+  /Game/HG/Maps/L_PlanetSurface       절차적 행성 표면. 조명과 AHGPlanetGenerator만 있고 지형은 실행할 때 시드로 만든다.
 - 이미 있는 맵과 머티리얼은 건드리지 않는다. 사람이 에디터에서 고친 배치를 덮어쓰지 않기 위해서이다.
   다시 만들고 싶으면 환경 변수 HG_MAPGEN_FORCE=1을 주고 실행한다 (기존 맵을 지우고 새로 만든다).
+- 예외: upgrade_station()은 이미 있는 L_Station에서 에어록 발판과 귀환 시작점의 "값"만 새 규칙으로 바꾼다.
+  액터를 지우거나 옮기지 않으며, 이미 바뀌어 있으면 저장하지 않는다.
 - 이 스크립트는 처음 배치를 잡아 주는 용도이다. 이후의 배치 수정은 에디터에서 맵을 직접 고치는 것이 기준이다.
 
 좌표 단위는 언리얼 유닛(1 = 1cm)이다. 엔진 기본 도형(Cube, Cylinder, Sphere)은 Scale 1일 때 1m 크기이고 중심이 원점이다.
@@ -21,6 +24,10 @@ MAP_DIR = "/Game/HG/Maps"
 MAT_DIR = "/Game/HG/Materials/Greybox"
 STATION_MAP = MAP_DIR + "/L_Station"
 ASTEROID_MAP = MAP_DIR + "/L_Asteroid_Krak7"
+PLANET_MAP = MAP_DIR + "/L_PlanetSurface"
+
+# 행성에서 정거장으로 돌아올 때 쓰는 도착 태그. AHGPlanetGenerator의 ReturnArrivalTag 기본값과 같다.
+FROM_PLANET = "FromPlanet"
 
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 asset_lib = unreal.EditorAssetLibrary
@@ -212,10 +219,16 @@ def build_station():
     anchor = spawn(unreal.HGShopCameraAnchor, "ShopCameraAnchor", "Gameplay", (0, 0, 0), rot(yaw=45))
     anchor.set_editor_property("pan_radius", 900.0)
     explorer_start("ExplorerStart_Default", (-100, 220), 90, "Default", False)
-    explorer_start("ExplorerStart_FromAsteroid", (-450, 250), -90, "FromAsteroid", False)
+    explorer_start("ExplorerStart_FromPlanet", (-450, 250), -90, FROM_PLANET, False)
 
     pad = spawn(unreal.HGTravelPad, "TravelPad_Airlock", "Gameplay", (-450, 400, 60))
-    set_travel(pad, ASTEROID_MAP, "FromStation", "크락-7 소행성", "Oxygen")
+    set_dive(pad)
+
+
+def set_dive(pad):
+    """에어록 발판을 다이빙 발판으로 만든다. 목적지는 행성 표면 맵, 어느 행성인지는 실행 중에 고른다."""
+    set_travel(pad, PLANET_MAP, "Landing", "접근 행성으로 다이빙", "Oxygen")
+    pad.set_editor_property("dive_to_selected_planet", True)
 
 
 # ---------------------------------------------------------------------------
@@ -259,13 +272,74 @@ def build_asteroid():
 
 
 # ---------------------------------------------------------------------------
+# L_PlanetSurface: 절차적 행성 표면 (행성 중심 = 원점)
+# ---------------------------------------------------------------------------
+def build_planet_surface():
+    """우주 조명 + 행성 생성기. 지형, 바위, 재료, 귀환 발판은 게임을 시작할 때 생성기가 시드로 만든다."""
+    # 대기가 없는 우주라서 하늘 대기는 두지 않는다. 하늘이 검으므로 스카이 라이트 대신 약한 보조광으로 그림자 면을 살린다.
+    sun = spawn(unreal.DirectionalLight, "Sun", "Lighting", (0, 0, 80000), rot(pitch=-55, yaw=35))
+    sun_comp = sun.get_component_by_class(unreal.DirectionalLightComponent)
+    sun_comp.set_mobility(unreal.ComponentMobility.MOVABLE)
+    sun_comp.set_intensity(10.0)
+    # 방향광이 둘이면 엔진이 어느 쪽을 주광원으로 쓸지 경고한다. 해를 우선순위로 지정한다.
+    sun_comp.set_editor_property("forward_shading_priority", 1)
+
+    fill =spawn(unreal.DirectionalLight, "FillLight", "Lighting", (0, 0, 80000), rot(pitch=40, yaw=215))
+    fill_comp = fill.get_component_by_class(unreal.DirectionalLightComponent)
+    fill_comp.set_mobility(unreal.ComponentMobility.MOVABLE)
+    fill_comp.set_intensity(1.2)
+    fill_comp.set_light_color(unreal.LinearColor(0.55, 0.65, 1.0, 1.0))
+    fill_comp.set_cast_shadows(False)
+
+    # 노출 고정: 화면 대부분이 검은 하늘이라 자동 노출을 두면 지면이 하얗게 날아간다.
+    # 값은 EV100이다 (프로젝트 기본값인 "확장 휘도 범위"가 켜져 있을 때). 클수록 어둡다.
+    ppv = spawn(unreal.PostProcessVolume, "PostProcess_Space", "Lighting", (0, 0, 0))
+    ppv.set_editor_property("unbound", True)
+    settings = ppv.get_editor_property("settings")
+    settings.set_editor_property("override_auto_exposure_min_brightness", True)
+    settings.set_editor_property("auto_exposure_min_brightness", 2.5)
+    settings.set_editor_property("override_auto_exposure_max_brightness", True)
+    settings.set_editor_property("auto_exposure_max_brightness", 2.5)
+    ppv.set_editor_property("settings", settings)
+
+    gen = spawn(unreal.HGPlanetGenerator, "PlanetGenerator", "Gameplay", (0, 0, 0))
+    gen.set_editor_property("return_level", unreal.load_asset(STATION_MAP))
+    gen.set_editor_property("return_arrival_tag", FROM_PLANET)
+    gen.set_editor_property("return_name", "훠궈훠궈 (허브 정거장)")
+
+    # 멀리 떠 있는 가스 행성. 검은 하늘에서 거리감과 "우주에 있다"는 느낌을 준다.
+    shape("sphere", "GasPlanet", "Backdrop", (900000, 600000, 300000), (4000, 4000, 4000), "GasPlanet", collide=False)
+
+
+def upgrade_station():
+    """이미 있는 L_Station을 행성 다이빙 규칙으로 바꾼다. 값만 바꾸고, 바뀐 것이 있을 때만 저장한다."""
+    world = unreal.EditorLoadingAndSavingUtils.load_map(STATION_MAP)
+    changed = False
+    for actor in actor_sub.get_all_level_actors():
+        if isinstance(actor, unreal.HGTravelPad):
+            if actor.get_actor_label() == "TravelPad_Airlock" and not actor.get_editor_property("dive_to_selected_planet"):
+                set_dive(actor)
+                changed = True
+                unreal.log("[MapGen] L_Station 에어록 발판을 다이빙 발판으로 바꿈")
+        elif isinstance(actor, unreal.HGExplorerStart):
+            if str(actor.get_editor_property("start_tag")) == "FromAsteroid":
+                actor.set_editor_property("start_tag", FROM_PLANET)
+                actor.set_actor_label("ExplorerStart_FromPlanet")
+                changed = True
+                unreal.log("[MapGen] L_Station 귀환 시작점 태그를 FromPlanet으로 바꿈")
+    if changed:
+        unreal.EditorLoadingAndSavingUtils.save_map(world, STATION_MAP)
+        unreal.log("[MapGen] 맵 저장: " + STATION_MAP)
+
+
+# ---------------------------------------------------------------------------
 # 실행
 # ---------------------------------------------------------------------------
 MATS = ensure_materials()
 
 # 맵끼리 서로 참조(이동 발판의 목적지)하므로 빈 맵을 먼저 모두 만들고 나서 채운다.
 targets = []
-for map_path, builder in ((STATION_MAP, build_station), (ASTEROID_MAP, build_asteroid)):
+for map_path, builder in ((STATION_MAP, build_station), (ASTEROID_MAP, build_asteroid), (PLANET_MAP, build_planet_surface)):
     if create_empty_map(map_path):
         targets.append((map_path, builder))
 
@@ -274,5 +348,8 @@ for map_path, builder in targets:
     builder()
     unreal.EditorLoadingAndSavingUtils.save_map(world, map_path)
     unreal.log("[MapGen] 맵 저장: " + map_path)
+
+if STATION_MAP not in [path for path, _ in targets]:
+    upgrade_station()
 
 unreal.log("[MapGen] 완료. 새로 만든 맵 %d개" % len(targets))

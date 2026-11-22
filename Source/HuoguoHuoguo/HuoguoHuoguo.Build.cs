@@ -13,6 +13,9 @@ public class HuoguoHuoguo : ModuleRules
 
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput" });
 
+		// 행성 지형을 런타임에 메시로 만들기 위한 엔진 플러그인 모듈.
+		PrivateDependencyModuleNames.Add("ProceduralMeshComponent");
+
 		PrivateDependencyModuleNames.AddRange(new string[] { });
 	}
 }

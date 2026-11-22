@@ -10,6 +10,7 @@ struct FInputActionValue;
 class AHGShopCameraPawn;
 class AHGExplorerCharacter;
 class AHGTravelPad;
+class AHGPlanetGenerator;
 
 // 지금 플레이어가 어느 파트를 조작하고 있는지.
 UENUM(BlueprintType)
@@ -69,9 +70,34 @@ public:
 	UFUNCTION(Exec)
 	void HGSimKey(const FString& KeyName, float HoldSeconds = 1.f);
 
+	// HGPlanets : 접근 중인 행성 목록을 로그와 화면에 낸다.
+	UFUNCTION(Exec)
+	void HGPlanets();
+
+	// HGSelectPlanet 2 : 목록의 2번째 행성을 다이빙 목적지로 고른다 (1부터 센다, 숫자 키 1~4와 같다).
+	UFUNCTION(Exec)
+	void HGSelectPlanet(int32 Number);
+
+	// HGDive [번호] : 번호를 주면 그 행성을 고르고, 다이빙 발판을 밟은 것처럼 바로 내려간다.
+	UFUNCTION(Exec)
+	void HGDive(int32 Number = 0);
+
+	// HGNextCycle : 궤도 주기를 넘겨 접근 행성 목록을 새로 뽑는다.
+	UFUNCTION(Exec)
+	void HGNextCycle();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
+
+	/**
+	 * 시점 회전 처리. 행성 위에서는 중력 기준 좌표계 안에서 처리한다.
+	 *
+	 * 기본 구현은 월드 Z축을 "위"로 보고 Pitch를 제한하고 Roll을 버린다. 행성 옆면에 서면 월드 Z가 옆쪽이라
+	 * 시점이 엉뚱하게 꺾인다. 그래서 시점을 중력 좌표계로 옮겨 같은 처리를 한 뒤 다시 월드로 돌려놓는다.
+	 * 또 행성 위를 걸으면 "위"가 조금씩 돌아가므로, 그만큼 시점도 함께 돌려서 지평선이 늘 수평으로 보이게 한다.
+	 */
+	virtual void UpdateRotation(float DeltaTime) override;
 
 	// 경영 -> 탐험 / 탐험 -> 경영 카메라 블렌드 시간(초).
 	UPROPERTY(EditAnywhere, Category = "Mode")
@@ -98,9 +124,17 @@ private:
 	UPROPERTY() TObjectPtr<UInputAction> MoveAction;
 	UPROPERTY() TObjectPtr<UInputAction> LookAction;
 	UPROPERTY() TObjectPtr<UInputAction> JumpAction;
+	UPROPERTY() TObjectPtr<UInputAction> SelectPlanetAction;
 
 	UPROPERTY() TObjectPtr<AHGShopCameraPawn> ShopPawn;
 	UPROPERTY() TObjectPtr<AHGExplorerCharacter> Explorer;
+
+	// 행성 표면 맵이면 그 맵의 행성 생성기. 정거장에서는 nullptr.
+	UPROPERTY() TObjectPtr<AHGPlanetGenerator> Planet;
+
+	// 지난 프레임의 중력 기준 좌표계. 이번 프레임과의 차이만큼 시점을 같이 돌리는 데 쓴다.
+	FQuat LastGravityFrame = FQuat::Identity;
+	bool bHasLastGravityFrame = false;
 
 	EHGPlayMode PlayMode = EHGPlayMode::Shop;
 	bool bModesInitialized = false;
@@ -118,6 +152,11 @@ private:
 
 	// 화면 위쪽에 계속 떠 있는 조작 안내. 모드가 바뀔 때마다 내용을 바꾼다.
 	void UpdateControlsHint() const;
+
+	// 정거장 화면에 계속 떠 있는 "접근 중인 행성" 목록. 고른 행성 앞에 표시가 붙는다. 정거장이 아니면 지운다.
+	void UpdatePlanetBoard() const;
+
+	void OnSelectPlanet(const FInputActionValue& Value);
 
 	void OnToggleMode(const FInputActionValue& Value);
 	void OnShopPan(const FInputActionValue& Value);
