@@ -264,7 +264,9 @@ void AHGPlanetGenerator::ScatterProps()
 	const double RadiusM = Planet.Radius / 100.0;
 	const double AreaM2 = 4.0 * UE_PI * RadiusM * RadiusM;
 	const int32 RockCount = FMath::Clamp(FMath::RoundToInt(AreaM2 / 2000.0 * Planet.Richness), 20, 1500);
-	const int32 IngredientCount = FMath::Clamp(FMath::RoundToInt(AreaM2 / 3500.0 * Planet.Richness), 12, 400);
+	// 재료 표식은 낮 재료와 밤 재료를 다 만든 뒤 지금 시간대가 아닌 것을 숨긴다. 한 번에 보이는 것은 대략 절반이므로
+	// 한 시간대에 약 3500m²당 1개가 보이도록 두 배로 만든다.
+	const int32 IngredientCount = FMath::Clamp(FMath::RoundToInt(AreaM2 / 1750.0 * Planet.Richness), 24, 800);
 
 	// 착륙 지점 근처에는 아무것도 두지 않는다 (발판과 착륙한 사장님이 바위에 묻히지 않게).
 	const double MinPoleAngle = (LandingFlatRadius * 0.8) / Planet.Radius;
@@ -328,13 +330,18 @@ void AHGPlanetGenerator::ScatterProps()
 		return;
 	}
 
-	// 이 행성 군계가 고향(HomeBiome)인 재료 종류들.
+	// 지금 시간대. 다이빙 중에는 정거장에서 내려간 시간대 그대로다 (돌아가야 넘어간다).
+	const EHGDayPhase Phase = GI ? GI->GetDayPhase() : EHGDayPhase::Day;
+
+	// 이 행성 군계가 고향(HomeBiome)인 재료 종류들과, 종류마다 지금 시간대에 보이는지.
 	TArray<int32> NativeKinds;
+	TArray<bool> KindVisibleNow;
 	for (const FName& Id : Table->GetRowNames())
 	{
 		const FHGIngredientRow* Row = Table->FindRow<FHGIngredientRow>(Id, TEXT("ScatterProps"));
 		const int32 Kind = IngredientIds.Add(Id);
 		IngredientColors.Add(Row ? Row->Color : FLinearColor::White);
+		KindVisibleNow.Add(!Row || HGDay::IsAvailable(Row->AvailableAt, Phase));
 
 		UInstancedStaticMeshComponent* Ism = NewObject<UInstancedStaticMeshComponent>(this, *FString::Printf(TEXT("Ingredient_%s"), *Id.ToString()));
 		Ism->SetStaticMesh(MarkerMesh);
@@ -352,8 +359,11 @@ void AHGPlanetGenerator::ScatterProps()
 
 	// 표식 배치: 절반은 이 군계의 고향 재료, 나머지는 모든 재료에서 고르게.
 	// 표식 번호 i는 이 순서로 정해진다. 같은 시드면 같은 번호에 같은 재료, 같은 자리가 나온다 (캔 기록이 이 번호를 쓴다).
+	// 시간대와 상관없이 늘 같은 순서로 모든 표식을 만들고, 지금 시간대가 아닌 재료만 숨긴다.
+	// 시간대에 따라 뽑는 재료를 바꾸면 같은 번호가 낮과 밤에 다른 재료를 가리켜서 캔 기록이 꼬이기 때문이다.
 	const FTransform ToWorld = Terrain->GetComponentTransform();
 	int32 HiddenCount = 0;
+	int32 OtherTimeCount = 0;
 	for (int32 i = 0; i < IngredientCount; ++i)
 	{
 		const bool bNative = !NativeKinds.IsEmpty() && Rng.FRand() < 0.5f;
@@ -370,18 +380,26 @@ void AHGPlanetGenerator::ScatterProps()
 		// 이 행성에서 이미 캔 표식은 처음부터 숨긴다.
 		if (GI && GI->IsMarkerHarvested(Planet.Seed, i))
 		{
-			HideMarker(i);
+			Marker.bHarvested = true;
+			HideInstance(i);
 			++HiddenCount;
+		}
+		// 지금 시간대에 나지 않는 재료도 숨긴다 (밤에 내려오면 낮 재료가 안 보인다).
+		else if (!KindVisibleNow[Kind])
+		{
+			Marker.bOtherTime = true;
+			HideInstance(i);
+			++OtherTimeCount;
 		}
 	}
 
-	UE_LOG(LogHuoguo, Log, TEXT("행성 배치: 바위 %d, 재료 %d (종류 %d, 이미 캔 것 %d개 숨김)"), RockCount, IngredientCount, IngredientIds.Num(), HiddenCount);
+	UE_LOG(LogHuoguo, Log, TEXT("행성 배치 (%s): 바위 %d, 재료 %d (종류 %d, 다른 시간대 재료 %d개 숨김, 이미 캔 것 %d개 숨김, 지금 캘 수 있는 것 %d)"),
+		HGDay::PhaseName(Phase), RockCount, IngredientCount, IngredientIds.Num(), OtherTimeCount, HiddenCount, GetRemainingIngredientCount());
 }
 
-void AHGPlanetGenerator::HideMarker(int32 MarkerId)
+void AHGPlanetGenerator::HideInstance(int32 MarkerId)
 {
-	FHGIngredientMarker& Marker = Markers[MarkerId];
-	Marker.bHarvested = true;
+	const FHGIngredientMarker& Marker = Markers[MarkerId];
 
 	// 크기 0 변환으로 바꿔 그리지 않게 한다. 인스턴스를 지우면(RemoveInstance) 뒤 인스턴스 번호가 당겨져서
 	// 다른 표식이 가리키는 번호가 틀어지므로 지우지 않는다.
@@ -398,7 +416,7 @@ int32 AHGPlanetGenerator::FindNearestIngredient(const FVector& From, float MaxDi
 	double BestDistSq = FMath::Square(static_cast<double>(MaxDistance));
 	for (int32 i = 0; i < Markers.Num(); ++i)
 	{
-		if (Markers[i].bHarvested)
+		if (!Markers[i].IsAvailable())
 		{
 			continue;
 		}
@@ -424,11 +442,12 @@ FVector AHGPlanetGenerator::GetMarkerLocation(int32 MarkerId) const
 
 FName AHGPlanetGenerator::HarvestIngredient(int32 MarkerId)
 {
-	if (!Markers.IsValidIndex(MarkerId) || Markers[MarkerId].bHarvested)
+	if (!Markers.IsValidIndex(MarkerId) || !Markers[MarkerId].IsAvailable())
 	{
 		return NAME_None;
 	}
-	HideMarker(MarkerId);
+	Markers[MarkerId].bHarvested = true;
+	HideInstance(MarkerId);
 	if (UHGGameInstance* GI = GetGameInstance<UHGGameInstance>())
 	{
 		GI->MarkHarvested(Planet.Seed, MarkerId);
@@ -452,7 +471,7 @@ int32 AHGPlanetGenerator::GetRemainingIngredientCount() const
 	int32 Count = 0;
 	for (const FHGIngredientMarker& Marker : Markers)
 	{
-		Count += Marker.bHarvested ? 0 : 1;
+		Count += Marker.IsAvailable() ? 1 : 0;
 	}
 	return Count;
 }

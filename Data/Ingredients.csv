@@ -1,4 +1,7 @@
-﻿Name,DisplayName,Color,Price,HomeBiome
-SporeMushroom,포자버섯,"(R=0.55,G=0.40,B=0.95,A=1.0)",12,Fungal
-FrostKelp,서리다시마,"(R=0.30,G=0.85,B=0.65,A=1.0)",10,Ice
-EmberChili,불씨고추,"(R=0.95,G=0.25,B=0.15,A=1.0)",15,Rock
+﻿Name,DisplayName,Color,Price,HomeBiome,AvailableAt
+SporeMushroom,포자버섯,"(R=0.55,G=0.40,B=0.95,A=1.0)",12,Fungal,Day
+FrostKelp,서리다시마,"(R=0.30,G=0.85,B=0.65,A=1.0)",10,Ice,Day
+EmberChili,불씨고추,"(R=0.95,G=0.25,B=0.15,A=1.0)",15,Rock,Day
+GlowCap,야광버섯,"(R=0.55,G=1.00,B=0.30,A=1.0)",14,Fungal,Night
+MoonLotus,달빛연근,"(R=0.85,G=0.90,B=1.00,A=1.0)",13,Ice,Night
+CinderPotato,숯불감자,"(R=1.00,G=0.60,B=0.20,A=1.0)",11,Rock,Night

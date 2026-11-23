@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
+#include "Game/HGDayTypes.h"
 #include "Planet/HGPlanetTypes.h"
 #include "HGIngredientTypes.generated.h"
 
@@ -34,4 +35,8 @@ struct HUOGUOHUOGUO_API FHGIngredientRow : public FTableRowBase
 	// 이 재료가 많이 나는 생물 군계. 그 군계 행성에서는 재료 표식의 절반이 이 재료다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ingredient")
 	EHGPlanetBiome HomeBiome = EHGPlanetBiome::Rock;
+
+	// 행성에서 이 재료가 보이는 시간대. 같은 행성이라도 낮과 밤에 캘 수 있는 재료가 다르다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ingredient")
+	EHGIngredientTime AvailableAt = EHGIngredientTime::Any;
 };

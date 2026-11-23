@@ -84,7 +84,11 @@ void AHGExplorePlayerController::InitializeFromLevel()
 	}
 	if (Planet)
 	{
-		ShowMessage(FString::Printf(TEXT("착륙: %s"), *Planet->GetPlanet().Describe()));
+		// 다이빙한 시간대에 따라 보이는 재료가 다르다. 정거장에 돌아가면 시간대가 한 칸 넘어간다.
+		const UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
+		const TCHAR* PhaseName = HGDay::PhaseName(GI ? GI->GetDayPhase() : EHGDayPhase::Day);
+		ShowMessage(FString::Printf(TEXT("착륙 (%s): %s | %s에 나는 재료 %d개"), PhaseName, *Planet->GetPlanet().Describe(),
+			PhaseName, Planet->GetRemainingIngredientCount()));
 	}
 
 	UE_LOG(LogHuoguo, Log, TEXT("탐험 파트 시작: %s, 시작 %s, 행성 %s"), *World->GetMapName(),

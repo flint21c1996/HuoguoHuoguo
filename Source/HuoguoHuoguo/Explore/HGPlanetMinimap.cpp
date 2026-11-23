@@ -149,7 +149,7 @@ int32 UHGPlanetMinimap::NativePaint(const FPaintArgs& Args, const FGeometry& All
 	constexpr float DotSize = 6.f;
 	for (const FHGIngredientMarker& Marker : P->GetIngredientMarkers())
 	{
-		if (Marker.bHarvested)
+		if (!Marker.IsAvailable())
 		{
 			continue;
 		}

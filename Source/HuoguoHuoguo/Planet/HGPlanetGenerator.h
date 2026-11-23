@@ -17,6 +17,10 @@ struct FHGIngredientMarker
 	int32 Instance = INDEX_NONE;  // 그 재료 인스턴스 메시 안의 인스턴스 번호
 	FVector Location = FVector::ZeroVector; // 월드 위치
 	bool bHarvested = false;
+	bool bOtherTime = false;      // 지금 시간대(낮/밤)에 나지 않는 재료라서 숨겼다
+
+	// 지금 보이고 캘 수 있는지 (캐지 않았고 지금 시간대 재료).
+	bool IsAvailable() const { return !bHarvested && !bOtherTime; }
 };
 
 /**
@@ -72,12 +76,12 @@ public:
 	// 이미 캤거나 번호가 틀리면 NAME_None.
 	FName HarvestIngredient(int32 MarkerId);
 
-	// 남은(캐지 않은) 재료 표식 수.
+	// 지금 캘 수 있는 재료 표식 수 (캐지 않았고 지금 시간대 재료).
 	int32 GetRemainingIngredientCount() const;
 
 	// ---- 미니맵 등 표시용 ----
 
-	// 재료 표식 전체 (캔 것 포함, bHarvested로 구분).
+	// 재료 표식 전체 (캔 것, 다른 시간대 것 포함. IsAvailable()로 구분).
 	const TArray<FHGIngredientMarker>& GetIngredientMarkers() const { return Markers; }
 
 	// 재료 종류(Kind)의 표시 색. 범위를 벗어나면 흰색.
@@ -160,8 +164,9 @@ private:
 	bool bHasReturnPad = false;
 	FVector ReturnPadLocation = FVector::ZeroVector;
 
-	// 표식 하나를 안 보이게 한다 (인스턴스 크기를 0으로). 인스턴스를 지우면 뒤 번호가 당겨지므로 지우지 않는다.
-	void HideMarker(int32 MarkerId);
+	// 표식 하나의 인스턴스를 안 보이게 한다 (크기를 0으로). 인스턴스를 지우면 뒤 번호가 당겨지므로 지우지 않는다.
+	// 왜 숨겼는지(캠 / 다른 시간대)는 부르는 쪽이 표식의 플래그로 남긴다.
+	void HideInstance(int32 MarkerId);
 
 	void ChoosePlanet();
 	void BuildTerrain();
