@@ -393,7 +393,7 @@ void AHGShopPlayerController::HGBuildSelect(int32 Number)
 
 void AHGShopPlayerController::HGCursorAt(float X, float Y)
 {
-	FurniturePlacer->SetCursorWorldOverride(FVector(X, Y, FurniturePlacer->FloorZ));
+	FurniturePlacer->SetCursorWorldOverride(FVector(X, Y, FurniturePlacer->Grid.FloorZ));
 	UE_LOG(LogHuoguo, Log, TEXT("[Furniture] 시험 커서를 바닥 (%.0f, %.0f)에 둠"), X, Y);
 }
 

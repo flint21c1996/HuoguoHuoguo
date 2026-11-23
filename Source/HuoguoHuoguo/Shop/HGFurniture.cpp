@@ -68,6 +68,17 @@ UStaticMeshComponent* AHGFurniture::AddPart(FName Name, UStaticMesh* Mesh, const
 	return Part;
 }
 
+void AHGFurniture::SetPartColor(UStaticMeshComponent* Part, const FLinearColor& Color)
+{
+	const int32 Index = Parts.IndexOfByKey(Part);
+	if (Index == INDEX_NONE || PartColors[Index].Equals(Color))
+	{
+		return;
+	}
+	PartColors[Index] = Color;
+	Repaint();
+}
+
 void AHGFurniture::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
@@ -143,6 +154,8 @@ void AHGFurniture::Repaint()
 AHGTable::AHGTable()
 {
 	DisplayName = NSLOCTEXT("HG", "Furniture_Table", "식탁");
+	FurnitureId = TEXT("Table");
+	Footprint = FIntPoint(2, 2);
 
 	UStaticMesh* Cylinder = LoadBasicShape(TEXT("Cylinder"));
 	// 상판: 지름 156, 두께 8, 윗면 높이 82. 의자 좌석(높이 45)보다 높아서 의자를 밑으로 밀어 넣을 수 있다.
@@ -158,6 +171,8 @@ AHGTable::AHGTable()
 AHGChair::AHGChair()
 {
 	DisplayName = NSLOCTEXT("HG", "Furniture_Chair", "의자");
+	FurnitureId = TEXT("Chair");
+	bFacesTable = true;
 
 	UStaticMesh* Cylinder = LoadBasicShape(TEXT("Cylinder"));
 	UStaticMesh* Cube = LoadBasicShape(TEXT("Cube"));
@@ -165,4 +180,48 @@ AHGChair::AHGChair()
 	AddPart(TEXT("Seat"), Cylinder, FVector(0.f, 0.f, 22.5f), FVector(0.56f, 0.56f, 0.45f), SeatColor);
 	// 등받이: 좌석 뒤쪽(-X) 끝에 세운 판. 높이 45~95.
 	AddPart(TEXT("Back"), Cube, FVector(-24.f, 0.f, 70.f), FVector(0.08f, 0.5f, 0.5f), WoodColor);
+}
+
+AHGPlanter::AHGPlanter()
+{
+	DisplayName = NSLOCTEXT("HG", "Furniture_Planter", "화분");
+	FurnitureId = TEXT("Planter");
+
+	UStaticMesh* Cylinder = LoadBasicShape(TEXT("Cylinder"));
+	UStaticMesh* Sphere = LoadBasicShape(TEXT("Sphere"));
+	// 토분: 지름 50, 높이 45. 그 위에 둥근 잎 덤불 (지름 72). 둘 다 충돌이 있어 커서로 가리킬 수 있다.
+	AddPart(TEXT("Pot"), Cylinder, FVector(0.f, 0.f, 22.5f), FVector(0.5f, 0.5f, 0.45f), FLinearColor(0.62f, 0.32f, 0.20f));
+	AddPart(TEXT("Leaves"), Sphere, FVector(0.f, 0.f, 78.f), FVector(0.72f, 0.72f, 0.66f), FLinearColor(0.18f, 0.55f, 0.22f));
+}
+
+AHGSauceBar::AHGSauceBar()
+{
+	DisplayName = NSLOCTEXT("HG", "Furniture_SauceBar", "소스 바");
+	FurnitureId = TEXT("SauceBar");
+	Footprint = FIntPoint(2, 1);
+
+	UStaticMesh* Cube = LoadBasicShape(TEXT("Cube"));
+	UStaticMesh* Cylinder = LoadBasicShape(TEXT("Cylinder"));
+	// 몸체: 길이 180(X), 폭 80(Y), 높이 85. 2x1칸(200 x 100) 안에 들어가도록 칸보다 조금 작다.
+	AddPart(TEXT("Body"), Cube, FVector(0.f, 0.f, 42.5f), FVector(1.8f, 0.8f, 0.85f), WoodColor);
+	AddPart(TEXT("Top"), Cube, FVector(0.f, 0.f, 87.f), FVector(1.86f, 0.86f, 0.04f), SteelColor);
+	// 소스 그릇 셋 (마장 갈색, 고추기름 빨강, 파 초록). 장식이라 충돌이 없다.
+	const FLinearColor SauceColors[] = { FLinearColor(0.45f, 0.28f, 0.12f), BrothColor, FLinearColor(0.30f, 0.62f, 0.20f) };
+	for (int32 i = 0; i < 3; ++i)
+	{
+		AddPart(*FString::Printf(TEXT("Sauce_%d"), i), Cylinder, FVector(-55.f + i * 55.f, 0.f, 93.f), FVector(0.28f, 0.28f, 0.08f), SauceColors[i], false);
+	}
+}
+
+AHGLantern::AHGLantern()
+{
+	DisplayName = NSLOCTEXT("HG", "Furniture_Lantern", "등불");
+	FurnitureId = TEXT("Lantern");
+
+	UStaticMesh* Cylinder = LoadBasicShape(TEXT("Cylinder"));
+	UStaticMesh* Sphere = LoadBasicShape(TEXT("Sphere"));
+	// 바닥 받침, 가는 기둥(높이 150), 꼭대기의 붉은 등 (가게 천장 등불과 같은 색).
+	AddPart(TEXT("Base"), Cylinder, FVector(0.f, 0.f, 3.f), FVector(0.42f, 0.42f, 0.06f), SteelColor);
+	AddPart(TEXT("Pole"), Cylinder, FVector(0.f, 0.f, 80.f), FVector(0.07f, 0.07f, 1.5f), SteelColor);
+	AddPart(TEXT("Lamp"), Sphere, FVector(0.f, 0.f, 165.f), FVector(0.46f, 0.46f, 0.56f), FLinearColor(0.95f, 0.22f, 0.10f));
 }

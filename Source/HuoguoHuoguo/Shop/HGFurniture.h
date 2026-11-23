@@ -21,8 +21,11 @@ enum class EHGFurniturePreview : uint8
  * 경영 파트에서 사장님이 배치하는 가구의 공통 부모.
  *
  * 외형은 엔진 기본 도형을 조합한 "부품"으로 만든다. 하위 클래스가 생성자에서 AddPart로 부품을 붙인다.
- * 나중에 아트 메시가 생기면 이 클래스를 상속한 블루프린트(BP_Table 등)에서 메시만 바꾸면 되도록,
- * 배치 규칙(겹침 검사, 바닥 검사)은 부품의 실제 충돌 모양을 그대로 쓴다. 별도의 "발자국 크기" 값을 두지 않는다.
+ * 나중에 아트 메시가 생기면 이 클래스를 상속한 블루프린트(BP_Table 등)에서 메시만 바꾸면 된다.
+ *
+ * 배치는 칸(그리드) 단위다 (FHGShopGrid). 가구마다 차지하는 칸 수 Footprint가 있고, 가구끼리는 칸이 겹치면 안 된다.
+ * 벽, 카운터, 사장님과의 겹침은 부품의 실제 충돌 모양으로 따로 검사한다.
+ * 가구 종류 ID(FurnitureId)는 콤보 규칙(Data/Combos.csv의 Needs 열)이 가리키는 이름이다.
  *
  * 가구 하나가 같은 클래스로 두 가지 역할을 한다.
  *   - 실제 가구: 부품이 BlockAll로 사장님과 손님을 막는다.
@@ -40,6 +43,18 @@ public:
 	// 화면 안내와 메시지에 쓰는 이름 ("식탁", "의자").
 	UPROPERTY(EditDefaultsOnly, Category = "Furniture")
 	FText DisplayName;
+
+	// 가구 종류 ID ("Table", "Chair", "Planter", "Lantern"). 콤보 규칙이 이 이름으로 가구를 가리킨다.
+	UPROPERTY(EditDefaultsOnly, Category = "Furniture")
+	FName FurnitureId;
+
+	// 차지하는 칸 수 (회전 0도 기준, X = 액터 앞쪽 방향). 가구 원점(가운데)은 이 칸 사각형의 가운데에 온다.
+	UPROPERTY(EditDefaultsOnly, Category = "Furniture")
+	FIntPoint Footprint = FIntPoint(1, 1);
+
+	// 놓을 때 바로 옆(상하좌우) 식탁 쪽으로 저절로 돌아앉는다 (의자).
+	UPROPERTY(EditDefaultsOnly, Category = "Furniture")
+	bool bFacesTable = false;
 
 	// 유령으로 바꾼다. 스폰 직후(FinishSpawning 전)에 불러야 한 프레임도 사장님을 막지 않는다.
 	void MakeGhost();
@@ -62,6 +77,9 @@ protected:
 	 */
 	UStaticMeshComponent* AddPart(FName Name, UStaticMesh* Mesh, const FVector& Location, const FVector& Scale, const FLinearColor& Color, bool bCollide = true);
 
+	// 부품 하나의 원래 색을 바꾼다 (식탁 김 색 등). 미리보기 중이면 미리보기가 끝난 뒤에 보인다.
+	void SetPartColor(UStaticMeshComponent* Part, const FLinearColor& Color);
+
 	// 엔진 기본 도형을 불러온다 (생성자 안에서만 부를 수 있다). Shape = "Cube", "Cylinder", "Sphere".
 	static UStaticMesh* LoadBasicShape(const TCHAR* Shape);
 
@@ -69,7 +87,9 @@ protected:
 	TObjectPtr<USceneComponent> Root;
 
 private:
-	UPROPERTY()
+	// Transient: 맵에 저장하지 않는다. 맵에 저장된 가구를 불러오면 생성자가 만든 부품 목록이 맵에 저장된 옛 목록으로
+	// 덮어써져서, 나중에 추가한 부품(식탁 김 등)이 목록에서 빠지고 색이 칠해지지 않은 적이 있다.
+	UPROPERTY(Transient)
 	TArray<TObjectPtr<UStaticMeshComponent>> Parts;
 
 	// 부품마다의 원래 색과 충돌 여부. Parts와 같은 순서다.
@@ -84,8 +104,8 @@ private:
 };
 
 /**
- * 식탁: 둥근 상판, 가운데 다리, 바닥 받침, 상판 위 훠궈 냄비(장식).
- * 지름 1.56m, 상판 높이 0.78m. 의자를 상판 밑으로 밀어 넣을 수 있도록 다리와 받침만 바닥에 닿는다.
+ * 식탁: 둥근 상판, 가운데 다리, 바닥 받침, 상판 위 훠궈 냄비(장식). 2x2칸.
+ * 지름 1.56m, 상판 높이 0.78m. 이 식탁을 바라보는 바로 옆 칸의 의자가 이 식탁의 자리다.
  */
 UCLASS()
 class HUOGUOHUOGUO_API AHGTable : public AHGFurniture
@@ -97,8 +117,8 @@ public:
 };
 
 /**
- * 의자: 둥근 좌석과 등받이. 앞쪽(액터의 +X)이 손님이 바라보는 방향이고 등받이는 -X 쪽에 있다.
- * 식탁을 바라보게 놓으려면 의자의 +X가 식탁 쪽을 향하도록 돌린다.
+ * 의자: 둥근 좌석과 등받이. 1x1칸. 앞쪽(액터의 +X)이 손님이 바라보는 방향이고 등받이는 -X 쪽에 있다.
+ * 식탁 바로 옆 칸에 놓으면 저절로 식탁을 보게 돌아간다.
  */
 UCLASS()
 class HUOGUOHUOGUO_API AHGChair : public AHGFurniture
@@ -107,4 +127,37 @@ class HUOGUOHUOGUO_API AHGChair : public AHGFurniture
 
 public:
 	AHGChair();
+};
+
+/** 화분 (장식, 1x1칸). 식탁 둘레에 두면 콤보 재료가 된다. */
+UCLASS()
+class HUOGUOHUOGUO_API AHGPlanter : public AHGFurniture
+{
+	GENERATED_BODY()
+
+public:
+	AHGPlanter();
+};
+
+/**
+ * 소스 바 (2x1칸). 훠궈 손님이 찍어 먹을 소스 그릇 셋을 올린 긴 바. 식탁 둘레에 두면 콤보 재료가 된다.
+ * 회전 0도에서 액터 앞쪽(X)으로 2칸, 옆(Y)으로 1칸. R로 돌리면 세로로 2칸이 된다.
+ */
+UCLASS()
+class HUOGUOHUOGUO_API AHGSauceBar : public AHGFurniture
+{
+	GENERATED_BODY()
+
+public:
+	AHGSauceBar();
+};
+
+/** 등불 (장식, 1x1칸). 식탁 둘레에 두면 콤보 재료가 된다. */
+UCLASS()
+class HUOGUOHUOGUO_API AHGLantern : public AHGFurniture
+{
+	GENERATED_BODY()
+
+public:
+	AHGLantern();
 };
