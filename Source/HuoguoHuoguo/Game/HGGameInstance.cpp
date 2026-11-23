@@ -14,6 +14,7 @@ UHGGameInstance::UHGGameInstance()
 {
 	// 소프트 참조라서 에셋이 아직 없어도 컴파일과 실행은 된다. 실제로 쓸 때 불러온다.
 	IngredientTable = TSoftObjectPtr<UDataTable>(FSoftObjectPath(TEXT("/Game/HG/Data/DT_Ingredients.DT_Ingredients")));
+	ComboTable = TSoftObjectPtr<UDataTable>(FSoftObjectPath(TEXT("/Game/HG/Data/DT_Combos.DT_Combos")));
 }
 
 const TArray<FHGPlanetSeed>& UHGGameInstance::GetApproachingPlanets()
@@ -151,6 +152,28 @@ FString UHGGameInstance::DescribeBag()
 		}
 	}
 	return Parts.IsEmpty() ? FString(TEXT("비어 있음")) : FString::Join(Parts, TEXT(", "));
+}
+
+const UDataTable* UHGGameInstance::GetComboTable()
+{
+	if (!LoadedComboTable && !ComboTable.IsNull())
+	{
+		LoadedComboTable = ComboTable.LoadSynchronous();
+	}
+	if (!LoadedComboTable && !bComboTableMissingLogged)
+	{
+		bComboTableMissingLogged = true;
+		UE_LOG(LogHuoguo, Error, TEXT("콤보 DataTable(%s)을 불러오지 못했다. Tools/Invoke-HGMapGen.ps1로 Data/Combos.csv를 읽어 들일 것"),
+			*ComboTable.ToString());
+	}
+	return LoadedComboTable;
+}
+
+bool UHGGameInstance::DiscoverCombo(FName ComboId)
+{
+	bool bAlready = false;
+	DiscoveredCombos.Add(ComboId, &bAlready);
+	return !bAlready;
 }
 
 bool UHGGameInstance::IsMarkerHarvested(int32 PlanetSeed, int32 MarkerId) const

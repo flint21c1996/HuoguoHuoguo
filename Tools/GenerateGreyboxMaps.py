@@ -396,6 +396,7 @@ DATA_DIR = "/Game/HG/Data"
 # 그래서 재료 값을 바꿀 때는 CSV만 고치고 이 스크립트를 다시 돌린다. 에디터에서 DataTable을 직접 고치지 않는다.
 DATA_TABLES = (
     ("DT_Ingredients", "Data/Ingredients.csv", "HGIngredientRow"),
+    ("DT_Combos", "Data/Combos.csv", "HGComboRow"),
 )
 
 

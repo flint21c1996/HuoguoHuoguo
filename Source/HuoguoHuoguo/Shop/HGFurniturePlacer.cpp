@@ -13,6 +13,7 @@
 #include "GameFramework/PlayerController.h"
 #include "HuoguoHuoguo.h"
 #include "Shop/HGFurniture.h"
+#include "Shop/HGShopCombos.h"
 
 namespace
 {
@@ -220,6 +221,7 @@ void UHGFurniturePlacer::EndBuild()
 	SetHovered(nullptr);
 	DestroyGhost();
 	HideGridOverlay();
+	PreviewText.Reset();
 	bBuilding = false;
 }
 
@@ -435,6 +437,7 @@ void UHGFurniturePlacer::UpdateCursor()
 	{
 		Ghost->SetActorHiddenInGame(true);
 		bGhostValid = false;
+		PreviewText.Reset();
 		ClearHighlight();
 	};
 
@@ -497,6 +500,7 @@ void UHGFurniturePlacer::UpdateCursor()
 	Ghost->SetActorHiddenInGame(false);
 	bGhostValid = CheckPlacement(Ghost, Rect, Items);
 	Ghost->SetPreviewState(bGhostValid ? EHGFurniturePreview::Valid : EHGFurniturePreview::Invalid);
+	PreviewText = bGhostValid ? BuildPreviewText(Ghost->FurnitureId, Rect, Items) : FString();
 	SetHighlight(Rect, bGhostValid ? ValidCellColor : InvalidCellColor);
 }
 
@@ -634,6 +638,52 @@ bool UHGFurniturePlacer::CheckPlacement(const AHGFurniture* Candidate, const FIn
 	return true;
 }
 
+FString UHGFurniturePlacer::BuildPreviewText(FName Id, const FIntRect& Rect, const TArray<FHGGridItem>& Items) const
+{
+	UHGGameInstance* GI = GetWorld()->GetGameInstance<UHGGameInstance>();
+	const UDataTable* Table = GI ? GI->GetComboTable() : nullptr;
+	if (!Table)
+	{
+		return FString();
+	}
+
+	// 유령을 놓았다고 치고 계산한다.
+	TArray<FHGGridItem> With = Items;
+	FHGGridItem& GhostItem = With.AddDefaulted_GetRef();
+	GhostItem.Id = Id;
+	GhostItem.Rect = Rect;
+
+	if (Ghost && Ghost->IsA<AHGTable>())
+	{
+		// 식탁: 이 자리 둘레에 이미 있는 장식으로 생기는 콤보.
+		const FHGComboResult Result = HGCombo::EvaluateTable(Table, Rect, With);
+		return Result.Num() > 0
+			? FString::Printf(TEXT("이 자리: %s"), *Result.Describe(Table))
+			: FString(TEXT("이 자리: 콤보 없음 (식탁 둘레에 화분, 등불, 소스 바를 놓으면 콤보)"));
+	}
+
+	// 장식, 의자: 맞닿는 식탁마다 놓기 전과 놓은 뒤를 비교해서 새로 생기는 콤보만 알린다.
+	TArray<FString> NewCombos;
+	for (const FHGGridItem& Item : Items)
+	{
+		if (!IsTableItem(Item) || !FHGShopGrid::Touches(Item.Rect, Rect))
+		{
+			continue;
+		}
+		const FHGComboResult Before = HGCombo::EvaluateTable(Table, Item.Rect, Items);
+		const FHGComboResult After = HGCombo::EvaluateTable(Table, Item.Rect, With);
+		for (int32 i = 0; i < After.Ids.Num(); ++i)
+		{
+			if (!Before.Ids.Contains(After.Ids[i]))
+			{
+				const FHGComboRow* Row = Table->FindRow<FHGComboRow>(After.Ids[i], TEXT("Preview"), false);
+				NewCombos.AddUnique(FString::Printf(TEXT("%s +%d%%"), *After.Names[i], Row ? Row->BonusPercent : 0));
+			}
+		}
+	}
+	return NewCombos.IsEmpty() ? FString() : FString::Printf(TEXT("옆 식탁에 새 콤보: %s"), *FString::Join(NewCombos, TEXT(", ")));
+}
+
 // ---------------------------------------------------------------------------
 // 클릭과 지우기
 // ---------------------------------------------------------------------------
@@ -687,7 +737,37 @@ FString UHGFurniturePlacer::Click()
 	SaveLayout();
 	RefreshOccupiedCells();
 
-	return FString::Printf(TEXT("놓았다: %s (칸 %d,%d, 방향 %.0f)"), *Placed->DisplayName.ToString(), Rect.Min.X, Rect.Min.Y, Yaw);
+	FString Result = FString::Printf(TEXT("놓았다: %s (칸 %d,%d, 방향 %.0f)"), *Placed->DisplayName.ToString(), Rect.Min.X, Rect.Min.Y, Yaw);
+
+	// 이 가구가 닿는(또는 이 가구 자신인) 식탁에서 처음 만든 콤보를 기록하고 알린다.
+	UHGGameInstance* GI = GetWorld()->GetGameInstance<UHGGameInstance>();
+	if (const UDataTable* Table = GI ? GI->GetComboTable() : nullptr)
+	{
+		TArray<FHGGridItem> Items;
+		HGShopGrid::GatherItems(GetWorld(), Grid, Items);
+		TArray<FString> Discovered;
+		for (const FHGGridItem& Item : Items)
+		{
+			if (!IsTableItem(Item) || !(Item.Actor.Get() == Placed || FHGShopGrid::Touches(Item.Rect, Rect)))
+			{
+				continue;
+			}
+			const FHGComboResult Combos = HGCombo::EvaluateTable(Table, Item.Rect, Items);
+			for (int32 i = 0; i < Combos.Ids.Num(); ++i)
+			{
+				if (GI->DiscoverCombo(Combos.Ids[i]))
+				{
+					Discovered.Add(Combos.Names[i]);
+				}
+			}
+		}
+		if (!Discovered.IsEmpty())
+		{
+			Result += FString::Printf(TEXT(" | 새 콤보 발견: %s!"), *FString::Join(Discovered, TEXT(", ")));
+			UE_LOG(LogHuoguo, Log, TEXT("[Combo] 새 콤보 발견: %s (발견한 콤보 %d개)"), *FString::Join(Discovered, TEXT(", ")), GI->GetDiscoveredCombos().Num());
+		}
+	}
+	return Result;
 }
 
 FString UHGFurniturePlacer::RemoveOrCancel()
@@ -752,6 +832,6 @@ FString UHGFurniturePlacer::DescribeCursor() const
 			Ghost->GetActorLocation().X, Ghost->GetActorLocation().Y, Ghost->GetActorRotation().Yaw,
 			bGhostValid ? TEXT("놓을 수 있음") : *FString::Printf(TEXT("놓을 수 없음(%s)"), *LastRejectReason))
 		: FString(TEXT("유령 숨김"));
-	return FString::Printf(TEXT("%s, 가리킨 가구 %s, 옮기는 중 %s"), *GhostText,
-		Hovered ? *Hovered->DisplayName.ToString() : TEXT("없음"), bMoving ? TEXT("예") : TEXT("아니오"));
+	return FString::Printf(TEXT("%s, 가리킨 가구 %s, 옮기는 중 %s, 미리보기 \"%s\""), *GhostText,
+		Hovered ? *Hovered->DisplayName.ToString() : TEXT("없음"), bMoving ? TEXT("예") : TEXT("아니오"), *PreviewText);
 }

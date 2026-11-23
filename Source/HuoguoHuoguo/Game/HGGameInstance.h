@@ -132,6 +132,16 @@ public:
 	// "포자버섯 3, 서리다시마 1" 처럼 한 줄로. 비었으면 "비어 있음". 순서는 DataTable 행 순서.
 	FString DescribeBag();
 
+	// ---- 가게: 콤보 ----
+
+	// 배치 콤보 표 (Data/Combos.csv -> DT_Combos, 처음 부를 때 불러온다). 행 구조체는 경영 파트의 FHGComboRow라서
+	// 공통 폴더인 여기서는 표 에셋만 들고 있는다. 에셋이 없으면 nullptr이고 에러 로그를 한 번 남긴다.
+	const UDataTable* GetComboTable();
+
+	// 콤보를 처음 만들었으면 기록하고 true. 이미 발견한 콤보면 false. (나중에 도감 화면이 읽는다)
+	bool DiscoverCombo(FName ComboId);
+	const TSet<FName>& GetDiscoveredCombos() const { return DiscoveredCombos; }
+
 	/**
 	 * 캔 재료 표식 기록. 행성 시드별로 표식 번호(생성기가 시드로 만든 순서)를 모은다.
 	 * 같은 행성에 다시 내려가면 생성기가 이 번호의 표식을 숨긴다. 행성은 시드로 매번 같은 자리에 같은 표식을 만들기 때문에
@@ -146,11 +156,22 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Data")
 	TSoftObjectPtr<UDataTable> IngredientTable;
 
+	// 배치 콤보 DataTable 경로. 기본값은 /Game/HG/Data/DT_Combos (Data/Combos.csv에서 만든다).
+	UPROPERTY(EditDefaultsOnly, Category = "Data")
+	TSoftObjectPtr<UDataTable> ComboTable;
+
 private:
 	UPROPERTY()
 	TObjectPtr<UDataTable> LoadedIngredientTable;
 
 	bool bIngredientTableMissingLogged = false;
+
+	UPROPERTY()
+	TObjectPtr<UDataTable> LoadedComboTable;
+
+	bool bComboTableMissingLogged = false;
+
+	TSet<FName> DiscoveredCombos;
 
 	UPROPERTY()
 	TMap<FName, int32> Bag;

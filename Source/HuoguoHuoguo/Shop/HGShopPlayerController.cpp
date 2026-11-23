@@ -219,6 +219,12 @@ void AHGShopPlayerController::PlayerTick(float DeltaTime)
 	if (FurniturePlacer->IsBuilding())
 	{
 		FurniturePlacer->UpdateCursor();
+		// 유령을 다른 칸으로 옮겨 콤보 미리보기가 바뀌었으면 안내 줄을 다시 쓴다.
+		if (FurniturePlacer->GetPreviewText() != LastPreviewText)
+		{
+			LastPreviewText = FurniturePlacer->GetPreviewText();
+			UpdateControlsHint();
+		}
 	}
 }
 
@@ -235,8 +241,9 @@ void AHGShopPlayerController::UpdateControlsHint() const
 					*Class->GetDefaultObject<AHGFurniture>()->DisplayName.ToString());
 			}
 		}
-		SetControlsHint(FString::Printf(TEXT("[가구 배치] 손에 든 것: %s | %s | 좌클릭 놓기/집기 | R 회전 | X 치우기/취소 | B 끝"),
-			*FurniturePlacer->GetHeldName().ToString(), *Choices));
+		const FString& Preview = FurniturePlacer->GetPreviewText();
+		SetControlsHint(FString::Printf(TEXT("[가구 배치] 손에 든 것: %s | %s | 좌클릭 놓기/집기 | R 회전 | X 치우기/취소 | B 끝%s%s"),
+			*FurniturePlacer->GetHeldName().ToString(), *Choices, Preview.IsEmpty() ? TEXT("") : TEXT("\n>> "), *Preview));
 	}
 	else
 	{

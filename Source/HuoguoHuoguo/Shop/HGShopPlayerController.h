@@ -30,6 +30,7 @@ class UHGFurniturePlacer;
  *   R              손에 든 가구 90도 회전 (의자는 식탁 옆에 대면 저절로 식탁을 본다)
  *   X              옮기던 가구를 원래 자리로 되돌리기, 또는 가리킨 가구 치우기
  *   B              배치 모드 끝
+ *   조작 안내 줄에 "이 자리에 놓으면 생길 콤보"가 나온다.
  */
 UCLASS()
 class HUOGUOHUOGUO_API AHGShopPlayerController : public AHGPlayerControllerBase
@@ -110,6 +111,9 @@ protected:
 	TObjectPtr<UHGFurniturePlacer> FurniturePlacer;
 
 private:
+	// 조작 안내에 마지막으로 쓴 콤보 미리보기. 바뀔 때만 안내 줄을 다시 쓴다.
+	FString LastPreviewText;
+
 	// 평소 경영 조작과 가구 배치 모드 조작. 배치 모드에 들어가면 컨텍스트를 통째로 바꾼다.
 	UPROPERTY() TObjectPtr<UInputMappingContext> ShopContext;
 	UPROPERTY() TObjectPtr<UInputMappingContext> BuildContext;

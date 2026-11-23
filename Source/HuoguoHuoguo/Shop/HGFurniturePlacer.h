@@ -20,6 +20,7 @@ class UMaterialInstanceDynamic;
  *   - 커서가 이미 놓인 가구를 가리키면 그 가구가 주황으로 바뀌고, 클릭하면 집어 들어 옮길 수 있다.
  *   - 지우기 키: 옮기던 가구는 원래 자리로 되돌리고, 가리킨 가구는 없앤다.
  *   - 의자는 식탁 바로 옆 칸에 대면 저절로 식탁 쪽으로 돌아앉는다.
+ *   - 유령 자리에 놓으면 생길 콤보를 미리 알려 준다 (GetPreviewText).
  *
  * 놓을 수 있는 자리 판정 (CheckPlacement):
  *   1. 칸: 가구의 칸 사각형이 배치 영역 안에 있고, 다른 가구의 칸과 겹치지 않아야 한다.
@@ -81,6 +82,9 @@ public:
 	// 지금 손에 든 가구 이름 (화면 안내용).
 	FText GetHeldName() const;
 
+	// 유령 자리에 놓으면 생길 콤보 안내 ("이 자리: 초록 쉼터 +20%"). 없거나 놓을 수 없으면 빈 문자열.
+	const FString& GetPreviewText() const { return PreviewText; }
+
 	// 가구 배치 기록을 사람이 읽을 수 있게 줄 단위로 만든다 (개발 명령 HGFurniture).
 	FString DescribeLayout() const;
 
@@ -93,6 +97,8 @@ private:
 
 	// 마지막 배치 검사에서 놓을 수 없었던 이유 (메시지와 시험 로그용).
 	mutable FString LastRejectReason;
+
+	FString PreviewText;
 
 	UPROPERTY() TObjectPtr<AHGFurniture> Ghost;
 	UPROPERTY() TObjectPtr<AHGFurniture> Hovered;
@@ -158,6 +164,9 @@ private:
 
 	// Candidate가 칸 사각형 Rect를 차지할 때 놓을 수 있는가. Items는 맵의 다른 가구.
 	bool CheckPlacement(const AHGFurniture* Candidate, const FIntRect& Rect, const TArray<FHGGridItem>& Items) const;
+
+	// 유령(Id, Rect)을 놓으면 생길 콤보 안내 문장.
+	FString BuildPreviewText(FName Id, const FIntRect& Rect, const TArray<FHGGridItem>& Items) const;
 
 	AHGFurniture* SpawnFurniture(TSubclassOf<AHGFurniture> Class, const FVector& Location, float Yaw) const;
 
