@@ -21,6 +21,25 @@
 
 - UTF-8 BOM으로 저장한다 (한국어).
 
+### Data/Combos.csv - 배치 콤보
+- 열: `Name`(행 이름 = 콤보 ID), `DisplayName`, `Needs`(식탁 둘레에 있어야 하는 가구 ID), `BonusPercent`(그 식탁 손님이 더 내는 %). 행 구조체는 `FHGComboRow` (`Docs/Source/Shop.md`).
+- `Needs` 형식: 가구 ID(`Table`, `Chair`, `Planter`, `Lantern`, `SauceBar`)를 `+`로 잇고, 개수는 `*숫자`. 예: `Planter`, `Planter+Lantern`, `Planter*2`.
+- 판정: 식탁 둘레 한 칸(대각선 포함)에 걸친 가구를 종류별로 센다. 한 식탁에 성립한 콤보의 보너스는 모두 더한다.
+- 지금 콤보
+
+| ID | 이름 | 필요 | 보너스 |
+|---|---|---|---|
+| `GreenNook` | 초록 쉼터 | 화분 | +20% |
+| `LanternGlow` | 등불 아래 | 등불 | +20% |
+| `GardenLantern` | 정원 등불석 | 화분 + 등불 | +30% |
+| `SauceMaster` | 소스 장인석 | 소스 바 | +25% |
+
+- 화분과 등불을 둘 다 붙이면 세 콤보가 함께 성립해 +70%다 (콤보 쌓기).
+- UTF-8 BOM으로 저장한다.
+
+### Content/HG/Data/DT_Combos - 콤보 DataTable
+- `ensure_data_tables()`가 `Data/Combos.csv`로 만든다. GameInstance가 소프트 참조로 불러온다 (`GetComboTable`).
+
 ### Content/HG/Data/DT_Ingredients - 재료 DataTable
 - `Tools/GenerateGreyboxMaps.py`의 `ensure_data_tables()`가 `Data/Ingredients.csv`로 만들고 채운다. CSV와 내용이 같으면 저장하지 않는다.
 - GameInstance가 소프트 참조로 불러온다. 행성 생성기는 행 순서대로 재료 표식 종류를 만든다.
@@ -33,5 +52,5 @@
 
 ## 알려진 문제와 다음 할 일
 
-- 손님 종족, 요리법, 업그레이드 표는 아직 없다.
-- `Price`는 아직 쓰지 않는다 (요리/판매가 생기면 쓴다).
+- 손님 종족, 요리법, 업그레이드, 가구 값(가구 목록) 표는 아직 없다. 가구 종류와 발자국 크기는 C++ 클래스에 있다.
+- 재료 `Price`는 손님이 꼬치 하나를 먹을 때 내는 값이다 (가방이 비면 기본 꼬치 5).

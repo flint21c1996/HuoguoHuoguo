@@ -31,8 +31,8 @@
   - 하루 구조 [구현됨 기본, 사용자 결정]
 - 경영 파트
   - 시점과 조작 [구현됨]
-  - 식탁과 의자 배치 [구현됨, 바꿀 예정]
-  - 경영의 중심 = 칸 배치와 콤보 [결정, 사용자 결정]
+  - 가구 배치 [구현됨]
+  - 경영의 중심 = 칸 배치와 콤보 [결정, 사용자 결정 / 첫 시제품 구현됨]
   - 훠궈다운 영업 [결정]
   - 고른 경영 시스템 [결정]
   - 손님이 주는 정보 [결정, 사용자 제안]
@@ -128,7 +128,7 @@
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
 
-### [Shop - 경영 파트 (아이소 시점에서 사장님이 가게를 걷고 가구를 배치한다)](Source/Shop.md)
+### [Shop - 경영 파트 (아이소 시점, 칸 배치와 콤보, 손님)](Source/Shop.md)
 
 - 역할
 - 파일
@@ -136,7 +136,11 @@
   - HGShopBossCharacter (.h/.cpp)
   - HGShopPlayerController (.h/.cpp)
   - HGFurniture (.h/.cpp)
+  - HGShopGrid (.h/.cpp)
+  - HGShopCombos (.h/.cpp)
   - HGFurniturePlacer (.h/.cpp)
+  - HGCustomer (.h/.cpp)
+  - HGCustomerDirector (.h/.cpp)
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
 
@@ -157,6 +161,8 @@
 - 역할
 - 파일
   - Data/Ingredients.csv - 재료
+  - Data/Combos.csv - 배치 콤보
+  - Content/HG/Data/DT_Combos - 콤보 DataTable
   - Content/HG/Data/DT_Ingredients - 재료 DataTable
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
