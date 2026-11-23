@@ -7,7 +7,7 @@ Claude는 `CLAUDE.md`가 이 파일을 불러오고, Codex는 이 파일을 직�
 
 1. 이 파일 (`AGENTS.md`)
 2. `Docs/INDEX.md` : 모든 구현 문서의 제목/소제목 색인. 프로젝트 전체를 한눈에 본다.
-3. `Docs/Project/Overview.md` : 게임 개요, 현재 플레이 흐름, 설계 원칙, 폴더 지도.
+3. `Docs/Project/Overview.md` : 게임 개요, 현재 플레이 흐름, 설계 원칙, 폴더 지도. 기획에 닿는 작업이면 `Docs/Project/Design.md`도 읽는다.
 4. 이번 작업이 닿는 폴더의 문서 (예: 행성 작업이면 `Docs/Source/Planet.md`).
 5. 실제 코드. 문서는 안내일 뿐이고 코드가 기준이다. 문서와 코드가 다르면 코드를 믿고, 작업 끝에 문서를 고친다.
 
@@ -17,7 +17,8 @@ Claude는 `CLAUDE.md`가 이 파일을 불러오고, Codex는 이 파일을 직�
 
 ### 구조
 - `Docs/INDEX.md` : 자동 생성 색인. 손으로 고치지 않는다.
-- `Docs/Project/` : 프로젝트 전체 (`Overview.md`, `Config.md`)
+- `Docs/Project/` : 프로젝트 전체 (`Overview.md`, `Config.md`, 기획서 `Design.md`, 기획 참고 `GameReferences.md`)
+  - 기획 방향이나 사용자 결정이 바뀌면 `Design.md`를 먼저 고친다. 사용자가 정하지 않은 것을 결정된 것처럼 적지 않는다.
 - `Docs/Source/<폴더>.md` : `Source/HuoguoHuoguo/<폴더>/` 하나당 문서 하나 (`Module.md`는 모듈 루트)
 - `Docs/Content/<폴더>.md` : `Content/HG/<폴더>/` 하나당 문서 하나
 - `Docs/Tools/Tools.md` : `Tools/` 스크립트
