@@ -30,9 +30,47 @@ const TArray<FHGPlanetSeed>& UHGGameInstance::GetApproachingPlanets()
 void UHGGameInstance::AdvanceOrbitCycle()
 {
 	++OrbitCycle;
+	DayPhase = EHGDayPhase::Day;
 	bPlanetsBuilt = false;
 	GetApproachingPlanets();
 	ForgetDepartedPlanets();
+}
+
+FString UHGGameInstance::DescribeTime() const
+{
+	return FString::Printf(TEXT("%d일째 %s"), GetDayNumber(), HGDay::PhaseName(DayPhase));
+}
+
+bool UHGGameInstance::PassTime()
+{
+	switch (DayPhase)
+	{
+	case EHGDayPhase::Day:
+		DayPhase = EHGDayPhase::Night;
+		break;
+	case EHGDayPhase::Night:
+		DayPhase = EHGDayPhase::Closing;
+		break;
+	default:
+		// 문 닫을 시간 다음은 하루를 마치고 다음 날 낮이다. 궤도 주기가 넘어가 다른 행성들이 접근한다.
+		AdvanceOrbitCycle();
+		UE_LOG(LogHuoguo, Log, TEXT("[Time] 하루를 마침 -> %s"), *DescribeTime());
+		return true;
+	}
+	UE_LOG(LogHuoguo, Log, TEXT("[Time] 시간대가 넘어감 -> %s"), *DescribeTime());
+	return false;
+}
+
+bool UHGGameInstance::FinishDive()
+{
+	if (!bDiveInProgress)
+	{
+		return false;
+	}
+	bDiveInProgress = false;
+	// 다이빙은 문 닫을 시간에는 할 수 없으므로 여기서는 낮 -> 밤, 밤 -> 문 닫을 시간만 일어난다.
+	PassTime();
+	return true;
 }
 
 void UHGGameInstance::ForgetDepartedPlanets()
@@ -153,6 +191,8 @@ void UHGGameInstance::CommitDiveToSelectedPlanet()
 	if (const FHGPlanetSeed* Planet = GetSelectedPlanet())
 	{
 		DivePlanet = *Planet;
+		// 돌아오면 시간대가 한 칸 넘어간다 (FinishDive). 행성에 있는 동안은 내려간 시간대 그대로다.
+		bDiveInProgress = true;
 	}
 	else
 	{

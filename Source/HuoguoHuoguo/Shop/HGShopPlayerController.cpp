@@ -97,6 +97,13 @@ void AHGShopPlayerController::InitializeFromLevel()
 	if (bArrivedByTravel)
 	{
 		FadeInAfterTravel();
+		// 다이빙하고 돌아왔으면 시간대가 한 칸 넘어간다 (낮에 갔으면 밤, 밤에 갔으면 문 닫을 시간).
+		UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
+		if (GI && GI->FinishDive())
+		{
+			ShowMessage(FString::Printf(TEXT("행성에서 돌아오니 %s이 되었다"), *GI->DescribeTime()));
+			UpdatePlanetBoard();
+		}
 		// 행성에서 가져온 재료를 알려 준다. 진열대/창고 UI가 생기면 그쪽으로 옮긴다.
 		HGBag();
 	}
@@ -146,6 +153,7 @@ void AHGShopPlayerController::SetupInputComponent()
 	Input->BindAction(RotateFurnitureAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnRotateFurniture);
 	Input->BindAction(RemoveFurnitureAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnRemoveFurniture);
 	Input->BindAction(SelectFurnitureAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnSelectFurniture);
+	Input->BindAction(PassTimeAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnPassTime);
 }
 
 void AHGShopPlayerController::BuildInputObjects()
@@ -166,14 +174,16 @@ void AHGShopPlayerController::BuildInputObjects()
 	RotateFurnitureAction = MakeAction(TEXT("IA_Shop_RotateFurniture"), EInputActionValueType::Boolean);
 	RemoveFurnitureAction = MakeAction(TEXT("IA_Shop_RemoveFurniture"), EInputActionValueType::Boolean);
 	SelectFurnitureAction = MakeAction(TEXT("IA_Shop_SelectFurniture"), EInputActionValueType::Axis1D);
+	PassTimeAction = MakeAction(TEXT("IA_Shop_PassTime"), EInputActionValueType::Boolean);
 
 	// 숫자 키: 액션 하나에 키 여러 개를 매핑하고, 배율 수정자로 키마다 값을 1, 2, 3...으로 다르게 낸다.
 	// 받는 쪽은 값을 반올림해서 몇 번인지 안다. 키마다 액션을 따로 만들지 않아도 된다.
 	const FKey NumberKeys[] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine };
 
-	// 평소: 이동, 카메라, 행성 선택(1~4).
+	// 평소: 이동, 카메라, 행성 선택(1~4), 시간 넘기기(T).
 	ShopContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Shop"));
 	MapCommonKeys(ShopContext);
+	ShopContext->MapKey(PassTimeAction, EKeys::T);
 	for (int32 i = 0; i < 4; ++i)
 	{
 		MapScaledKey(ShopContext, SelectPlanetAction, NumberKeys[i], static_cast<float>(i + 1));
@@ -230,7 +240,7 @@ void AHGShopPlayerController::UpdateControlsHint() const
 	}
 	else
 	{
-		SetControlsHint(TEXT("[경영] WASD 사장님 이동 | 우클릭 드래그 회전 | Q/E 90도 회전 | 휠 확대 | 1~4 행성 선택 | B 가구 배치 | 청록 발판 = 다이빙"));
+		SetControlsHint(TEXT("[경영] WASD 사장님 이동 | 우클릭 드래그 회전 | Q/E 90도 회전 | 휠 확대 | 1~4 행성 선택 | B 가구 배치 | T 시간 넘기기 | 청록 발판 = 다이빙"));
 	}
 }
 
@@ -318,6 +328,33 @@ void AHGShopPlayerController::OnRemoveFurniture(const FInputActionValue& Value)
 void AHGShopPlayerController::OnSelectFurniture(const FInputActionValue& Value)
 {
 	HGBuildSelect(FMath::RoundToInt(Value.Get<float>()));
+}
+
+void AHGShopPlayerController::OnPassTime(const FInputActionValue& Value)
+{
+	HGPassTime();
+}
+
+void AHGShopPlayerController::HGPassTime()
+{
+	UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
+	if (!GI || bTraveling)
+	{
+		return;
+	}
+	if (GI->PassTime())
+	{
+		ShowMessage(FString::Printf(TEXT("하루를 마쳤다. %s: 새 행성들이 접근한다"), *GI->DescribeTime()));
+	}
+	else if (GI->GetDayPhase() == EHGDayPhase::Closing)
+	{
+		ShowMessage(FString::Printf(TEXT("%s. 오늘은 더 다이빙할 수 없다. T로 하루를 마친다"), *GI->DescribeTime()));
+	}
+	else
+	{
+		ShowMessage(FString::Printf(TEXT("시간이 흘렀다: %s"), *GI->DescribeTime()));
+	}
+	UpdatePlanetBoard();
 }
 
 void AHGShopPlayerController::HGBuild()
@@ -430,7 +467,7 @@ void AHGShopPlayerController::HGNextCycle()
 	if (UHGGameInstance* GI = GetGameInstance<UHGGameInstance>())
 	{
 		GI->AdvanceOrbitCycle();
-		ShowMessage(FString::Printf(TEXT("궤도 주기 %d: 새 행성들이 접근한다"), GI->GetOrbitCycle()));
+		ShowMessage(FString::Printf(TEXT("궤도 주기 %d (%s): 새 행성들이 접근한다"), GI->GetOrbitCycle(), *GI->DescribeTime()));
 		HGPlanets();
 	}
 }
@@ -444,7 +481,11 @@ void AHGShopPlayerController::UpdatePlanetBoard() const
 	}
 
 	// 정거장의 "도착 전광판" 임시판. 정식 UI가 생기면 이 내용을 위젯으로 옮긴다.
-	FString Board = FString::Printf(TEXT("== 접근 중인 행성 (궤도 주기 %d) | 숫자 키로 선택, 청록 발판으로 다이빙 =="), GI->GetOrbitCycle());
+	// 첫 줄에 지금 시간대를 붙인다. 낮에 내려가면 낮 재료, 밤에 내려가면 밤 재료가 보이므로 다이빙 전에 알아야 한다.
+	FString Board = GI->CanDive()
+		? FString::Printf(TEXT("== %s | 접근 중인 행성 | 숫자 키로 선택, 청록 발판으로 다이빙 (지금 내려가면 %s 재료) =="),
+			*GI->DescribeTime(), HGDay::PhaseName(GI->GetDayPhase()))
+		: FString::Printf(TEXT("== %s | 오늘은 다이빙 끝. T로 하루를 마치면 새 행성들이 접근한다 =="), *GI->DescribeTime());
 	const TArray<FHGPlanetSeed>& Planets = GI->GetApproachingPlanets();
 	for (int32 i = 0; i < Planets.Num(); ++i)
 	{

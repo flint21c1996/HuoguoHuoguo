@@ -21,6 +21,7 @@ class UHGFurniturePlacer;
  *   마우스 휠       확대/축소
  *   1 ~ 4          다이빙할 접근 행성 선택. 에어록의 청록 다이빙 발판을 밟으면 그 행성으로 내려간다.
  *   B              가구 배치 모드 켜기/끄기
+ *   T              시간 넘기기 (낮 -> 밤 -> 문 닫을 시간 -> 하루 마치기). 다이빙하고 돌아와도 한 칸 넘어간다.
  *   마우스 커서는 늘 보인다. 나중에 손님, 주방, UI를 클릭으로 다루기 위해서이다. 그래서 회전은 우클릭을 누르는 동안만 한다.
  *
  * 가구 배치 모드 (IMC_ShopBuild, 이동/카메라 조작은 그대로):
@@ -69,9 +70,13 @@ public:
 	UFUNCTION(Exec)
 	void HGDive(int32 Number = 0);
 
-	// HGNextCycle : 궤도 주기를 넘겨 접근 행성 목록을 새로 뽑는다.
+	// HGNextCycle : 궤도 주기를 넘겨 접근 행성 목록을 새로 뽑는다 (다음 날 낮이 된다).
 	UFUNCTION(Exec)
 	void HGNextCycle();
+
+	// HGPassTime : 시간대를 한 칸 넘긴다 (T 키와 같다). 문 닫을 시간에 부르면 하루를 마치고 다음 날 낮이 된다.
+	UFUNCTION(Exec)
+	void HGPassTime();
 
 	// HGRotate 90 : 카메라를 그 각도만큼 좌우로 돌린다 (우클릭 드래그를 대신하는 시험용).
 	UFUNCTION(Exec)
@@ -119,6 +124,7 @@ private:
 	UPROPERTY() TObjectPtr<UInputAction> RotateFurnitureAction;
 	UPROPERTY() TObjectPtr<UInputAction> RemoveFurnitureAction;
 	UPROPERTY() TObjectPtr<UInputAction> SelectFurnitureAction;
+	UPROPERTY() TObjectPtr<UInputAction> PassTimeAction;
 
 	UPROPERTY() TObjectPtr<AHGShopBossCharacter> ShopBoss;
 
@@ -148,4 +154,5 @@ private:
 	void OnRotateFurniture(const FInputActionValue& Value);
 	void OnRemoveFurniture(const FInputActionValue& Value);
 	void OnSelectFurniture(const FInputActionValue& Value);
+	void OnPassTime(const FInputActionValue& Value);
 };

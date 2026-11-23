@@ -104,6 +104,12 @@ void AHGPlayerControllerBase::RequestTravel(AHGTravelPad* Pad)
 			ShowMessage(TEXT("다이빙할 행성이 없다"), FColor::Red);
 			return;
 		}
+		if (!GI->CanDive())
+		{
+			// 하루 구조: 낮이나 밤에만 내려간다. 문 닫을 시간에는 하루를 마쳐야 다음 날 다시 내려갈 수 있다.
+			ShowMessage(TEXT("문 닫을 시간에는 다이빙할 수 없다. T로 하루를 마친다"), FColor::Red);
+			return;
+		}
 		GI->CommitDiveToSelectedPlanet();
 		DestinationText = FString::Printf(TEXT("%s (다이빙)"), *Selected->Name);
 	}

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
+#include "Game/HGDayTypes.h"
 #include "Planet/HGPlanetTypes.h"
 #include "HGGameInstance.generated.h"
 
@@ -58,10 +59,32 @@ public:
 	// 지금 궤도 주기에 정거장으로 접근 중인 행성 목록. 처음 부를 때 만든다.
 	const TArray<FHGPlanetSeed>& GetApproachingPlanets();
 
-	// 궤도 주기를 하나 넘긴다. 접근 행성 목록이 새로 바뀐다. (나중에 하루가 끝날 때 부른다.)
+	// 궤도 주기를 하나 넘긴다. 접근 행성 목록이 새로 바뀌고 다음 날 낮이 된다. 하루를 마칠 때 부른다.
 	void AdvanceOrbitCycle();
 
 	int32 GetOrbitCycle() const { return OrbitCycle; }
+
+	// ---- 하루와 시간대 ----
+
+	// 지금 시간대. 행성 표면 맵도 이 값을 읽는다 (다이빙 중에는 내려간 시간대 그대로이고, 돌아와야 넘어간다).
+	EHGDayPhase GetDayPhase() const { return DayPhase; }
+
+	// 몇째 날인지 (1부터). 하루 = 궤도 주기 하나.
+	int32 GetDayNumber() const { return OrbitCycle + 1; }
+
+	// "3일째 밤" 처럼 한 줄로.
+	FString DescribeTime() const;
+
+	// 문 닫을 시간에는 다이빙하지 않는다.
+	bool CanDive() const { return DayPhase != EHGDayPhase::Closing; }
+
+	// 시간대를 한 칸 넘긴다. 낮 -> 밤 -> 문 닫을 시간 -> (하루를 마치고) 다음 날 낮.
+	// 다음 날로 넘어갔으면 true (접근 행성 목록이 바뀌었다).
+	bool PassTime();
+
+	// 정거장에 돌아왔을 때 경영 파트가 부른다. 다이빙하고 돌아온 것이면 시간대를 한 칸 넘기고 true.
+	// 다이빙 기록이 없으면(다른 발판으로 왔거나 맵을 바로 열었으면) 아무것도 하지 않는다.
+	bool FinishDive();
 
 	// 다이빙할 행성을 고른다. Index는 GetApproachingPlanets의 순서. 범위를 벗어나면 false.
 	bool SelectPlanet(int32 Index);
@@ -149,6 +172,11 @@ private:
 	// 세계 전체의 시드. 나중에 새 게임을 시작할 때 무작위로 정하고 저장 파일에 넣는다.
 	int32 UniverseSeed = 20261123;
 	int32 OrbitCycle = 0;
+	EHGDayPhase DayPhase = EHGDayPhase::Day;
+
+	// 다이빙 발판을 밟았고 아직 정거장에 돌아오지 않았다. 돌아오면 FinishDive가 시간대를 넘기고 끈다.
+	bool bDiveInProgress = false;
+
 	int32 SelectedPlanetIndex = 0;
 	bool bPlanetsBuilt = false;
 	TArray<FHGPlanetSeed> ApproachingPlanets;
