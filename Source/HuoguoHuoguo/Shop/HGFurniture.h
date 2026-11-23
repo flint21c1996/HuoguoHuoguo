@@ -106,6 +106,7 @@ private:
 /**
  * 식탁: 둥근 상판, 가운데 다리, 바닥 받침, 상판 위 훠궈 냄비(장식). 2x2칸.
  * 지름 1.56m, 상판 높이 0.78m. 이 식탁을 바라보는 바로 옆 칸의 의자가 이 식탁의 자리다.
+ * 냄비 위 김(구 세 개)은 손님이 먹는 동안만 보이고, 색이 식탁 상태(콤보 수)를 보여 준다.
  */
 UCLASS()
 class HUOGUOHUOGUO_API AHGTable : public AHGFurniture
@@ -114,6 +115,13 @@ class HUOGUOHUOGUO_API AHGTable : public AHGFurniture
 
 public:
 	AHGTable();
+
+	// 김을 켜고 끈다. 켤 때 색을 정한다.
+	void SetSteam(bool bOn, const FLinearColor& Color = FLinearColor::White);
+
+private:
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UStaticMeshComponent>> SteamParts;
 };
 
 /**

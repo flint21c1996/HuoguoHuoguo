@@ -5,6 +5,7 @@
 #include "HGShopPlayerController.generated.h"
 
 class AHGShopBossCharacter;
+class UHGCustomerDirector;
 class UHGFurniturePlacer;
 
 /**
@@ -31,6 +32,8 @@ class UHGFurniturePlacer;
  *   X              옮기던 가구를 원래 자리로 되돌리기, 또는 가리킨 가구 치우기
  *   B              배치 모드 끝
  *   조작 안내 줄에 "이 자리에 놓으면 생길 콤보"가 나온다.
+ *
+ * 손님 (UHGCustomerDirector): 낮과 밤에 손님이 들어와 식탁을 바라보는 의자에 앉아 먹고, 식탁 콤보만큼 돈을 더 내고 나간다.
  */
 UCLASS()
 class HUOGUOHUOGUO_API AHGShopPlayerController : public AHGPlayerControllerBase
@@ -83,6 +86,22 @@ public:
 	UFUNCTION(Exec)
 	void HGRotate(float Degrees);
 
+	// HGCustomers : 손님 상태, 가진 돈, 발견한 콤보 수를 로그로 낸다.
+	UFUNCTION(Exec)
+	void HGCustomers();
+
+	// HGSpawnCustomer : 빈자리가 있으면 지금 바로 손님 한 명을 들인다.
+	UFUNCTION(Exec)
+	void HGSpawnCustomer();
+
+	// HGCombos : 식탁마다 자리 수와 성립한 콤보를 로그로 낸다.
+	UFUNCTION(Exec)
+	void HGCombos();
+
+	// HGGiveIngredient GlowCap 2 : 시험용. 가방에 재료를 넣는다 (손님이 먹는 꼬치 확인용).
+	UFUNCTION(Exec)
+	void HGGiveIngredient(FName IngredientId, int32 Count = 1);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
@@ -109,6 +128,10 @@ protected:
 	// 가구 배치 모드. 고를 수 있는 가구 목록, 격자 간격 등은 이 컴포넌트의 속성이다.
 	UPROPERTY(VisibleAnywhere, Category = "Furniture")
 	TObjectPtr<UHGFurniturePlacer> FurniturePlacer;
+
+	// 손님 흐름 (들어오기, 앉기, 먹기, 계산, 나가기).
+	UPROPERTY(VisibleAnywhere, Category = "Customers")
+	TObjectPtr<UHGCustomerDirector> CustomerDirector;
 
 private:
 	// 조작 안내에 마지막으로 쓴 콤보 미리보기. 바뀔 때만 안내 줄을 다시 쓴다.

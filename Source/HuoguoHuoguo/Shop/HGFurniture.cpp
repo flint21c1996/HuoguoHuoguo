@@ -166,6 +166,33 @@ AHGTable::AHGTable()
 	// 훠궈 냄비와 국물. 장식이라 충돌이 없다.
 	AddPart(TEXT("Pot"), Cylinder, FVector(0.f, 0.f, 92.f), FVector(0.6f, 0.6f, 0.2f), SteelColor, false);
 	AddPart(TEXT("Broth"), Cylinder, FVector(0.f, 0.f, 102.5f), FVector(0.52f, 0.52f, 0.01f), BrothColor, false);
+
+	// 김: 냄비 위로 작아지며 올라가는 구 세 개. 장식이라 충돌이 없고, 손님이 먹는 동안만 보인다.
+	UStaticMesh* Sphere = LoadBasicShape(TEXT("Sphere"));
+	const FVector SteamOffsets[] = { FVector(-6.f, 4.f, 122.f), FVector(5.f, -3.f, 146.f), FVector(-2.f, 2.f, 172.f) };
+	const float SteamSizes[] = { 0.34f, 0.26f, 0.18f };
+	for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(SteamSizes)); ++i)
+	{
+		UStaticMeshComponent* Puff = AddPart(*FString::Printf(TEXT("Steam_%d"), i), Sphere, SteamOffsets[i], FVector(SteamSizes[i]), FLinearColor::White, false);
+		Puff->SetCastShadow(false);
+		Puff->SetVisibility(false);
+		SteamParts.Add(Puff);
+	}
+}
+
+void AHGTable::SetSteam(bool bOn, const FLinearColor& Color)
+{
+	for (UStaticMeshComponent* Puff : SteamParts)
+	{
+		if (Puff)
+		{
+			if (bOn)
+			{
+				SetPartColor(Puff, Color);
+			}
+			Puff->SetVisibility(bOn);
+		}
+	}
 }
 
 AHGChair::AHGChair()

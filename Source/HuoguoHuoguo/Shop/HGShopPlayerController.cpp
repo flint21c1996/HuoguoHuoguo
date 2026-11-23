@@ -8,6 +8,7 @@
 #include "HuoguoHuoguo.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
+#include "Shop/HGCustomerDirector.h"
 #include "Shop/HGFurniture.h"
 #include "Shop/HGFurniturePlacer.h"
 #include "Shop/HGShopBossCharacter.h"
@@ -18,6 +19,7 @@
 AHGShopPlayerController::AHGShopPlayerController()
 {
 	FurniturePlacer = CreateDefaultSubobject<UHGFurniturePlacer>(TEXT("FurniturePlacer"));
+	CustomerDirector = CreateDefaultSubobject<UHGCustomerDirector>(TEXT("CustomerDirector"));
 }
 
 void AHGShopPlayerController::BeginPlay()
@@ -80,6 +82,11 @@ void AHGShopPlayerController::InitializeFromLevel()
 
 	// 행성에 다녀왔으면 사장님이 바꿔 둔 가구 배치로 되돌린다. 처음이면 맵의 배치를 기록해 둔다.
 	FurniturePlacer->RestoreLayout();
+
+	// 손님 흐름 시작. 계산 메시지는 화면 메시지로, 돈이 바뀌면 조작 안내 줄(가진 돈 표시)을 다시 쓴다.
+	CustomerDirector->OnMessage = [this](const FString& Text) { ShowMessage(Text); };
+	CustomerDirector->OnMoneyChanged = [this]() { UpdateControlsHint(); };
+	CustomerDirector->Start(FurniturePlacer);
 
 	BuildInputObjects();
 	ApplyMappingContext(ShopContext);
@@ -247,7 +254,9 @@ void AHGShopPlayerController::UpdateControlsHint() const
 	}
 	else
 	{
-		SetControlsHint(TEXT("[경영] WASD 사장님 이동 | 우클릭 드래그 회전 | Q/E 90도 회전 | 휠 확대 | 1~4 행성 선택 | B 가구 배치 | T 시간 넘기기 | 청록 발판 = 다이빙"));
+		const UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
+		SetControlsHint(FString::Printf(TEXT("[경영] 가진 돈 %d | WASD 사장님 이동 | 우클릭 드래그 회전 | Q/E 90도 회전 | 휠 확대 | 1~4 행성 선택 | B 가구 배치 | T 시간 넘기기 | 청록 발판 = 다이빙"),
+			GI ? GI->GetMoney() : 0));
 	}
 }
 
@@ -422,6 +431,33 @@ void AHGShopPlayerController::HGRotate(float Degrees)
 	FRotator Rotation = GetControlRotation();
 	Rotation.Yaw = FRotator::NormalizeAxis(Rotation.Yaw + Degrees);
 	SetControlRotation(Rotation);
+}
+
+void AHGShopPlayerController::HGCustomers()
+{
+	UE_LOG(LogHuoguo, Log, TEXT("[Customer] %s"), *CustomerDirector->DescribeCustomers());
+}
+
+void AHGShopPlayerController::HGSpawnCustomer()
+{
+	ShowMessage(CustomerDirector->SpawnCustomerNow());
+}
+
+void AHGShopPlayerController::HGCombos()
+{
+	UE_LOG(LogHuoguo, Log, TEXT("[Combo] %s"), *CustomerDirector->DescribeTables());
+}
+
+void AHGShopPlayerController::HGGiveIngredient(FName IngredientId, int32 Count)
+{
+	UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
+	if (!GI || !GI->FindIngredient(IngredientId))
+	{
+		ShowMessage(FString::Printf(TEXT("재료 표에 없는 ID: %s"), *IngredientId.ToString()), FColor::Red);
+		return;
+	}
+	GI->AddToBag(IngredientId, Count);
+	HGBag();
 }
 
 void AHGShopPlayerController::HGPlanets()

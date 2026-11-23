@@ -154,6 +154,35 @@ FString UHGGameInstance::DescribeBag()
 	return Parts.IsEmpty() ? FString(TEXT("비어 있음")) : FString::Join(Parts, TEXT(", "));
 }
 
+bool UHGGameInstance::TakeOneFromBag(FName& OutIngredientId)
+{
+	// 표의 행 순서대로 본다. 표에 없는 ID(표에서 지운 재료)도 뒤에 붙여서 꺼낼 수 있게 한다.
+	TArray<FName> Order;
+	if (const UDataTable* Table = GetIngredientTable())
+	{
+		Order = Table->GetRowNames();
+	}
+	for (const TPair<FName, int32>& Pair : Bag)
+	{
+		Order.AddUnique(Pair.Key);
+	}
+	for (const FName& Id : Order)
+	{
+		int32* Count = Bag.Find(Id);
+		if (Count && *Count > 0)
+		{
+			--(*Count);
+			if (*Count == 0)
+			{
+				Bag.Remove(Id);
+			}
+			OutIngredientId = Id;
+			return true;
+		}
+	}
+	return false;
+}
+
 const UDataTable* UHGGameInstance::GetComboTable()
 {
 	if (!LoadedComboTable && !ComboTable.IsNull())

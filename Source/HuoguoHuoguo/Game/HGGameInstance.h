@@ -132,7 +132,14 @@ public:
 	// "포자버섯 3, 서리다시마 1" 처럼 한 줄로. 비었으면 "비어 있음". 순서는 DataTable 행 순서.
 	FString DescribeBag();
 
-	// ---- 가게: 콤보 ----
+	// 가방에서 재료 하나를 꺼낸다 (DataTable 행 순서로 처음 남아 있는 것). 손님이 꼬치로 먹는다.
+	// 가방이 비었으면 false. 지금은 가방이 곧 가게 창고다 (창고 구분은 미정).
+	bool TakeOneFromBag(FName& OutIngredientId);
+
+	// ---- 가게: 돈과 콤보 ----
+
+	int32 GetMoney() const { return Money; }
+	void AddMoney(int32 Amount) { Money += Amount; }
 
 	// 배치 콤보 표 (Data/Combos.csv -> DT_Combos, 처음 부를 때 불러온다). 행 구조체는 경영 파트의 FHGComboRow라서
 	// 공통 폴더인 여기서는 표 에셋만 들고 있는다. 에셋이 없으면 nullptr이고 에러 로그를 한 번 남긴다.
@@ -170,6 +177,8 @@ private:
 	TObjectPtr<UDataTable> LoadedComboTable;
 
 	bool bComboTableMissingLogged = false;
+
+	int32 Money = 0;
 
 	TSet<FName> DiscoveredCombos;
 
