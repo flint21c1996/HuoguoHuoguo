@@ -16,6 +16,7 @@ public class HuoguoHuoguo : ModuleRules
 		// 행성 지형을 런타임에 메시로 만들기 위한 엔진 플러그인 모듈.
 		PrivateDependencyModuleNames.Add("ProceduralMeshComponent");
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		// 화면 UI(미니맵 등). UMG 위젯을 C++에서 만들고 Slate로 직접 그린다.
+		PrivateDependencyModuleNames.AddRange(new string[] { "UMG", "Slate", "SlateCore" });
 	}
 }

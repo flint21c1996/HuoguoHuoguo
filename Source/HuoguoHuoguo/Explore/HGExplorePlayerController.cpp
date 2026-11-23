@@ -5,6 +5,7 @@
 #include "EngineUtils.h"
 #include "EnhancedInputComponent.h"
 #include "Explore/HGExplorerCharacter.h"
+#include "Explore/HGPlanetMinimap.h"
 #include "Game/HGGameInstance.h"
 #include "HuoguoHuoguo.h"
 #include "InputAction.h"
@@ -72,7 +73,11 @@ void AHGExplorePlayerController::InitializeFromLevel()
 	bShowMouseCursor = false;
 	SetInputMode(FInputModeGameOnly());
 
-	SetControlsHint(TEXT("[탐험] WASD 이동 | 마우스 시점 | Space 점프 | E 재료 채집 | 금색 발판 = 정거장으로 귀환"));
+	SetControlsHint(TEXT("[탐험] WASD 이동 | 마우스 시점 | Space 점프 | E 재료 채집 | M 지도 범위 | 금색 발판 = 정거장으로 귀환"));
+	if (Planet)
+	{
+		CreateMinimap();
+	}
 	if (!ArrivalTag.IsNone())
 	{
 		FadeInAfterTravel();
@@ -140,6 +145,61 @@ void AHGExplorePlayerController::SetupInputComponent()
 	Input->BindAction(JumpAction, ETriggerEvent::Started, this, &AHGExplorePlayerController::OnJumpStarted);
 	Input->BindAction(JumpAction, ETriggerEvent::Completed, this, &AHGExplorePlayerController::OnJumpCompleted);
 	Input->BindAction(InteractAction, ETriggerEvent::Started, this, &AHGExplorePlayerController::OnInteract);
+	Input->BindAction(MapAction, ETriggerEvent::Started, this, &AHGExplorePlayerController::OnToggleMap);
+}
+
+void AHGExplorePlayerController::CreateMinimap()
+{
+	Minimap = CreateWidget<UHGPlanetMinimap>(this, UHGPlanetMinimap::StaticClass());
+	if (!Minimap)
+	{
+		return;
+	}
+	Minimap->Init(Planet, Explorer);
+	// 화면 전체를 덮는 위젯으로 붙이고, 지도는 위젯이 직접 오른쪽 위 모서리에 그린다 (UHGPlanetMinimap::NativePaint).
+	// 뷰포트 슬롯의 앵커/정렬 설정은 위치 설정 함수가 앵커를 되돌리는 등 순서에 민감해서 쓰지 않는다.
+	Minimap->AddToViewport(10);
+	UE_LOG(LogHuoguo, Log, TEXT("[Map] 미니맵 생성: 화면에 붙음 %s"), Minimap->IsInViewport() ? TEXT("예") : TEXT("아니오"));
+}
+
+void AHGExplorePlayerController::OnToggleMap(const FInputActionValue& Value)
+{
+	if (Minimap)
+	{
+		Minimap->ToggleWholePlanet();
+		UE_LOG(LogHuoguo, Log, TEXT("[Map] 미니맵 범위: %s"), Minimap->IsWholePlanet() ? TEXT("행성 전체") : TEXT("근거리"));
+	}
+}
+
+void AHGExplorePlayerController::HGMapInfo()
+{
+	FVector2D PadMapCm;
+	if (!Minimap || !Minimap->GetReturnPadOnMap(PadMapCm))
+	{
+		ShowMessage(TEXT("미니맵 또는 귀환 발판이 없다"), FColor::Red);
+		return;
+	}
+	// 방위: 지도 위쪽(카메라가 보는 쪽) = 0도, 오른쪽으로 돌수록 +.
+	const double Bearing = FMath::RadiansToDegrees(FMath::Atan2(PadMapCm.X, PadMapCm.Y));
+	FVector PadLocation;
+	Planet->GetReturnPadLocation(PadLocation);
+	UE_LOG(LogHuoguo, Log, TEXT("[Map] 귀환 발판: 지도 방위 %.1f도, 표면 거리 %.1fm (직선 거리 %.1fm)"),
+		Bearing, PadMapCm.Size() / 100.0, FVector::Dist(Explorer->GetActorLocation(), PadLocation) / 100.0);
+}
+
+void AHGExplorePlayerController::HGFacePad()
+{
+	FVector2D PadMapCm;
+	if (!Minimap || !Explorer || !Minimap->GetReturnPadOnMap(PadMapCm))
+	{
+		return;
+	}
+	// 지도 방위만큼 "위"(행성 바깥 방향) 축으로 시점을 돌린다. 양의 각도는 위에서 내려다볼 때 시계 방향(오른쪽)이다.
+	const double Bearing = FMath::Atan2(PadMapCm.X, PadMapCm.Y);
+	const FVector Up = (Explorer->GetActorLocation() - Planet->GetGravityCenter()).GetSafeNormal();
+	const FQuat Turn(Up, Bearing);
+	SetControlRotation((Turn * GetControlRotation().Quaternion()).Rotator());
+	UE_LOG(LogHuoguo, Log, TEXT("[Map] 귀환 발판 쪽으로 %.1f도 돌림"), FMath::RadiansToDegrees(Bearing));
 }
 
 void AHGExplorePlayerController::PlayerTick(float DeltaTime)
@@ -241,6 +301,7 @@ void AHGExplorePlayerController::BuildInputObjects()
 	LookAction = MakeAction(TEXT("IA_Explore_Look"), EInputActionValueType::Axis2D);
 	JumpAction = MakeAction(TEXT("IA_Explore_Jump"), EInputActionValueType::Boolean);
 	InteractAction = MakeAction(TEXT("IA_Explore_Interact"), EInputActionValueType::Boolean);
+	MapAction = MakeAction(TEXT("IA_Explore_Map"), EInputActionValueType::Boolean);
 
 	ExploreContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Explore"));
 	MapWASD(ExploreContext, MoveAction);
@@ -248,6 +309,7 @@ void AHGExplorePlayerController::BuildInputObjects()
 	ExploreContext->MapKey(JumpAction, EKeys::SpaceBar);
 	// 상호작용(채집). 나중에 IMC_ 에셋으로 옮기면 키를 바꿀 수 있다.
 	ExploreContext->MapKey(InteractAction, EKeys::E);
+	ExploreContext->MapKey(MapAction, EKeys::M);
 }
 
 void AHGExplorePlayerController::OnMove(const FInputActionValue& Value)

@@ -1,6 +1,6 @@
 # Planet - 행성 시드와 절차적 행성 생성기
 
-> 경로: `Source/HuoguoHuoguo/Planet/` · 마지막 갱신: 2026-11-23
+> 경로: `Source/HuoguoHuoguo/Planet/` · 마지막 갱신: 2026-11-24
 
 ## 역할
 
@@ -34,6 +34,7 @@
   - 채집 API: `FindNearestIngredient(From, MaxDistance)`, `GetMarkerIngredient`, `GetMarkerLocation`, `HarvestIngredient`(숨기고 GI에 기록, 재료 ID 반환), `GetRemainingIngredientCount`.
   - 숨기기는 인스턴스 크기를 0으로 바꾼다. 인스턴스를 지우면 뒤 번호가 당겨져 다른 표식의 번호가 틀어지기 때문이다.
   - DataTable이 없으면 재료 없이 바위만 놓고 에러 로그를 남긴다.
+- 표시용 조회 (미니맵): `GetIngredientMarkers()`(전체 표식, 캔 것 포함), `GetIngredientColor(Kind)`, `GetReturnPadLocation(Out)`(발판을 만들 때 위치를 기억해 둔다).
 - `SpawnReturnPad()`: 착륙 지점에서 4m 옆에 금색 `AHGTravelPad`를 지연 생성 (`ReturnLevel`, `ReturnArrivalTag` 기본 `FromPlanet`, `ReturnName`).
 - `GetLandingTransform()`: 북극 지표 + 95. `GetGravityCenter()`: 액터 위치.
 

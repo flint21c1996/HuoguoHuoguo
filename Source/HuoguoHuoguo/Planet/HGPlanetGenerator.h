@@ -75,6 +75,17 @@ public:
 	// 남은(캐지 않은) 재료 표식 수.
 	int32 GetRemainingIngredientCount() const;
 
+	// ---- 미니맵 등 표시용 ----
+
+	// 재료 표식 전체 (캔 것 포함, bHarvested로 구분).
+	const TArray<FHGIngredientMarker>& GetIngredientMarkers() const { return Markers; }
+
+	// 재료 종류(Kind)의 표시 색. 범위를 벗어나면 흰색.
+	FLinearColor GetIngredientColor(int32 Kind) const;
+
+	// 귀환 발판 위치. 발판이 없으면 false.
+	bool GetReturnPadLocation(FVector& OutLocation) const;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -143,7 +154,11 @@ private:
 
 	// 재료 종류 ID (IngredientMarkers와 같은 순서)와 표식 전체.
 	TArray<FName> IngredientIds;
+	TArray<FLinearColor> IngredientColors;
 	TArray<FHGIngredientMarker> Markers;
+
+	bool bHasReturnPad = false;
+	FVector ReturnPadLocation = FVector::ZeroVector;
 
 	// 표식 하나를 안 보이게 한다 (인스턴스 크기를 0으로). 인스턴스를 지우면 뒤 번호가 당겨지므로 지우지 않는다.
 	void HideMarker(int32 MarkerId);

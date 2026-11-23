@@ -6,6 +6,7 @@
 
 class AHGExplorerCharacter;
 class AHGPlanetGenerator;
+class UHGPlanetMinimap;
 
 /**
  * 탐험 파트 컨트롤러 (행성 표면 맵 등).
@@ -14,7 +15,8 @@ class AHGPlanetGenerator;
  *   AHGPlanetGenerator가 있으면 행성 맵이다. 지형을 먼저 만들게 한 뒤 착륙 지점(북극)에 사장님을 만들고 구형 중력을 켠다.
  *   없으면 평면 맵으로 보고 도착 태그에 맞는 AHGExplorerStart에 만든다.
  *
- * 조작: WASD 이동(카메라 기준), 마우스 시점, Space 점프, E 채집. 커서는 숨긴다.
+ * 조작: WASD 이동(카메라 기준), 마우스 시점, Space 점프, E 채집, M 미니맵 범위(근거리/행성 전체). 커서는 숨긴다.
+ * 행성 맵이면 오른쪽 위에 미니맵(UHGPlanetMinimap)을 띄운다.
  * 재료 표식 가까이(HarvestRadius 안) 가면 "E 채집: <재료>" 안내가 뜨고, E를 누르면 가장 가까운 표식을 캐서 가방에 넣는다.
  * 정거장으로 돌아가는 길은 착륙 지점 옆의 금색 귀환 발판뿐이다. 경영 화면으로 바로 전환하는 키는 없다.
  */
@@ -31,6 +33,14 @@ public:
 	// HGIngredients : 이 행성의 남은 재료 표식 수와 가방 내용을 로그로 낸다.
 	UFUNCTION(Exec)
 	void HGIngredients();
+
+	// HGMapInfo : 미니맵 기준 귀환 발판의 방향(지도 위쪽 = 0도, 오른쪽 = +)과 표면 거리를 로그로 낸다.
+	UFUNCTION(Exec)
+	void HGMapInfo();
+
+	// HGFacePad : 시험용. 미니맵이 가리키는 귀환 발판 방향으로 카메라를 돌린다. 그 뒤 W로 걸으면 발판에 가까워져야 한다.
+	UFUNCTION(Exec)
+	void HGFacePad();
 
 protected:
 	virtual void BeginPlay() override;
@@ -60,6 +70,13 @@ private:
 	UPROPERTY() TObjectPtr<UInputAction> LookAction;
 	UPROPERTY() TObjectPtr<UInputAction> JumpAction;
 	UPROPERTY() TObjectPtr<UInputAction> InteractAction;
+	UPROPERTY() TObjectPtr<UInputAction> MapAction;
+
+	// 오른쪽 위 미니맵. 행성 맵에서만 만든다.
+	UPROPERTY() TObjectPtr<UHGPlanetMinimap> Minimap;
+
+	void CreateMinimap();
+	void OnToggleMap(const FInputActionValue& Value);
 
 	// 지금 캘 수 있는 가장 가까운 표식 번호 (PlayerTick에서 갱신). 없으면 INDEX_NONE.
 	int32 NearestMarker = INDEX_NONE;

@@ -40,7 +40,8 @@
   - 행성 걷기 [구현됨]
   - 재료 채집 [구현됨]
   - 전투 [아이디어]
-  - 지도 [아이디어]
+  - 미니맵 [구현됨]
+  - 큰 지도 [아이디어]
 - 가방 [구현됨 일부]
 - 하지 않기로 한 것
 - 작업 방식에 대한 요청
@@ -78,13 +79,14 @@
   - HGPlaceholderPaint (.h/.cpp)
 - 알려진 문제와 다음 할 일
 
-### [Explore - 탐험 파트 (3인칭으로 행성을 걷고 재료를 캔다)](Source/Explore.md)
+### [Explore - 탐험 파트 (3인칭으로 행성을 걷고 재료를 캐고 미니맵을 본다)](Source/Explore.md)
 
 - 역할
 - 파일
   - HGExploreGameMode (.h/.cpp)
   - HGExplorerCharacter (.h/.cpp)
   - HGExplorePlayerController (.h/.cpp)
+  - HGPlanetMinimap (.h/.cpp)
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
 

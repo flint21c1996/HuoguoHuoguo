@@ -317,6 +317,7 @@ void AHGPlanetGenerator::ScatterProps()
 	}
 	IngredientMarkers.Reset();
 	IngredientIds.Reset();
+	IngredientColors.Reset();
 	Markers.Reset();
 
 	UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
@@ -333,6 +334,7 @@ void AHGPlanetGenerator::ScatterProps()
 	{
 		const FHGIngredientRow* Row = Table->FindRow<FHGIngredientRow>(Id, TEXT("ScatterProps"));
 		const int32 Kind = IngredientIds.Add(Id);
+		IngredientColors.Add(Row ? Row->Color : FLinearColor::White);
 
 		UInstancedStaticMeshComponent* Ism = NewObject<UInstancedStaticMeshComponent>(this, *FString::Printf(TEXT("Ingredient_%s"), *Id.ToString()));
 		Ism->SetStaticMesh(MarkerMesh);
@@ -434,6 +436,17 @@ FName AHGPlanetGenerator::HarvestIngredient(int32 MarkerId)
 	return IngredientIds[Markers[MarkerId].Kind];
 }
 
+FLinearColor AHGPlanetGenerator::GetIngredientColor(int32 Kind) const
+{
+	return IngredientColors.IsValidIndex(Kind) ? IngredientColors[Kind] : FLinearColor::White;
+}
+
+bool AHGPlanetGenerator::GetReturnPadLocation(FVector& OutLocation) const
+{
+	OutLocation = ReturnPadLocation;
+	return bHasReturnPad;
+}
+
 int32 AHGPlanetGenerator::GetRemainingIngredientCount() const
 {
 	int32 Count = 0;
@@ -472,4 +485,7 @@ void AHGPlanetGenerator::SpawnReturnPad()
 	Pad->DestinationName = ReturnName;
 	Pad->PadColor = FLinearColor(0.95f, 0.62f, 0.15f);
 	Pad->FinishSpawning(PadTransform);
+
+	bHasReturnPad = true;
+	ReturnPadLocation = Location;
 }
