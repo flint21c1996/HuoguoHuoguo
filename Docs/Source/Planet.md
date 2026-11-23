@@ -26,13 +26,17 @@
   - 법선은 접선 두 방향 유한 차분으로 계산 (면 이음매 명암 없음).
   - 삼각형 감기 순서는 면마다 첫 칸을 계산해 바깥을 향하도록 자동 결정 (`(P1-P2)x(P0-P2)`).
   - `UProceduralMeshComponent`, 복합 충돌 = 단순 충돌, 동기 쿠킹(사장님이 떨어지지 않게).
-- `ScatterProps()`: 지형과 다른 시드 수열. 표면적 비례 개수 (바위 2000m²당 1, 20~1500 / 재료 3500m²당 1, 12~400) × Richness. 착륙 지점 근처 제외. 바위는 인스턴스 메시(`RoundRocks`, `BlockRocks`, 충돌 있음).
+- `ScatterProps()`: 지형과 다른 시드 수열. 표면적 비례 개수 (바위 2000m²당 1, 20~1500 / 재료 표식 1750m²당 1, 24~800) × Richness. 착륙 지점 근처 제외. 바위는 인스턴스 메시(`RoundRocks`, `BlockRocks`, 충돌 있음).
 - 재료 표식 (데이터 기반)
   - 재료 종류는 GameInstance의 재료 DataTable(`DT_Ingredients`) 행 순서다. 종류마다 `MarkerMesh`(구) 인스턴스 메시를 실행 중에 만들어 행의 `Color`로 칠한다 (충돌 없음).
   - 표식의 절반은 이 행성 군계가 `HomeBiome`인 재료, 나머지는 모든 재료에서 고르게. 크기 `MarkerScale` 0.4, 지표 위 22.
-  - 표식 번호 = 생성 순서. 같은 시드면 같은 번호에 같은 재료와 자리가 나온다. 이미 캔 번호(`GI->IsMarkerHarvested(시드, 번호)`)는 처음부터 숨긴다.
-  - 채집 API: `FindNearestIngredient(From, MaxDistance)`, `GetMarkerIngredient`, `GetMarkerLocation`, `HarvestIngredient`(숨기고 GI에 기록, 재료 ID 반환), `GetRemainingIngredientCount`.
-  - 숨기기는 인스턴스 크기를 0으로 바꾼다. 인스턴스를 지우면 뒤 번호가 당겨져 다른 표식의 번호가 틀어지기 때문이다.
+  - 표식 번호 = 생성 순서. 같은 시드면 같은 번호에 같은 재료와 자리가 나온다. 이미 캔 번호(`GI->IsMarkerHarvested(시드, 번호)`)는 처음부터 숨긴다(`bHarvested`).
+  - 낮/밤 재료: 시간대와 상관없이 모든 표식을 같은 순서로 만들고, 재료의 `AvailableAt`이 지금 시간대(`GI->GetDayPhase()`, 다이빙한 시간대)가 아닌 표식을 숨긴다(`bOtherTime`). 그래서 한 행성에 낮 재료 자리와 밤 재료 자리가 따로 있다.
+    시간대에 따라 재료를 다르게 뽑지 않는 이유: 같은 번호가 낮과 밤에 다른 재료를 가리키면 캔 기록(번호)이 꼬인다. 한 시간대에 약 절반만 보이므로 표식 수를 예전의 두 배로 만든다.
+  - `FHGIngredientMarker::IsAvailable()` = 캐지 않았고 지금 시간대 재료. 찾기, 캐기, 남은 수, 미니맵이 모두 이것을 쓴다.
+  - 채집 API: `FindNearestIngredient(From, MaxDistance)`, `GetMarkerIngredient`, `GetMarkerLocation`, `HarvestIngredient`(숨기고 GI에 기록, 재료 ID 반환), `GetRemainingIngredientCount`(지금 캘 수 있는 수).
+  - 로그: "행성 배치 (밤): 바위 37, 재료 42 (종류 6, 다른 시간대 재료 22개 숨김, 이미 캔 것 1개 숨김, 지금 캘 수 있는 것 19)".
+  - 숨기기(`HideInstance`)는 인스턴스 크기를 0으로 바꾼다. 인스턴스를 지우면 뒤 번호가 당겨져 다른 표식의 번호가 틀어지기 때문이다.
   - DataTable이 없으면 재료 없이 바위만 놓고 에러 로그를 남긴다.
 - 표시용 조회 (미니맵): `GetIngredientMarkers()`(전체 표식, 캔 것 포함), `GetIngredientColor(Kind)`, `GetReturnPadLocation(Out)`(발판을 만들 때 위치를 기억해 둔다).
 - `SpawnReturnPad()`: 착륙 지점에서 4m 옆에 금색 `AHGTravelPad`를 지연 생성 (`ReturnLevel`, `ReturnArrivalTag` 기본 `FromPlanet`, `ReturnName`).
@@ -47,7 +51,9 @@
 ## 알려진 문제와 다음 할 일
 
 - 에디터 뷰포트에서는 지형이 보이지 않는다 (실행할 때만 생성). 에디터 미리보기가 필요하면 별도 버튼으로 만든다.
-- 재료 배치 방식을 데이터 기반으로 바꾸면서 같은 시드의 재료 종류/자리가 이전 버전과 달라졌다 (지형과 바위는 그대로).
+- 재료 배치 방식을 데이터 기반으로 바꾸면서, 그리고 낮/밤 재료를 넣으면서(표식 수 두 배, 재료 6종) 같은 시드의 재료 종류/자리가 이전 버전과 달라졌다 (지형과 바위는 그대로).
+- 확인됨 (낮/밤, 반지름 72m 얼음 행성 시드 265933003): 낮 다이빙 재료 42개 중 23개 보임, 서리다시마 캠. 같은 행성에 밤 다이빙 → 19개 보임(낮 22 + 캔 1 숨김), 달빛연근 캠.
+- 행성 조명은 시간대와 상관없이 같다. 밤 다이빙이면 하늘을 어둡게 하는 연출이 있으면 좋다.
 - 캔 재료 기록은 게임이 켜져 있는 동안만 남는다 (저장 파일 없음).
 - 밤 쪽이 꽤 어둡다 (보조광 1.2). 하늘에 별 없음.
 - 중형 행성은 격자 상한 때문에 격자 한 칸이 약 5m로 거칠다. 더 크게 하려면 LOD/청크 분할이 필요하다.

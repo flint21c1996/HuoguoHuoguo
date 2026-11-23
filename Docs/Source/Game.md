@@ -1,6 +1,6 @@
 # Game - 두 파트의 공통 부모(게임 모드, 컨트롤러), GameInstance, 재료 데이터 구조
 
-> 경로: `Source/HuoguoHuoguo/Game/` · 마지막 갱신: 2026-11-23
+> 경로: `Source/HuoguoHuoguo/Game/` · 마지막 갱신: 2026-11-24
 
 ## 역할
 
@@ -17,7 +17,7 @@
 추상 클래스. 두 파트 컨트롤러의 공통 기능.
 - `Boss`: 지금 조종 중인 사장님(`AHGBossCharacter`). 하위 클래스가 만들어 넣는다.
 - 맵 이동 `RequestTravel(Pad)`: 이동 발판이 부른다.
-  - 다이빙 발판(`bDiveToSelectedPlanet`)이면 `GI->CommitDiveToSelectedPlanet()`으로 고른 행성을 고정한다.
+  - 다이빙 발판(`bDiveToSelectedPlanet`)이면 `GI->CommitDiveToSelectedPlanet()`으로 고른 행성을 고정한다. 문 닫을 시간(`!GI->CanDive()`)이면 거절 메시지를 띄우고 이동하지 않는다.
   - 화면 암전 후 타이머로 도착 태그를 GameInstance에 맡기고 `OpenLevelBySoftObjectPtr`.
 - 맵 시작 도우미: `ConsumeArrivalTag()`, `FindStart(Tag)`(태그 > Default > 아무거나), `FadeInAfterTravel()`.
 - 입력 도우미 (Enhanced Input을 에셋 없이 코드로 만든다)
@@ -35,8 +35,13 @@
 맵이 바뀌어도 유지되는 상태.
 - 도착 태그: `SetPendingArrival` / `ConsumePendingArrival`
 - 접근 행성: `UniverseSeed`(현재 고정값 20261123) + `OrbitCycle`로 `HGPlanet::MakeApproachingPlanets(…, 4)`를 처음 요청 때 만든다.
-  - `AdvanceOrbitCycle()`, `SelectPlanet(Index)`, `GetSelectedPlanet()`
-  - `CommitDiveToSelectedPlanet()` → `GetDivePlanet()` (TOptional). 표면 맵 생성기가 읽는다.
+  - `AdvanceOrbitCycle()`(다음 날 낮으로 되돌림), `SelectPlanet(Index)`, `GetSelectedPlanet()`
+  - `CommitDiveToSelectedPlanet()` → `GetDivePlanet()` (TOptional). 표면 맵 생성기가 읽는다. 다이빙 중 표시(`bDiveInProgress`)도 켠다.
+- 하루와 시간대 (기획서 "하루 구조")
+  - `DayPhase`(`EHGDayPhase`: 낮/밤/문 닫을 시간), `GetDayNumber()` = 궤도 주기 + 1 (하루 = 궤도 주기 하나), `DescribeTime()` "1일째 밤".
+  - `PassTime()`: 낮 → 밤 → 문 닫을 시간 → `AdvanceOrbitCycle()`(다음 날 낮). 다음 날로 넘어갔으면 true.
+  - `FinishDive()`: 정거장에 돌아왔을 때 다이빙 중이었으면 `PassTime()` 한 번. 행성에 있는 동안은 내려간 시간대 그대로라서, 표면 맵은 `GetDayPhase()`로 내려간 시간대를 읽는다.
+  - `CanDive()`: 문 닫을 시간이 아니면 true.
 - 정거장 가구 배치 기록: `FHGPlacedFurniture`(클래스, 위치, Yaw) 배열. `HasShopLayout`, `GetShopLayout`, `SetShopLayout`.
   - 클래스는 `TSubclassOf<AActor>`로 들고 있다. 공통 폴더가 경영 파트(`Shop/HGFurniture.h`)를 include하지 않기 위해서이다.
 - `GetDevSequence()`: `HGSeq`가 아직 실행하지 않은 명령들.
@@ -47,8 +52,12 @@
   - 캔 표식 기록 `HarvestedByPlanet`(행성 시드 → 표식 번호 집합): `IsMarkerHarvested`, `MarkHarvested`, `GetHarvestedCount`.
     `AdvanceOrbitCycle()`이 접근 목록에서 빠진 행성의 기록을 지운다 (`ForgetDepartedPlanets`). "행성이 떠날 때까지 캔 자리는 비어 있다".
 
+### HGDayTypes.h
+- `EHGDayPhase`(`Day`/`Night`/`Closing`), `EHGIngredientTime`(`Any`/`Day`/`Night`, 재료 CSV의 `AvailableAt`).
+- `HGDay::PhaseName(Phase)`("낮"/"밤"/"문 닫을 시간"), `HGDay::IsAvailable(Time, Phase)`(문 닫을 시간은 밤으로 친다).
+
 ### HGIngredientTypes.h
-- `FHGIngredientRow`(DataTable 행): `DisplayName`, `Color`, `Price`(아직 안 씀), `HomeBiome`. 행 이름이 재료 ID.
+- `FHGIngredientRow`(DataTable 행): `DisplayName`, `Color`, `Price`(아직 안 씀), `HomeBiome`, `AvailableAt`(행성에서 보이는 시간대). 행 이름이 재료 ID.
 - 경영(손님, 요리)과 탐험(채집)이 같이 쓰므로 공통 폴더에 둔다. 원본 데이터는 `Data/Ingredients.csv` (`Docs/Content/Data.md`).
 
 ## 흐름 / 규칙
@@ -61,7 +70,8 @@
 
 - 입력이 코드 생성이다. 키 설정 화면이 필요해지면 `IA_`/`IMC_` 에셋으로 옮긴다.
 - 화면 안내는 디버그 메시지다. UMG 위젯으로 바꿀 때 `ShowMessage`/`SetControlsHint`와 경영 파트의 행성 목록만 교체하면 된다.
-- `UniverseSeed`, 가구 배치, 가방, 캔 표식 기록은 파일에 저장해야 한다 (저장 기능 없음).
-- 재료 DataTable은 GameInstance 기본값의 소프트 경로로만 참조된다. 패키징할 때는 쿠킹 대상에 넣어야 한다 (Asset Manager 또는 "항상 쿠킹" 디렉터리). `OrbitCycle`은 아직 게임 내 날짜와 연결되지 않았다.
+- `UniverseSeed`, 날짜와 시간대, 가구 배치, 가방, 캔 표식 기록은 파일에 저장해야 한다 (저장 기능 없음).
+- 재료 DataTable은 GameInstance 기본값의 소프트 경로로만 참조된다. 패키징할 때는 쿠킹 대상에 넣어야 한다 (Asset Manager 또는 "항상 쿠킹" 디렉터리).
+- 시간대는 칸 단위로만 넘어간다 (시계, 시간 흐름 없음). 정거장과 행성의 조명은 시간대에 따라 바뀌지 않는다.
 - 접근 행성 관리는 GameInstance 서브시스템으로 분리할 수 있다 (인벤토리가 생길 때 같이).
 - 다이빙 연출은 화면 암전뿐이다.

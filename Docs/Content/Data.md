@@ -1,6 +1,6 @@
 # Data - 밸런스 데이터 (CSV 원본과 DataTable 에셋)
 
-> 경로: `Data/` (CSV 원본), `Content/HG/Data/` (DataTable 에셋) · 마지막 갱신: 2026-11-23
+> 경로: `Data/` (CSV 원본), `Content/HG/Data/` (DataTable 에셋) · 마지막 갱신: 2026-11-24
 
 ## 역할
 
@@ -10,8 +10,15 @@
 ## 파일
 
 ### Data/Ingredients.csv - 재료
-- 열: `Name`(행 이름 = 재료 ID), `DisplayName`, `Color`(`"(R=,G=,B=,A=)"`), `Price`, `HomeBiome`(`Rock`/`Ice`/`Fungal`). 행 구조체는 `FHGIngredientRow` (`Docs/Source/Game.md`).
-- 지금 재료: `SporeMushroom` 포자버섯(보라, 버섯숲), `FrostKelp` 서리다시마(청록, 얼음), `EmberChili` 불씨고추(빨강, 바위).
+- 열: `Name`(행 이름 = 재료 ID), `DisplayName`, `Color`(`"(R=,G=,B=,A=)"`), `Price`, `HomeBiome`(`Rock`/`Ice`/`Fungal`), `AvailableAt`(`Day`/`Night`/`Any`, 행성에서 보이는 시간대). 행 구조체는 `FHGIngredientRow` (`Docs/Source/Game.md`).
+- 지금 재료 (군계마다 낮 하나, 밤 하나)
+
+| 군계 | 낮 | 밤 |
+|---|---|---|
+| 버섯숲 `Fungal` | `SporeMushroom` 포자버섯 (보라) | `GlowCap` 야광버섯 (연두) |
+| 얼음 `Ice` | `FrostKelp` 서리다시마 (청록) | `MoonLotus` 달빛연근 (흰빛 하늘) |
+| 바위 `Rock` | `EmberChili` 불씨고추 (빨강) | `CinderPotato` 숯불감자 (주황) |
+
 - UTF-8 BOM으로 저장한다 (한국어).
 
 ### Content/HG/Data/DT_Ingredients - 재료 DataTable
