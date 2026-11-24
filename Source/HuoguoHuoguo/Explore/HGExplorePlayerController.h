@@ -28,7 +28,7 @@ class HUOGUOHUOGUO_API AHGExplorePlayerController : public AHGPlayerControllerBa
 public:
 	// HGWarpToIngredient : 시험용. 가장 가까운 캐지 않은 재료 표식 바로 옆으로 사장님을 옮긴다.
 	UFUNCTION(Exec)
-	void HGWarpToIngredient();
+	void HGWarpToIngredient(int32 Index = -1);
 
 	// HGIngredients : 이 행성의 남은 재료 표식 수와 가방 내용을 로그로 낸다.
 	UFUNCTION(Exec)
@@ -51,8 +51,37 @@ public:
 	UFUNCTION(Exec)
 	void HGWarpToLandmark(int32 Index);
 
+	// HGWarpToRock <번호> [바라볼 번호] : 시험용. 소행성 지대의 그 소행성 위로 옮기고, 바라볼 소행성(없으면 가장 가까운 것) 쪽을 보게 한다.
+	// 그대로 W + Space면 그 소행성으로 뛰어 건너가 본다. 0번 = 본 소행성.
+	UFUNCTION(Exec)
+	void HGWarpToRock(int32 Index, int32 Target = -1);
+
+	// HGAutoRun <초> : 시험용. 그 시간 동안 앞으로(W) 달린다. HGSimKey는 키를 하나씩만 누르므로,
+	// 달리면서 점프하는 시험은 HGAutoRun과 HGSimKey SpaceBar를 같이 쓴다.
+	UFUNCTION(Exec)
+	void HGAutoRun(float Seconds);
+
+	// HGWarpToInteract <번호> : 시험용. 폐우주선의 상호작용 지점(설계도 단말들, 바깥 문, 안쪽 문 순서) 바로 앞으로 옮긴다.
+	// 순서와 위치는 로그 [Derelict]. 옮긴 뒤 E(HGSimKey E)를 누르면 그 지점을 쓴다.
+	UFUNCTION(Exec)
+	void HGWarpToInteract(int32 Index);
+
+	/**
+	 * HGTune [이름] [값] : 손맛 맞추기용. 게임 중에 설정값(소수 UPROPERTY)을 이름으로 보거나 바꾼다.
+	 *   HGTune                        -> 바꿀 수 있는 값 목록과 지금 값
+	 *   HGTune CameraUpFollowSpeed    -> 그 값 보기
+	 *   HGTune CameraUpFollowSpeed 2  -> 그 값 바꾸기 (게임을 다시 시작하면 원래 값으로 돌아간다)
+	 * 찾는 곳: 이 컨트롤러(카메라 따라가기), 사장님(점프, 중력, 카메라 거리), 사장님 이동 컴포넌트(AirControl, MaxWalkSpeed 등).
+	 * 이름의 대소문자는 가리지 않는다.
+	 */
+	UFUNCTION(Exec)
+	void HGTune(const FString& Name = TEXT(""), const FString& Value = TEXT(""));
+
 protected:
 	virtual void BeginPlay() override;
+
+	// 소행성 지대: 산소/제트팩 한 줄 표시, 캐릭터 안내 문구 띄우기, 산소가 바닥나면 비상 귀환.
+	void UpdateHopHud();
 	virtual void SetupInputComponent() override;
 
 	// 매 프레임 가까운 재료 표식을 찾아 채집 안내를 갱신한다.
@@ -80,12 +109,35 @@ private:
 	UPROPERTY() TObjectPtr<UInputAction> JumpAction;
 	UPROPERTY() TObjectPtr<UInputAction> InteractAction;
 	UPROPERTY() TObjectPtr<UInputAction> MapAction;
+	UPROPERTY() TObjectPtr<UInputAction> ZoomAction;
+	UPROPERTY() TObjectPtr<UInputAction> DownAction;
+	UPROPERTY() TObjectPtr<UInputAction> BrakeAction;
+
+	// 폐우주선 문/단말 (가까운 것 번호)과 상호작용 거리(cm).
+	int32 NearestInteract = INDEX_NONE;
+	float InteractRadius = 260.f;
 
 	// 오른쪽 위 미니맵. 행성 맵에서만 만든다.
 	UPROPERTY() TObjectPtr<UHGPlanetMinimap> Minimap;
 
+	// 시험용 자동 달리기 남은 시간 (HGAutoRun).
+	float AutoRunSeconds = 0.f;
+
 	void CreateMinimap();
 	void OnToggleMap(const FInputActionValue& Value);
+
+	// 마우스 휠: 카메라 거리.
+	void OnZoom(const FInputActionValue& Value);
+
+	// 무중력 비행: Ctrl(아래 분사), Shift(브레이크) 누름/뗌.
+	void OnDown(const FInputActionValue& Value);
+	void OnBrake(const FInputActionValue& Value);
+
+	// 폐우주선 문(들어가기/나가기)이나 설계도 단말을 쓴다.
+	void UseInteractable(int32 Index);
+
+	// 사장님에서 Target까지 벽에 막히지 않았는가 (폐우주선에서 벽 너머 상호작용 막기).
+	bool HasLineOfSight(const FVector& Target) const;
 
 	// 지금 캘 수 있는 가장 가까운 표식 번호 (PlayerTick에서 갱신). 없으면 INDEX_NONE.
 	int32 NearestMarker = INDEX_NONE;
@@ -98,8 +150,16 @@ private:
 	// 행성 표면 맵이면 그 맵의 행성 생성기. 평면 맵에서는 nullptr.
 	UPROPERTY() TObjectPtr<AHGPlanetGenerator> Planet;
 
-	// 지난 프레임의 중력 기준 좌표계. 이번 프레임과의 차이만큼 시점을 같이 돌리는 데 쓴다.
+	// 지난 프레임의 카메라 기준 좌표계 (사장님 중력 기준을 부드럽게 따라간 것). 이번 프레임과의 차이만큼 시점을 같이 돌리는 데 쓴다.
 	FQuat LastGravityFrame = FQuat::Identity;
+
+	// 카메라가 사장님의 중력 기준("위")을 따라가는 빠르기 (1/초, 클수록 빨리). 3이면 약 0.33초에 차이가 63% 줄어든다.
+	UPROPERTY(EditAnywhere, Category = "Camera")
+	float CameraUpFollowSpeed = 3.f;
+
+	// 확인용: 공중에서 카메라 기준이 가장 빨리 돈 속도(도/초). 착지할 때 로그 [Cam]으로 남기고 지운다.
+	float MaxCameraTurnRate = 0.f;
+	bool bCameraWasAirborne = false;
 	bool bHasLastGravityFrame = false;
 
 	void InitializeFromLevel();
