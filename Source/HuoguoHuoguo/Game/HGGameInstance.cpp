@@ -198,6 +198,28 @@ const UDataTable* UHGGameInstance::GetComboTable()
 	return LoadedComboTable;
 }
 
+bool UHGGameInstance::RemoveFromBag(FName IngredientId, int32 Count)
+{
+	int32* Have = Bag.Find(IngredientId);
+	if (Count <= 0 || !Have || *Have < Count)
+	{
+		return false;
+	}
+	*Have -= Count;
+	if (*Have == 0)
+	{
+		Bag.Remove(IngredientId);
+	}
+	return true;
+}
+
+bool UHGGameInstance::UnlockFurniture(FName FurnitureId)
+{
+	bool bAlready = false;
+	UnlockedFurniture.Add(FurnitureId, &bAlready);
+	return !bAlready;
+}
+
 bool UHGGameInstance::DiscoverCombo(FName ComboId)
 {
 	bool bAlready = false;

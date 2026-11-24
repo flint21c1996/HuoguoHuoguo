@@ -136,6 +136,9 @@ public:
 	// 가방이 비었으면 false. 지금은 가방이 곧 가게 창고다 (창고 구분은 미정).
 	bool TakeOneFromBag(FName& OutIngredientId);
 
+	// 가방에서 그 재료를 Count개 꺼낸다 (가구 해금에 쓴다). 모자라면 꺼내지 않고 false.
+	bool RemoveFromBag(FName IngredientId, int32 Count);
+
 	// ---- 가게: 돈과 콤보 ----
 
 	int32 GetMoney() const { return Money; }
@@ -148,6 +151,15 @@ public:
 	// 콤보를 처음 만들었으면 기록하고 true. 이미 발견한 콤보면 false. (나중에 도감 화면이 읽는다)
 	bool DiscoverCombo(FName ComboId);
 	const TSet<FName>& GetDiscoveredCombos() const { return DiscoveredCombos; }
+
+	// 열린 가구 (가구 ID). 처음부터 열린 가구(Unlock = Start)는 여기 없어도 열린 것으로 친다 (경영 파트의 HGFurnitureUnlock).
+	bool IsFurnitureUnlocked(FName FurnitureId) const { return UnlockedFurniture.Contains(FurnitureId); }
+	// 새로 열었으면 true.
+	bool UnlockFurniture(FName FurnitureId);
+
+	// 지금까지 계산하고 간 손님 수 (게임 전체, 맵을 옮겨도 남는다). 손님 수로 열리는 가구가 쓴다.
+	int32 GetServedCustomers() const { return ServedCustomers; }
+	void AddServedCustomer() { ++ServedCustomers; }
 
 	/**
 	 * 캔 재료 표식 기록. 행성 시드별로 표식 번호(생성기가 시드로 만든 순서)를 모은다.
@@ -178,9 +190,12 @@ private:
 
 	bool bComboTableMissingLogged = false;
 
-	int32 Money = 0;
+	// 처음 가진 돈. 첫 식탁과 의자 몇 개를 더 놓을 수 있는 정도.
+	int32 Money = 300;
 
 	TSet<FName> DiscoveredCombos;
+	TSet<FName> UnlockedFurniture;
+	int32 ServedCustomers = 0;
 
 	UPROPERTY()
 	TMap<FName, int32> Bag;

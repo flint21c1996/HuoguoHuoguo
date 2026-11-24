@@ -21,6 +21,8 @@ class UMaterialInstanceDynamic;
  *   - 지우기 키: 옮기던 가구는 원래 자리로 되돌리고, 가리킨 가구는 없앤다.
  *   - 의자는 식탁 바로 옆 칸에 대면 저절로 식탁 쪽으로 돌아앉는다.
  *   - 유령 자리에 놓으면 생길 콤보를 미리 알려 준다 (GetPreviewText).
+ *   - 가구 목록은 가구 데이터(Data/Furniture.csv) 전체다. 1/2/3 분류, Z/C로 고른다. 잠긴 가구도 목록에 보이지만 놓을 수 없다.
+ *   - 돈: 새로 놓으면 값(Price)을 내고, 치우면 절반을 돌려받는다. 옮기기는 공짜. 잠긴 가구는 U로 돈이나 재료를 내고 연다.
  *
  * 놓을 수 있는 자리 판정 (CheckPlacement):
  *   1. 칸: 가구의 칸 사각형이 배치 영역 안에 있고, 다른 가구의 칸과 겹치지 않아야 한다.
@@ -74,8 +76,12 @@ public:
 	// 지금 손에 든 가구 ID: 옮기는 중이면 그 가구, 아니면 고른 가구.
 	FName GetHeldId() const;
 
-	// 손에 든 가구 한 줄 설명: "원앙 냄비 원탁 (식탁 2/6, 2x2, 값 180, 손님 +10%)".
+	// 손에 든 가구 한 줄 설명: "원앙 냄비 원탁 (식탁 2/6, 2x2, 값 180, 손님 +10%) | 가진 돈 300 | 열린 가구 3/19".
+	// 잠긴 가구면 가진 돈 대신 여는 조건 ("잠김: U로 열기, 돈 250 (가진 돈 300)").
 	FString DescribeHeld();
+
+	// U 키: 손에 든 잠긴 가구를 돈이나 재료를 내고 연다. 결과 문장.
+	FString TryUnlockHeld();
 
 	// 손에 든 가구(유령)를 돌린다.
 	void RotateHeld(float Degrees);
@@ -186,6 +192,9 @@ private:
 
 	// Rect 자리에 놓을 의자가 바라볼 방향. 상하좌우 바로 옆에 식탁이 있으면 그쪽, 없으면 Fallback.
 	float FaceTableYaw(const FIntRect& Rect, const TArray<FHGGridItem>& Items, float Fallback) const;
+
+	// 손에 든 가구를 새로 놓을 수 있는가: 열려 있고 값을 낼 돈이 있는가. 아니면 LastRejectReason에 이유. 옮기는 중이면 늘 true.
+	bool CanAffordHeld() const;
 
 	// Candidate가 칸 사각형 Rect를 차지할 때 놓을 수 있는가. Items는 맵의 다른 가구.
 	bool CheckPlacement(const AHGFurniture* Candidate, const FIntRect& Rect, const TArray<FHGGridItem>& Items) const;

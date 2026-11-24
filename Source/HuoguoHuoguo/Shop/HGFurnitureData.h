@@ -15,6 +15,16 @@ enum class EHGFurnitureCategory : uint8
 	Decor   // 장식: 식탁 둘레에 두면 콤보 재료가 된다.
 };
 
+/** 가구가 열리는 방법 (카이로식 해금). */
+UENUM(BlueprintType)
+enum class EHGFurnitureUnlock : uint8
+{
+	Start,       // 처음부터 열려 있다.
+	Money,       // 배치 모드에서 U로 돈 UnlockAmount를 내고 연다.
+	Customers,   // 손님을 모두 UnlockAmount명 받으면 저절로 열린다 (손님이 소문을 낸다).
+	Ingredient   // 배치 모드에서 U로 가방의 재료 UnlockIngredient를 UnlockAmount개 내고 연다 (행성에서 구해 온다).
+};
+
 /**
  * 가구 한 종류의 데이터 (DataTable 한 줄). 원본은 저장소의 `Data/Furniture.csv`다 (엑셀로 열어 고칠 수 있다).
  * `Tools/GenerateGreyboxMaps.py`가 `/Game/HG/Data/DT_Furniture`로 읽어 들인다.
@@ -53,9 +63,20 @@ struct HUOGUOHUOGUO_API FHGFurnitureRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Furniture")
 	int32 SizeY = 1;
 
-	// 사는 값 (아직 쓰지 않는다. 가게 키우기/가구 사기가 생기면 쓴다).
+	// 하나 놓을 때마다 내는 값. 치우면 절반을 돌려받는다. 이미 놓인 가구를 옮기는 것은 공짜다.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Furniture")
 	int32 Price = 0;
+
+	// 여는 방법과 조건. Money = 여는 값, Customers = 받은 손님 수, Ingredient = 재료 개수.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Furniture")
+	EHGFurnitureUnlock Unlock = EHGFurnitureUnlock::Start;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Furniture")
+	int32 UnlockAmount = 0;
+
+	// Unlock이 Ingredient일 때 내는 재료 ID (Data/Ingredients.csv의 Name).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Furniture")
+	FName UnlockIngredient;
 
 	// 이 가구가 손님 값에 더하는 %. 식탁: 그 식탁 손님 모두, 의자: 그 의자에 앉은 손님. 장식은 0 (장식은 콤보로 더한다).
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Furniture")
@@ -101,4 +122,28 @@ namespace HGFurnitureData
 	HUOGUOHUOGUO_API TArray<FName> ParseTags(const FString& Tags);
 
 	HUOGUOHUOGUO_API const TCHAR* CategoryName(EHGFurnitureCategory Category);
+}
+
+class UHGGameInstance;
+
+/**
+ * 가구 해금 규칙 (카이로식: 처음엔 몇 개만, 나머지는 하나씩 연다). 열린 가구 기록은 GameInstance에 있다.
+ * 구현은 HGFurnitureUnlock.cpp.
+ */
+namespace HGFurnitureUnlock
+{
+	// 열려 있는가. Start 가구는 늘 열려 있다.
+	HUOGUOHUOGUO_API bool IsUnlocked(const UHGGameInstance* GI, FName FurnitureId, const FHGFurnitureRow& Row);
+
+	// 잠긴 가구의 여는 조건 한 줄 ("잠김: U로 열기, 돈 250 (가진 돈 300)"). 열려 있으면 빈 문자열.
+	HUOGUOHUOGUO_API FString DescribeLock(UHGGameInstance* GI, FName FurnitureId, const FHGFurnitureRow& Row);
+
+	// U 키: 돈이나 재료를 내고 연다 (Money, Ingredient). 결과 문장을 OutMessage에 담는다. 열었으면 true.
+	HUOGUOHUOGUO_API bool TryUnlock(UHGGameInstance* GI, FName FurnitureId, const FHGFurnitureRow& Row, FString& OutMessage);
+
+	// 손님 수 조건(Customers)을 채운 가구를 연다. 새로 연 가구 이름들.
+	HUOGUOHUOGUO_API TArray<FString> UnlockByCustomers(UHGGameInstance* GI);
+
+	// 열린 가구 수 / 전체 수.
+	HUOGUOHUOGUO_API FIntPoint CountUnlocked(const UHGGameInstance* GI);
 }

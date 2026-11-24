@@ -161,6 +161,7 @@ void AHGShopPlayerController::SetupInputComponent()
 	Input->BindAction(RemoveFurnitureAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnRemoveFurniture);
 	Input->BindAction(SelectFurnitureAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnSelectFurniture);
 	Input->BindAction(CycleFurnitureAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnCycleFurniture);
+	Input->BindAction(UnlockFurnitureAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnUnlockFurniture);
 	Input->BindAction(PassTimeAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnPassTime);
 }
 
@@ -183,6 +184,7 @@ void AHGShopPlayerController::BuildInputObjects()
 	RemoveFurnitureAction = MakeAction(TEXT("IA_Shop_RemoveFurniture"), EInputActionValueType::Boolean);
 	SelectFurnitureAction = MakeAction(TEXT("IA_Shop_SelectFurniture"), EInputActionValueType::Axis1D);
 	CycleFurnitureAction = MakeAction(TEXT("IA_Shop_CycleFurniture"), EInputActionValueType::Axis1D);
+	UnlockFurnitureAction = MakeAction(TEXT("IA_Shop_UnlockFurniture"), EInputActionValueType::Boolean);
 	PassTimeAction = MakeAction(TEXT("IA_Shop_PassTime"), EInputActionValueType::Boolean);
 
 	// 숫자 키: 액션 하나에 키 여러 개를 매핑하고, 배율 수정자로 키마다 값을 1, 2, 3...으로 다르게 낸다.
@@ -211,6 +213,7 @@ void AHGShopPlayerController::BuildInputObjects()
 	}
 	MapDirectionalKey(BuildContext, CycleFurnitureAction, EKeys::Z, false, true);
 	MapDirectionalKey(BuildContext, CycleFurnitureAction, EKeys::C, false, false);
+	BuildContext->MapKey(UnlockFurnitureAction, EKeys::U);
 }
 
 void AHGShopPlayerController::MapCommonKeys(UInputMappingContext* Context)
@@ -244,7 +247,7 @@ void AHGShopPlayerController::UpdateControlsHint() const
 	if (FurniturePlacer->IsBuilding())
 	{
 		const FString& Preview = FurniturePlacer->GetPreviewText();
-		SetControlsHint(FString::Printf(TEXT("[가구 배치] 손에 든 것: %s\n1 식탁 / 2 의자 / 3 장식 | Z/C 이전/다음 가구 | 좌클릭 놓기/집기 | R 회전 | X 치우기/취소 | B 끝%s%s"),
+		SetControlsHint(FString::Printf(TEXT("[가구 배치] 손에 든 것: %s\n1 식탁 / 2 의자 / 3 장식 | Z/C 이전/다음 가구 | U 잠긴 가구 열기 | 좌클릭 놓기/집기 | R 회전 | X 치우기/취소 | B 끝%s%s"),
 			*FurniturePlacer->DescribeHeld(), Preview.IsEmpty() ? TEXT("") : TEXT("\n>> "), *Preview));
 	}
 	else
@@ -399,6 +402,27 @@ void AHGShopPlayerController::HGBuild()
 	// 회전용 우클릭이 눌린 채로 컨텍스트가 바뀌면 뗌(Completed)을 못 받을 수 있어서 회전 상태를 풀어 둔다.
 	bRotateHeld = false;
 	UpdateControlsHint();
+}
+
+void AHGShopPlayerController::OnUnlockFurniture(const FInputActionValue& Value)
+{
+	HGUnlock();
+}
+
+void AHGShopPlayerController::HGUnlock()
+{
+	ShowMessage(FurniturePlacer->TryUnlockHeld());
+	UpdateControlsHint();
+}
+
+void AHGShopPlayerController::HGGiveMoney(int32 Amount)
+{
+	if (UHGGameInstance* GI = GetGameInstance<UHGGameInstance>())
+	{
+		GI->AddMoney(Amount);
+		ShowMessage(FString::Printf(TEXT("돈 %+d, 가진 돈 %d"), Amount, GI->GetMoney()));
+		UpdateControlsHint();
+	}
 }
 
 void AHGShopPlayerController::HGBuildCategory(int32 Number)

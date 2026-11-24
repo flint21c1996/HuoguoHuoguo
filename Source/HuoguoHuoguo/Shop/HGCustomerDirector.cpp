@@ -360,6 +360,7 @@ void UHGCustomerDirector::Pay(FVisit& Visit)
 	const int32 TotalBonus = Combos.BonusPercent + TableBonus + ChairBonus;
 	const int32 Total = FMath::RoundToInt(BasePrice * (100 + TotalBonus) / 100.f);
 	GI->AddMoney(Total);
+	GI->AddServedCustomer();
 	++ServedCount;
 	for (const FName& Id : Combos.Ids)
 	{
@@ -384,6 +385,13 @@ void UHGCustomerDirector::Pay(FVisit& Visit)
 		Total, *FString::Join(EatenParts, TEXT(", ")), BasePrice,
 		*Table->GetDisplayName().ToString(), TableBonus, Chair ? *Chair->GetDisplayName().ToString() : TEXT("의자"), ChairBonus,
 		*ComboText, GI->GetMoney()));
+
+	// 손님이 늘면 소문이 나서 열리는 가구 (Unlock = Customers).
+	const TArray<FString> Opened = HGFurnitureUnlock::UnlockByCustomers(GI);
+	if (!Opened.IsEmpty())
+	{
+		Message(FString::Printf(TEXT("손님 %d명! 소문을 듣고 새 가구가 들어왔다: %s"), GI->GetServedCustomers(), *FString::Join(Opened, TEXT(", "))));
+	}
 	if (OnMoneyChanged)
 	{
 		OnMoneyChanged();

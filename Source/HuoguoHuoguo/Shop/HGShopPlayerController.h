@@ -27,7 +27,9 @@ class UHGFurniturePlacer;
  *
  * 가구 배치 모드 (IMC_ShopBuild, 이동/카메라 조작은 그대로). 바닥에 배치 영역 칸 무늬가 깔린다:
  *   1 / 2 / 3      분류 고르기: 식탁 / 의자 / 장식 (가구 목록은 Data/Furniture.csv). 가구는 크기만큼 칸을 차지한다.
- *   Z / C          같은 분류 안에서 이전 / 다음 가구
+ *   Z / C          같은 분류 안에서 이전 / 다음 가구 (잠긴 가구도 보인다)
+ *   U              손에 든 잠긴 가구를 돈이나 재료를 내고 열기 (손님 수로 열리는 가구는 저절로 열린다)
+ *   새로 놓으면 가구 값을 내고, 치우면 절반을 돌려받는다. 옮기기는 공짜.
  *   좌클릭          유령 자리에 놓기. 이미 놓인 가구를 가리키고 누르면 집어 든다.
  *   R              손에 든 가구 90도 회전 (의자는 식탁 옆에 대면 저절로 식탁을 본다)
  *   X              옮기던 가구를 원래 자리로 되돌리기, 또는 가리킨 가구 치우기
@@ -55,6 +57,14 @@ public:
 	// HGBuildCategory 2 : 분류를 고른다 (1 식탁, 2 의자, 3 장식. 배치 모드의 숫자 키와 같다).
 	UFUNCTION(Exec)
 	void HGBuildCategory(int32 Number);
+
+	// HGUnlock : 손에 든 잠긴 가구를 돈이나 재료를 내고 연다 (배치 모드의 U 키와 같다).
+	UFUNCTION(Exec)
+	void HGUnlock();
+
+	// HGGiveMoney 500 : 시험용. 돈을 더한다 (음수면 뺀다).
+	UFUNCTION(Exec)
+	void HGGiveMoney(int32 Amount);
 
 	// HGFurnitureList : 가구 목록 전체(분류, 이름, ID, 칸, 생김새, 값, 보너스, 꼬리표)를 로그로 낸다.
 	UFUNCTION(Exec)
@@ -161,6 +171,7 @@ private:
 	UPROPERTY() TObjectPtr<UInputAction> RemoveFurnitureAction;
 	UPROPERTY() TObjectPtr<UInputAction> SelectFurnitureAction;
 	UPROPERTY() TObjectPtr<UInputAction> CycleFurnitureAction;
+	UPROPERTY() TObjectPtr<UInputAction> UnlockFurnitureAction;
 	UPROPERTY() TObjectPtr<UInputAction> PassTimeAction;
 
 	UPROPERTY() TObjectPtr<AHGShopBossCharacter> ShopBoss;
@@ -192,5 +203,6 @@ private:
 	void OnRemoveFurniture(const FInputActionValue& Value);
 	void OnSelectFurniture(const FInputActionValue& Value);
 	void OnCycleFurniture(const FInputActionValue& Value);
+	void OnUnlockFurniture(const FInputActionValue& Value);
 	void OnPassTime(const FInputActionValue& Value);
 };

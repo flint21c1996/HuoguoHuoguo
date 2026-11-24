@@ -13,6 +13,7 @@
 #include "GameFramework/PlayerController.h"
 #include "HuoguoHuoguo.h"
 #include "Shop/HGFurniture.h"
+#include "Shop/HGFurnitureData.h"
 #include "Shop/HGShopCombos.h"
 
 namespace
@@ -119,7 +120,14 @@ FString UHGFurniturePlacer::DescribeHeld()
 	{
 		Text += FString::Printf(TEXT(", %s"), *Row->Tags);
 	}
-	return Text + TEXT(")");
+	Text += TEXT(")");
+
+	// 잠긴 가구면 여는 조건을, 열린 가구면 가진 돈과 열린 가구 수를 붙인다.
+	UHGGameInstance* GI = GetWorld()->GetGameInstance<UHGGameInstance>();
+	const FString Lock = HGFurnitureUnlock::DescribeLock(GI, Id, *Row);
+	const FIntPoint Opened = HGFurnitureUnlock::CountUnlocked(GI);
+	Text += Lock.IsEmpty() ? FString::Printf(TEXT(" | 가진 돈 %d"), GI ? GI->GetMoney() : 0) : FString::Printf(TEXT(" | %s"), *Lock);
+	return Text + FString::Printf(TEXT(" | 열린 가구 %d/%d"), Opened.X, Opened.Y);
 }
 
 void UHGFurniturePlacer::HoldFurniture(FName FurnitureId)
@@ -144,8 +152,27 @@ bool UHGFurniturePlacer::SelectCategory(EHGFurnitureCategory Category)
 	{
 		return false;
 	}
+	// 그 분류에서 마지막으로 골랐던 가구. 처음이면 첫 번째 열린 가구 (모두 잠겼으면 첫 가구).
 	const FName* Last = LastInCategory.Find(Category);
-	HoldFurniture(Last && Items.Contains(*Last) ? *Last : Items[0]);
+	FName Pick = Items[0];
+	if (Last && Items.Contains(*Last))
+	{
+		Pick = *Last;
+	}
+	else
+	{
+		const UHGGameInstance* GI = GetWorld()->GetGameInstance<UHGGameInstance>();
+		for (const FName& Id : Items)
+		{
+			const FHGFurnitureRow* Row = HGFurnitureData::FindRow(Id);
+			if (Row && HGFurnitureUnlock::IsUnlocked(GI, Id, *Row))
+			{
+				Pick = Id;
+				break;
+			}
+		}
+	}
+	HoldFurniture(Pick);
 	return true;
 }
 
@@ -627,7 +654,7 @@ void UHGFurniturePlacer::UpdateCursor()
 
 	Ghost->SetActorLocationAndRotation(Grid.RectCenter(Rect), FRotator(0.f, Yaw, 0.f));
 	Ghost->SetActorHiddenInGame(false);
-	bGhostValid = CheckPlacement(Ghost, Rect, Items);
+	bGhostValid = CheckPlacement(Ghost, Rect, Items) && CanAffordHeld();
 	Ghost->SetPreviewState(bGhostValid ? EHGFurniturePreview::Valid : EHGFurniturePreview::Invalid);
 	PreviewText = bGhostValid ? BuildPreviewText(Ghost->FurnitureId, Rect, Items) : FString();
 	SetHighlight(Rect, bGhostValid ? ValidCellColor : InvalidCellColor);
@@ -862,6 +889,7 @@ FString UHGFurniturePlacer::Click()
 	{
 		return TEXT("가구를 만들지 못했다");
 	}
+	const bool bWasMoving = bMoving;
 	if (bMoving)
 	{
 		bMoving = false;
@@ -871,10 +899,19 @@ FString UHGFurniturePlacer::Click()
 	SaveLayout();
 	RefreshOccupiedCells();
 
-	FString Result = FString::Printf(TEXT("놓았다: %s (칸 %d,%d, 방향 %.0f)"), *Placed->GetDisplayName().ToString(), Rect.Min.X, Rect.Min.Y, Yaw);
+	// 새로 놓은 가구는 값을 낸다. 이미 놓인 가구를 옮긴 것은 공짜다 (위에서 bMoving을 끄기 전 값으로 판정).
+	UHGGameInstance* GI = GetWorld()->GetGameInstance<UHGGameInstance>();
+	FString PriceText;
+	if (!bWasMoving && GI)
+	{
+		const int32 Price = Placed->GetData().Price;
+		GI->AddMoney(-Price);
+		PriceText = FString::Printf(TEXT(", -%d, 가진 돈 %d"), Price, GI->GetMoney());
+	}
+
+	FString Result = FString::Printf(TEXT("놓았다: %s (칸 %d,%d, 방향 %.0f%s)"), *Placed->GetDisplayName().ToString(), Rect.Min.X, Rect.Min.Y, Yaw, *PriceText);
 
 	// 이 가구가 닿는(또는 이 가구 자신인) 식탁에서 처음 만든 콤보를 기록하고 알린다.
-	UHGGameInstance* GI = GetWorld()->GetGameInstance<UHGGameInstance>();
 	if (const UDataTable* Table = GI ? GI->GetComboTable() : nullptr)
 	{
 		TArray<FHGGridItem> Items;
@@ -924,10 +961,58 @@ FString UHGFurniturePlacer::RemoveOrCancel()
 	AHGFurniture* Target = Hovered;
 	SetHovered(nullptr);
 	const FString Name = Target->GetDisplayName().ToString();
+	const int32 Refund = Target->GetData().Price / 2;
 	Target->Destroy();
 	SaveLayout();
 	RefreshOccupiedCells();
-	return FString::Printf(TEXT("치웠다: %s"), *Name);
+
+	// 치우면 값의 절반을 돌려받는다 (카이로식 되팔기).
+	UHGGameInstance* GI = GetWorld()->GetGameInstance<UHGGameInstance>();
+	if (GI)
+	{
+		GI->AddMoney(Refund);
+	}
+	return FString::Printf(TEXT("치웠다: %s (+%d 돌려받음, 가진 돈 %d)"), *Name, Refund, GI ? GI->GetMoney() : 0);
+}
+
+bool UHGFurniturePlacer::CanAffordHeld() const
+{
+	// 옮기는 중인 가구는 이미 산 것이라 따지지 않는다.
+	if (bMoving)
+	{
+		return true;
+	}
+	const FHGFurnitureRow* Row = HGFurnitureData::FindRow(SelectedId);
+	UHGGameInstance* GI = GetWorld()->GetGameInstance<UHGGameInstance>();
+	if (!Row || !GI)
+	{
+		return true;
+	}
+	if (!HGFurnitureUnlock::IsUnlocked(GI, SelectedId, *Row))
+	{
+		LastRejectReason = HGFurnitureUnlock::DescribeLock(GI, SelectedId, *Row);
+		return false;
+	}
+	if (GI->GetMoney() < Row->Price)
+	{
+		LastRejectReason = FString::Printf(TEXT("돈이 모자람 (값 %d, 가진 돈 %d)"), Row->Price, GI->GetMoney());
+		return false;
+	}
+	return true;
+}
+
+FString UHGFurniturePlacer::TryUnlockHeld()
+{
+	const FName Id = GetHeldId();
+	const FHGFurnitureRow* Row = HGFurnitureData::FindRow(Id);
+	if (!Row)
+	{
+		return TEXT("손에 든 가구가 없다");
+	}
+	FString Message;
+	HGFurnitureUnlock::TryUnlock(GetWorld()->GetGameInstance<UHGGameInstance>(), Id, *Row, Message);
+	UpdateCursor();
+	return Message;
 }
 
 // ---------------------------------------------------------------------------
