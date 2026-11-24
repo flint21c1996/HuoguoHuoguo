@@ -883,6 +883,30 @@ void AHGPlanetGenerator::ChoosePlanet()
 	// 노이즈 이동값도 시드에서 뽑는다. 큰 값으로 옮겨서 행성마다 노이즈 공간의 전혀 다른 곳을 읽게 한다.
 	FRandomStream Rng(Planet.Seed);
 	NoiseOffset = FVector(Rng.FRandRange(-1000.f, 1000.f), Rng.FRandRange(-1000.f, 1000.f), Rng.FRandRange(-1000.f, 1000.f));
+
+	// 크레이터: 행성마다 따로 수열에서 뽑는다 (위 값들을 뽑는 순서를 바꾸지 않아 기존 지형이 그대로 유지된다).
+	// 작은 행성 3 ~ 6개, 중형 6 ~ 12개. 반지름 5 ~ 14m지만 지형 격자가 담을 수 있게 격자 5칸 이상.
+	// 착륙 지점의 평평한 곳과 겹치지 않게 북극에서 떨어진 곳에만 둔다.
+	Craters.Reset();
+	FRandomStream CraterRng(static_cast<int32>(HashCombine(GetTypeHash(Planet.Seed), 0xc4a7u)));
+	const int32 Grid = FMath::Clamp(FMath::CeilToInt(Planet.Radius * UE_HALF_PI / TargetEdgeLength), 8, MaxGridPerFace);
+	const float CellLength = Planet.Radius * UE_HALF_PI / Grid;
+	const int32 CraterCount = Planet.SizeClass == EHGPlanetSize::Small ? CraterRng.RandRange(3, 6) : CraterRng.RandRange(6, 12);
+	for (int32 i = 0; i < CraterCount; ++i)
+	{
+		for (int32 Try = 0; Try < 20; ++Try)
+		{
+			FCrater Crater;
+			Crater.Dir = CraterRng.VRand();
+			Crater.Radius = FMath::Max(CraterRng.FRandRange(500.f, 1400.f), CellLength * 5.f);
+			Crater.Depth = Crater.Radius * CraterRng.FRandRange(0.18f, 0.3f);
+			if (FMath::Acos(FMath::Clamp(Crater.Dir.Z, -1.0, 1.0)) * Planet.Radius > LandingFlatRadius * 2.5f + Crater.Radius)
+			{
+				Craters.Add(Crater);
+				break;
+			}
+		}
+	}
 }
 
 float AHGPlanetGenerator::SurfaceRadiusAt(const FVector& Dir) const
@@ -949,7 +973,23 @@ float AHGPlanetGenerator::SurfaceRadiusAt(const FVector& Dir) const
 	const float ArcDistance = AngleFromPole * Planet.Radius;
 	const float Flatten = FMath::SmoothStep(LandingFlatRadius, LandingFlatRadius * 2.f, ArcDistance);
 
-	return Planet.Radius * (1.f + Planet.TerrainAmplitude * Height * Flatten) + Bumps * Flatten;
+	// 크레이터: 가운데가 파인 그릇(깊이 x (1 - d²)) + 가장자리를 따라 솟은 둑(깊이의 0.35배, 폭 반지름의 0.25배).
+	// d = 크레이터 중심에서 반지름 단위 거리. 짧은 호는 현 길이로 근사한다 (크레이터는 행성보다 훨씬 작다).
+	float CraterHeight = 0.f;
+	for (const FCrater& Crater : Craters)
+	{
+		const float D = static_cast<float>((Dir - Crater.Dir).Size() * Planet.Radius) / Crater.Radius;
+		if (D < 1.8f)
+		{
+			if (D < 1.f)
+			{
+				CraterHeight -= Crater.Depth * (1.f - D * D);
+			}
+			CraterHeight += Crater.Depth * 0.35f * FMath::Exp(-FMath::Square((D - 1.f) / 0.25f));
+		}
+	}
+
+	return Planet.Radius * (1.f + Planet.TerrainAmplitude * Height * Flatten) + Bumps * Flatten + CraterHeight;
 }
 
 void AHGPlanetGenerator::BuildTerrain()

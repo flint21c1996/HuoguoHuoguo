@@ -193,6 +193,15 @@ private:
 	bool bHasReturnPad = false;
 	FVector ReturnPadLocation = FVector::ZeroVector;
 
+	// 크레이터 하나: 행성 중심에서 본 방향, 반지름(cm), 깊이(cm). ChoosePlanet이 시드로 정하고 SurfaceRadiusAt이 높이에 더한다.
+	struct FCrater
+	{
+		FVector Dir = FVector::UpVector;
+		float Radius = 800.f;
+		float Depth = 200.f;
+	};
+	TArray<FCrater> Craters;
+
 	/**
 	 * 행성 그림체 (콘솔 변수 hg.PlanetMood, 기본 1). 모양은 복셀, 색과 하늘은 노 맨즈 스카이에서 배운 방향이다.
 	 * 켜져 있으면 생성이 끝난 뒤:
