@@ -14,6 +14,7 @@
 - 이동: MaxWalkSpeed 520, JumpZVelocity 620, AirControl 0.45, RotationRate (720, 720, 720).
   Pitch/Roll 회전 속도는 행성에서 몸을 새 "위"에 맞춰 세우기 위해 필요하다 (평면에서는 영향 없음).
 - 외형: 엔진 기본 도형 자리 표시 (원기둥 몸통 빨강, 구 머리, 헬멧 구 청록). `SetSuitVisible`로 헬멧 표시.
+  - 복셀 그림체(`hg.Voxel`, 기본)면 `BeginPlay`에서 같은 모양에 눈 두 개를 더해 복셀로 만들고 자리 표시 도형을 숨긴다 (`BuildVoxelBody`). 헬멧은 따로 복셀화해서 헬멧을 숨겨도 머리가 남는다.
 - `Move(Input)`: 카메라(컨트롤러) 회전을 `GetMoveFrame()` 좌표계로 옮겨 Yaw만 남기고 앞/오른쪽을 구한다.
   카메라를 어느 방향으로 돌려도 W = 화면 위쪽(카메라가 보는 쪽).
 - `GetMoveFrame()`: 기본 항등 회전. 구형 중력을 쓰는 하위 클래스가 바꾼다.

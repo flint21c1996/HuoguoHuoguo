@@ -49,11 +49,14 @@
   - `IngredientTable`(소프트 참조, 기본 `/Game/HG/Data/DT_Ingredients`): `GetIngredientTable()`이 처음 쓸 때 불러온다. 없으면 에러 로그 한 번.
   - `FindIngredient(Id)`, `GetIngredientName(Id)`(표에 없으면 ID 그대로).
   - 가방 `Bag`(재료 ID → 개수): `AddToBag`, `GetBagCount`, `DescribeBag()`("서리다시마 2, 불씨고추 1", 표의 행 순서).
+  - `RemoveFromBag(Id, Count)`: 그 재료를 Count개 꺼낸다 (가구 해금). 모자라면 꺼내지 않고 false.
   - `TakeOneFromBag(OutId)`: 표의 행 순서로 처음 남은 재료 하나를 꺼낸다. 가게 손님이 꼬치로 먹는다 (지금은 가방 = 가게 창고).
   - 캔 표식 기록 `HarvestedByPlanet`(행성 시드 → 표식 번호 집합): `IsMarkerHarvested`, `MarkHarvested`, `GetHarvestedCount`.
     `AdvanceOrbitCycle()`이 접근 목록에서 빠진 행성의 기록을 지운다 (`ForgetDepartedPlanets`). "행성이 떠날 때까지 캔 자리는 비어 있다".
 - 가게: 돈과 콤보
-  - `Money`: `GetMoney`, `AddMoney`. 손님 계산으로 늘어난다. 쓰는 곳은 아직 없다.
+  - `Money`(처음 300): `GetMoney`, `AddMoney`. 손님 계산으로 늘고, 가구를 놓거나 열 때 줄고, 가구를 치우면 절반이 돌아온다.
+  - 열린 가구 `UnlockedFurniture`(가구 ID 집합): `IsFurnitureUnlocked`, `UnlockFurniture`(새로 열었으면 true). 처음부터 열린 가구(Start)는 여기 없어도 열린 것으로 친다 (판정은 경영 파트 `HGFurnitureUnlock`).
+  - 받은 손님 수 `ServedCustomers`(게임 전체): `GetServedCustomers`, `AddServedCustomer`. 손님 수로 열리는 가구가 쓴다.
   - `ComboTable`(소프트 참조, 기본 `/Game/HG/Data/DT_Combos`): `GetComboTable()`. 행 구조체 `FHGComboRow`는 경영 파트(`Shop/HGShopCombos.h`)에 있어서, 공통 폴더인 여기서는 표 에셋(`UDataTable`)만 들고 있는다.
   - 발견한 콤보 `DiscoveredCombos`(콤보 ID 집합): `DiscoverCombo(Id)`(처음이면 true), `GetDiscoveredCombos`. 나중에 도감 화면이 읽는다.
 
@@ -75,7 +78,7 @@
 
 - 입력이 코드 생성이다. 키 설정 화면이 필요해지면 `IA_`/`IMC_` 에셋으로 옮긴다.
 - 화면 안내는 디버그 메시지다. UMG 위젯으로 바꿀 때 `ShowMessage`/`SetControlsHint`와 경영 파트의 행성 목록만 교체하면 된다.
-- `UniverseSeed`, 날짜와 시간대, 가구 배치, 가방, 캔 표식 기록, 돈, 발견한 콤보는 파일에 저장해야 한다 (저장 기능 없음).
+- `UniverseSeed`, 날짜와 시간대, 가구 배치, 가방, 캔 표식 기록, 돈, 발견한 콤보, 열린 가구, 받은 손님 수는 파일에 저장해야 한다 (저장 기능 없음).
 - 재료/콤보 DataTable은 GameInstance 기본값의 소프트 경로로만 참조된다. 패키징할 때는 쿠킹 대상에 넣어야 한다 (Asset Manager 또는 "항상 쿠킹" 디렉터리).
 - 시간대는 칸 단위로만 넘어간다 (시계, 시간 흐름 없음). 정거장과 행성의 조명은 시간대에 따라 바뀌지 않는다.
 - 접근 행성 관리는 GameInstance 서브시스템으로 분리할 수 있다 (인벤토리가 생길 때 같이).

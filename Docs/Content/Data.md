@@ -33,13 +33,17 @@
 | `Style` | 생김새. 식탁 `Round`/`Square`, 의자 `Stool`/`Wood`/`Cushion`/`Arm`, 장식 `Bush`/`Bamboo`/`Lantern`/`PaperLantern`/`SauceBar`/`Tank`/`Screen`. 모르는 값이면 회색 상자 |
 | `Pot` | 식탁의 훠궈 냄비: `Single`(단일) / `YinYang`(원앙, 홍탕/백탕 반반) / `NineGrid`(구궁격 9칸) / `Big`(큰 냄비). 식탁이 아니면 비운다 |
 | `SizeX`, `SizeY` | 차지하는 칸 (회전 0도 기준) |
-| `Price` | 사는 값 (아직 쓰지 않음, 가게 키우기 때 쓴다) |
+| `Price` | 하나 놓을 때마다 내는 값. 치우면 절반을 돌려받는다. 옮기기는 공짜 |
+| `Unlock` | 여는 방법: `Start`(처음부터) / `Money`(U로 돈을 내고) / `Customers`(손님 수가 차면 저절로) / `Ingredient`(U로 재료를 내고) |
+| `UnlockAmount` | 여는 조건의 수: 돈, 손님 수, 재료 개수 |
+| `UnlockIngredient` | `Ingredient`일 때 내는 재료 ID (`Data/Ingredients.csv`의 `Name`) |
 | `BonusPercent` | 손님 값에 더하는 %. 식탁은 그 식탁 손님 모두, 의자는 앉은 손님. 장식은 0 (콤보로 더한다) |
 | `Tags` | 콤보용 꼬리표, `\|`로 여러 개 (`Plant`, `Light`, `Sauce`, `Water`, `Art`, `Planet`) |
 | `ColorA`, `ColorB` | 주 색 / 보조 색 `#RRGGBB` (식탁: 상판/냄비, 의자: 몸체/방석, 화분: 잎/화분, 등: 등/기둥) |
 | `ActorClass` | 블루프린트 아트 클래스 경로 (예: `/Game/HG/Furniture/BP_TableYinYang.BP_TableYinYang_C`). 비우면 기본 도형 |
 | `Description` | 설명 한 줄 (가구 목록 화면이 생기면 쓴다) |
 
+- 처음 열린 가구는 원목 원탁, 나무 의자, 화분 3종이고, 처음 가진 돈은 300이다 (GameInstance).
 - 지금 가구 19종
 
 | 분류 | 가구 (ID, 칸, 값, 보너스) |
@@ -48,6 +52,11 @@
 | 의자 | 둥근 의자 `Stool` 20 · 나무 의자 `Chair` 40 +5% · 방석 의자 `CushionChair` 70 +10% · 팔걸이 의자 `ArmChair` 120 +15% · 둥실 우주 의자 `SpaceChair` 150 +20% (Planet) |
 | 장식 | 화분 `Planter` (Plant) · 대나무 화분 `Bamboo` (Plant) · 야광버섯 화분 `GlowShroomPot` (Plant, Planet) · 등불 `Lantern` (Light) · 홍등 `RedLantern` (Light) · 소스 바 `SauceBar` 2x1 (Sauce) · 수조 `FishTank` 2x1 (Water) · 병풍 `Screen` 2x1 (Art) |
 
+- 여는 조건 (지금 값)
+  - 처음부터: 원목 원탁, 나무 의자, 화분
+  - 돈: 2인 사각탁 100, 원앙 냄비 원탁 250, 구궁격 사각탁 500, 구리 솥 원탁 800, 둥근 의자 30, 방석 의자 150, 팔걸이 의자 350, 대나무 100, 등불 80, 소스 바 200, 병풍 300
+  - 손님 수: 홍등 10명, 둥실 우주 의자 25명, 연회 대원탁 40명
+  - 행성 재료: 야광버섯 화분 = 야광버섯(GlowCap) 3개, 수조 = 서리다시마(FrostKelp) 3개
 - 엑셀에서 저장할 때는 "CSV UTF-8(쉼표로 분리)" 형식을 고른다. 그냥 "CSV"로 저장하면 한국어가 깨진다. 쉼표가 든 칸은 엑셀이 알아서 따옴표로 감싼다.
 
 ### Data/Combos.csv - 배치 콤보
@@ -87,5 +96,6 @@
 
 ## 알려진 문제와 다음 할 일
 
-- 손님 종족, 요리법, 업그레이드 표는 아직 없다. 가구 Price는 적어 두었지만 아직 돈을 내고 사지 않는다.
+- 손님 종족, 요리법, 업그레이드 표는 아직 없다.
+- 가구 값과 여는 값은 처음 정한 값이다. 사람이 놀아 보고 맞춘다 (손님 한 명이 기본 꼬치로 15~30을 낸다).
 - 재료 `Price`는 손님이 꼬치 하나를 먹을 때 내는 값이다 (가방이 비면 기본 꼬치 5).

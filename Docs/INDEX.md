@@ -9,6 +9,7 @@
 
 - 한 줄 요약
 - 현재 플레이 흐름 (구현됨)
+- 그림체
 - 핵심 설계 원칙
 - 폴더 지도
 - 기획 방향 (논의 중)
@@ -39,6 +40,7 @@
   - 손님이 주는 정보 [결정, 사용자 제안]
   - 더 넣을 것 [아이디어, 사용자가 좋다고 함]
   - 사장님 역할 [일부 결정]
+- 그림체 [결정, 사용자 결정: 복셀 + 조명]
 - 탐험 파트
   - 행성 걷기 [구현됨]
   - 재료 채집 [구현됨]
@@ -80,6 +82,7 @@
 
 - 파일
   - HGPlaceholderPaint (.h/.cpp)
+  - HGVoxelShapes (.h/.cpp) - 복셀 그림체 도우미
 - 알려진 문제와 다음 할 일
 
 ### [Explore - 탐험 파트 (3인칭으로 행성을 걷고 재료를 캐고 미니맵을 본다)](Source/Explore.md)
@@ -118,6 +121,7 @@
 - 파일
   - HGPlanetTypes (.h/.cpp)
   - HGPlanetGenerator (.h/.cpp)
+  - 그림체 미리보기 (`hg.PlanetMood`, 기본 0)
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
 
@@ -137,10 +141,12 @@
   - HGShopBossCharacter (.h/.cpp)
   - HGShopPlayerController (.h/.cpp)
   - HGFurnitureData.h
+  - HGFurnitureUnlock.cpp
   - HGFurniture (.h/.cpp)
   - HGShopGrid (.h/.cpp)
   - HGShopCombos (.h/.cpp)
   - HGFurniturePlacer (.h/.cpp)
+  - HGStationLighting (.h/.cpp)
   - HGCustomer (.h/.cpp)
   - HGCustomerDirector (.h/.cpp)
 - 흐름 / 규칙
@@ -185,6 +191,8 @@
 
 - Greybox
   - MI_GB_* (15개)
+- HG
+  - M_HG_Glow
 - 알려진 문제와 다음 할 일
 
 ## Tools

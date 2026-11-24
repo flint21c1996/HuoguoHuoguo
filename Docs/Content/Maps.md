@@ -16,6 +16,8 @@
 - 홀(`Shop/Hall`): 가구 액터 `Table_0~3`(`HGTable`, (-300,-250) (100,-250) (-300,50) (100,50))과 `Chair_0~3`(`HGChair`, 각 식탁 남쪽 105, Yaw 90). 경영 파트에서 옮기거나 치울 수 있는 처음 배치다. 예전 도형 묶음(Table_N_Top/Leg/Pot/Seat)은 `upgrade_station()`이 이것으로 바꿨다.
 - 게임플레이: `ShopCameraAnchor`(원점, Yaw 45 = 카메라 처음 방향), `ExplorerStart_Default`(-100, 220, 사장님 시작), `ExplorerStart_FromPlanet`(-450, 250, 행성에서 귀환), `TravelPad_Airlock`(-450, 400, 60, 다이빙 발판 → `L_PlanetSurface`).
 - 조명: DirectionalLight, SkyAtmosphere, SkyLight(실시간 캡처).
+- `PostProcess_Station`(무한 범위, 노출 EV100 2.0 고정). 자동 노출을 두면 멀리 줌아웃했을 때 화면 대부분이 어두운 우주가 되어 카메라가 밝기를 끌어올리고 가게가 하얗게 날아갔다.
+  측정(FOV를 넓혀 멀리 보기를 흉내): 자동 노출일 때 가게 바닥 밝기가 가까이 175 → 멀리 254(거의 흰색), EV 2.0 고정 후 168 → 179. 가까이 본 모습은 자동 노출일 때와 거의 같다. 에디터에서 이 볼륨의 Exposure Min/Max Brightness를 고쳐 밝기를 바꾼다.
 
 ### L_PlanetSurface - 절차적 행성 표면
 - 탐험 파트 (World Settings GameMode = `HGExploreGameMode`).
