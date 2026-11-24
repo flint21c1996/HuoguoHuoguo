@@ -86,6 +86,43 @@ def ensure_materials():
     return materials
 
 
+GLOW_MATERIAL = "/Game/HG/Materials/M_HG_Glow"
+
+
+def ensure_glow_material():
+    """밤에 빛나는 등에 쓰는 발광 머티리얼 M_HG_Glow. 없을 때만 만든다 (있으면 에디터에서 고친 것을 존중).
+
+    파라미터: Color(벡터, 바탕색) -> Base Color, Color x Glow(스칼라, 기본 0) -> Emissive Color.
+    코드(HGVoxel::PaintGlow)가 동적 인스턴스를 만들어 밤에는 Glow를 올리고 낮에는 0으로 둔다.
+    """
+    mel = unreal.MaterialEditingLibrary
+    if asset_lib.does_asset_exist(GLOW_MATERIAL):
+        # 복셀은 인스턴스 메시로 그리므로 이 사용 표시가 꺼져 있으면 엔진이 기본 머티리얼로 바꿔 그린다 (검게 보였다).
+        mat = unreal.load_asset(GLOW_MATERIAL)
+        if not mat.get_editor_property("used_with_instanced_static_meshes"):
+            mat.set_editor_property("used_with_instanced_static_meshes", True)
+            mel.recompile_material(mat)
+            asset_lib.save_loaded_asset(mat)
+            unreal.log("[MapGen] 발광 머티리얼: 인스턴스 메시 사용 표시를 켬")
+        return
+    folder, name = GLOW_MATERIAL.rsplit("/", 1)
+    mat = asset_tools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
+    mat.set_editor_property("used_with_instanced_static_meshes", True)
+    color = mel.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -700, 0)
+    color.set_editor_property("parameter_name", "Color")
+    color.set_editor_property("default_value", unreal.LinearColor(1.0, 1.0, 1.0, 1.0))
+    glow = mel.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -700, 300)
+    glow.set_editor_property("parameter_name", "Glow")
+    glow.set_editor_property("default_value", 0.0)
+    multiply = mel.create_material_expression(mat, unreal.MaterialExpressionMultiply, -350, 200)
+    mel.connect_material_expressions(color, "", multiply, "A")
+    mel.connect_material_expressions(glow, "", multiply, "B")
+    mel.connect_material_property(color, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    mel.connect_material_property(multiply, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    mel.recompile_material(mat)
+    asset_lib.save_loaded_asset(mat)
+    unreal.log("[MapGen] 발광 머티리얼 생성: " + GLOW_MATERIAL)
+
 
 # ---------------------------------------------------------------------------
 # 맵 생성과 배치 도우미
@@ -469,6 +506,7 @@ def ensure_data_tables():
 # ---------------------------------------------------------------------------
 ensure_data_tables()
 MATS = ensure_materials()
+ensure_glow_material()
 
 # 맵끼리 서로 참조(이동 발판의 목적지)하므로 빈 맵을 먼저 모두 만들고 나서 채운다.
 targets = []

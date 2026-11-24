@@ -50,6 +50,7 @@ private:
 
 	TArray<FVector> Path;
 	bool bSeated = false;
+	bool bVoxelBody = false;
 	float WalkTime = 0.f;
 	FVector SeatFloor = FVector::ZeroVector;
 };

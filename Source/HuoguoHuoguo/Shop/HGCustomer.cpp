@@ -4,6 +4,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Debug/HGPlaceholderPaint.h"
+#include "Debug/HGVoxelShapes.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
@@ -50,9 +51,35 @@ AHGCustomer::AHGCustomer()
 
 void AHGCustomer::SetBodyColor(const FLinearColor& Color)
 {
-	HGPlaceholder::Paint(Torso, Color);
 	// 머리는 몸통 색을 밝게 한 색. 종족마다 머리와 몸 색이 함께 달라 보이게 한다.
-	HGPlaceholder::Paint(Head, FMath::Lerp(Color, FLinearColor::White, 0.45f));
+	const FLinearColor HeadColor = FMath::Lerp(Color, FLinearColor::White, 0.45f);
+	HGPlaceholder::Paint(Torso, Color);
+	HGPlaceholder::Paint(Head, HeadColor);
+
+	// 복셀 그림체: 같은 모양(몸통 원통, 머리 구)을 복셀로 만들어 Body 아래에 붙이고, 얼굴 앞(+X)에 눈 두 개를 더한다.
+	// Body에 붙이므로 걸을 때 통통 튀고 앉을 때 올라가는 움직임을 그대로 따른다. 한 번만 만든다.
+	if (HGVoxel::IsEnabled() && !bVoxelBody)
+	{
+		TArray<FHGVoxelShape> Shapes;
+		auto Add = [&Shapes](const TCHAR* Shape, const FVector& Location, const FVector& Scale, const FLinearColor& ShapeColor)
+		{
+			FHGVoxelShape& S = Shapes.AddDefaulted_GetRef();
+			S.Shape = Shape;
+			S.Location = Location;
+			S.Scale = Scale;
+			S.Color = ShapeColor;
+		};
+		Add(TEXT("Cylinder"), FVector(0.f, 0.f, 45.f), FVector(0.5f, 0.5f, 0.9f), Color);
+		Add(TEXT("Sphere"), FVector(0.f, 0.f, 112.f), FVector(0.42f), HeadColor);
+		for (const float Side : { -7.f, 7.f })
+		{
+			Add(TEXT("Cube"), FVector(19.f, Side, 116.f), FVector(0.05f, 0.05f, 0.07f), FLinearColor(0.08f, 0.06f, 0.06f));
+		}
+		HGVoxel::Build(this, Body, Shapes);
+		Torso->SetVisibility(false);
+		Head->SetVisibility(false);
+		bVoxelBody = true;
+	}
 }
 
 void AHGCustomer::WalkPath(const TArray<FVector>& Points)

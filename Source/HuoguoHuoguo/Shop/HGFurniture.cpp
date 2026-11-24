@@ -1,7 +1,12 @@
 ﻿#include "Shop/HGFurniture.h"
 
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Debug/HGPlaceholderPaint.h"
+#include "Debug/HGVoxelShapes.h"
+#include "Game/HGGameInstance.h"
+#include "HAL/IConsoleManager.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -18,6 +23,9 @@ namespace
 	const FLinearColor SeatColor(0.90f, 0.85f, 0.75f);
 	const FLinearColor ClayColor(0.62f, 0.32f, 0.20f);
 	const FLinearColor LeafColor(0.18f, 0.55f, 0.22f);
+
+	// 밤에 등이 빛나는 세기 (발광 머티리얼 Glow 값).
+	constexpr float LampGlow = 6.f;
 
 	// 미리보기 색. 원래 색 대신 이 색으로 칠한다.
 	FLinearColor PreviewColor(EHGFurniturePreview State)
@@ -77,9 +85,61 @@ void AHGFurniture::OnConstruction(const FTransform& Transform)
 	}
 	Tags = HGFurnitureData::ParseTags(Data.Tags);
 
+	// 게임 중이면 지금 시간대에 맞춰 밤 불빛을 켠 채로 만든다 (밤에 새로 놓은 등불도 바로 켜진다).
+	if (GetWorld() && GetWorld()->IsGameWorld())
+	{
+		if (const UHGGameInstance* GI = GetWorld()->GetGameInstance<UHGGameInstance>())
+		{
+			bNightLightOn = GI->GetDayPhase() != EHGDayPhase::Day;
+		}
+	}
+	Rebuild();
+}
+
+bool AHGFurniture::IsVoxelStyle()
+{
+	return HGVoxel::IsEnabled();
+}
+
+void AHGFurniture::Rebuild()
+{
 	ClearParts();
+	bHasLightAnchor = false;
+
+	// 복셀 모드면 모양을 적어 두었다가 한꺼번에 복셀로 바꾼다.
+	const bool bVoxel = IsVoxelStyle();
+	bCapturing = bVoxel;
+	Captured.Reset();
 	BuildParts();
+	bCapturing = false;
+	if (bVoxel)
+	{
+		VoxelizeCaptured();
+	}
+
+	// 밤 불빛. 유령(미리보기)에는 달지 않는다.
+	if (bHasLightAnchor && !bGhost)
+	{
+		NightLight = NewObject<UPointLightComponent>(this, NAME_None, RF_Transient);
+		NightLight->CreationMethod = EComponentCreationMethod::UserConstructionScript;
+		NightLight->SetupAttachment(Root);
+		NightLight->SetRelativeLocation(LightLocation);
+		NightLight->SetIntensityUnits(ELightUnits::Candelas);
+		NightLight->SetIntensity(LightIntensity);
+		NightLight->SetLightColor(LightColor);
+		NightLight->SetAttenuationRadius(450.f);
+		// 그림자는 끈다: 가게에 불빛이 수십 개 생길 수 있어서 그림자까지 그리면 무겁다.
+		NightLight->SetCastShadows(false);
+		NightLight->SetVisibility(bNightLightOn);
+		NightLight->RegisterComponent();
+	}
+
 	Repaint();
+	SetNightLight(bNightLightOn);
+	if (bSteamOn)
+	{
+		SetSteam(true, SteamColor);
+	}
 }
 
 void AHGFurniture::ClearParts()
@@ -91,15 +151,84 @@ void AHGFurniture::ClearParts()
 			Part->DestroyComponent();
 		}
 	}
+	if (IsValid(NightLight))
+	{
+		NightLight->DestroyComponent();
+	}
+	NightLight = nullptr;
 	Parts.Reset();
 	SteamParts.Reset();
+	GlowParts.Reset();
 	PartColors.Reset();
 	PartCollides.Reset();
 }
 
+void AHGFurniture::SetLightAnchor(const FVector& Location, const FLinearColor& Color, float Intensity)
+{
+	bHasLightAnchor = true;
+	LightLocation = Location;
+	LightColor = Color;
+	LightIntensity = Intensity;
+}
+
+void AHGFurniture::SetNightLight(bool bOn)
+{
+	bNightLightOn = bOn;
+	if (NightLight)
+	{
+		NightLight->SetVisibility(bOn);
+	}
+	for (UStaticMeshComponent* Part : GlowParts)
+	{
+		if (UMaterialInstanceDynamic* Mid = Part ? Cast<UMaterialInstanceDynamic>(Part->GetMaterial(0)) : nullptr)
+		{
+			Mid->SetScalarParameterValue(TEXT("Glow"), bOn && !bGhost ? LampGlow : 0.f);
+		}
+	}
+}
+
+void AHGFurniture::VoxelizeCaptured()
+{
+	// 적어 둔 모양을 공용 도우미로 복셀화한다 (Debug/HGVoxelShapes). 무리 0 = 몸, 1 = 김(숨겨 두고 손님이 먹을 때 켠다).
+	// 발광 모양(등)은 발광 머티리얼 무리가 되어 밤에만 빛난다 (SetNightLight). 가구는 바닥 아래로 내려가지 않게 Z < 0 칸을 버린다.
+	const TArray<FHGVoxelGroup> Groups = HGVoxel::Build(this, Root, Captured, HGVoxel::DefaultSize, !bGhost, true);
+	for (const FHGVoxelGroup& Group : Groups)
+	{
+		Parts.Add(Group.Component);
+		PartColors.Add(Group.Color);
+		PartCollides.Add(false);
+		if (Group.Group == 1)
+		{
+			Group.Component->SetCastShadow(false);
+			Group.Component->SetVisibility(false);
+			SteamParts.Add(Group.Component);
+		}
+		if (Group.bGlow)
+		{
+			GlowParts.Add(Group.Component);
+		}
+	}
+}
 UStaticMeshComponent* AHGFurniture::AddPart(const TCHAR* Shape, const FVector& Location, const FVector& Scale, const FLinearColor& Color,
 	bool bCollide, const FRotator& Rotation)
 {
+	// 복셀 모드: 모양만 적어 둔다. 충돌 부품은 보이지 않는 채로 만들어 배치 검사와 막기를 예전과 같게 한다.
+	if (bCapturing)
+	{
+		FHGVoxelShape& Captured_ = Captured.AddDefaulted_GetRef();
+		Captured_.Shape = Shape;
+		Captured_.Location = Location;
+		Captured_.Scale = Scale;
+		Captured_.Rotation = Rotation;
+		Captured_.Color = Color;
+		Captured_.Group = bAddingSteam ? 1 : 0;
+		Captured_.bGlow = bAddingGlow;
+		if (!bCollide)
+		{
+			return nullptr;
+		}
+	}
+
 	UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *FString::Printf(TEXT("/Engine/BasicShapes/%s.%s"), Shape, Shape));
 
 	// 생성 스크립트에서 만든 부품으로 표시한다. 에디터에서 가구를 옮겨 생성 스크립트가 다시 돌면 엔진이 지우고, 맵에 저장되지 않는다.
@@ -111,6 +240,20 @@ UStaticMeshComponent* AHGFurniture::AddPart(const TCHAR* Shape, const FVector& L
 	Part->SetRelativeScale3D(Scale);
 	ApplyCollision(Part, bCollide);
 	Part->RegisterComponent();
+
+	if (bCapturing)
+	{
+		// 복셀이 대신 보이므로 충돌 부품은 숨긴다.
+		Part->SetVisibility(false);
+		Part->SetHiddenInGame(true);
+	}
+
+	// 등처럼 밤에 빛나는 부품은 발광 머티리얼로 칠해 둔다 (처음 밝기 0, SetNightLight가 켠다). Repaint는 색만 바꾼다.
+	if (bAddingGlow && !bCapturing)
+	{
+		HGVoxel::PaintGlow(Part, Color, 0.f);
+		GlowParts.Add(Part);
+	}
 
 	Parts.Add(Part);
 	PartColors.Add(Color);
@@ -199,13 +342,22 @@ void AHGFurniture::BuildTable(const FLinearColor& InA, const FLinearColor& InB)
 	const float S = PotSize / 0.6f;
 	const FVector Offsets[] = { FVector(-6.f, 4.f, 122.f), FVector(5.f, -3.f, 146.f), FVector(-2.f, 2.f, 172.f) };
 	const float Sizes[] = { 0.34f, 0.26f, 0.18f };
+	// 복셀 모드에서는 김도 복셀 묶음 하나로 바뀐다 (AddPart가 null을 돌려주고 VoxelizeCaptured가 김 묶음을 만든다).
+	bAddingSteam = true;
 	for (int32 i = 0; i < 3; ++i)
 	{
-		UStaticMeshComponent* Puff = AddPart(TEXT("Sphere"), FVector(Offsets[i].X * S, Offsets[i].Y * S, Offsets[i].Z), FVector(Sizes[i] * S), FLinearColor::White, false);
-		Puff->SetCastShadow(false);
-		Puff->SetVisibility(false);
-		SteamParts.Add(Puff);
+		if (UStaticMeshComponent* Puff = AddPart(TEXT("Sphere"), FVector(Offsets[i].X * S, Offsets[i].Y * S, Offsets[i].Z), FVector(Sizes[i] * S), FLinearColor::White, false))
+		{
+			Puff->SetCastShadow(false);
+			Puff->SetVisibility(false);
+			SteamParts.Add(Puff);
+		}
 	}
+	bAddingSteam = false;
+
+	// 밤 불빛: 냄비 위 따뜻한 작은 빛 (식탁마다 냄비 불이 켜진 느낌).
+	// 냄비 바로 위에 두면 냄비가 하얗게 타서 조금 높이 둔다.
+	SetLightAnchor(FVector(0.f, 0.f, 175.f), FLinearColor(1.0f, 0.55f, 0.25f), 2.5f);
 }
 
 void AHGFurniture::BuildPot(float P, const FLinearColor& PotColor)
@@ -308,7 +460,11 @@ void AHGFurniture::BuildDecor(const FLinearColor& InA, const FLinearColor& InB)
 		const FLinearColor Pole = Or(InB, SteelColor);
 		AddPart(TEXT("Cylinder"), FVector(0.f, 0.f, 3.f), FVector(0.42f, 0.42f, 0.06f), Pole);
 		AddPart(TEXT("Cylinder"), FVector(0.f, 0.f, 80.f), FVector(0.07f, 0.07f, 1.5f), Pole);
+		bAddingGlow = true;
 		AddPart(TEXT("Sphere"), FVector(0.f, 0.f, 165.f), FVector(0.46f, 0.46f, 0.56f), Or(InA, FLinearColor(0.95f, 0.22f, 0.10f)));
+		bAddingGlow = false;
+		// 등 안에 빛을 두면 등의 안쪽 면만 밝아지고 겉은 어둡다. 등 바로 아래에 두어 등과 바닥을 함께 비춘다.
+		SetLightAnchor(FVector(0.f, 0.f, 125.f), FLinearColor(1.0f, 0.6f, 0.35f), 25.f);
 	}
 	else if (Style == TEXT("PaperLantern"))
 	{
@@ -317,9 +473,12 @@ void AHGFurniture::BuildDecor(const FLinearColor& InA, const FLinearColor& InB)
 		AddPart(TEXT("Cube"), FVector(0.f, 0.f, 4.f), FVector(0.5f, 0.5f, 0.08f), WoodColor);
 		AddPart(TEXT("Cube"), FVector(-30.f, 0.f, 100.f), FVector(0.07f, 0.07f, 1.9f), WoodColor);
 		AddPart(TEXT("Cube"), FVector(-5.f, 0.f, 192.f), FVector(0.55f, 0.06f, 0.06f), WoodColor);
+		bAddingGlow = true;
 		AddPart(TEXT("Sphere"), FVector(10.f, 0.f, 140.f), FVector(0.55f, 0.55f, 0.48f), Or(InA, FLinearColor(0.90f, 0.10f, 0.08f)));
+		bAddingGlow = false;
 		AddPart(TEXT("Cylinder"), FVector(10.f, 0.f, 165.f), FVector(0.28f, 0.28f, 0.05f), Frame, false);
 		AddPart(TEXT("Cylinder"), FVector(10.f, 0.f, 115.f), FVector(0.28f, 0.28f, 0.05f), Frame, false);
+		SetLightAnchor(FVector(10.f, 0.f, 105.f), FLinearColor(1.0f, 0.35f, 0.2f), 25.f);
 	}
 	else if (Style == TEXT("SauceBar"))
 	{
@@ -341,6 +500,7 @@ void AHGFurniture::BuildDecor(const FLinearColor& InA, const FLinearColor& InB)
 		AddPart(TEXT("Cube"), FVector(0.f, 0.f, 97.f), FVector((W - 30.f) / 100.f, (D - 30.f) / 100.f, 0.74f), Or(InA, FLinearColor(0.35f, 0.75f, 0.85f)));
 		AddPart(TEXT("Sphere"), FVector(W * 0.15f, D * 0.05f, 100.f), FVector(0.18f, 0.08f, 0.1f), FLinearColor(1.0f, 0.5f, 0.1f), false);
 		AddPart(TEXT("Sphere"), FVector(-W * 0.2f, -D * 0.05f, 85.f), FVector(0.16f, 0.07f, 0.09f), FLinearColor(1.0f, 0.85f, 0.2f), false);
+		SetLightAnchor(FVector(0.f, 0.f, 110.f), FLinearColor(0.3f, 0.7f, 1.0f), 8.f);
 	}
 	else if (Style == TEXT("Screen"))
 	{
@@ -417,6 +577,12 @@ void AHGFurniture::SetPartColor(UStaticMeshComponent* Part, const FLinearColor& 
 
 void AHGFurniture::SetSteam(bool bOn, const FLinearColor& Color)
 {
+	// 다시 만들 때(복셀 전환) 같은 상태로 되살리려고 기억해 둔다.
+	bSteamOn = bOn;
+	if (bOn)
+	{
+		SteamColor = Color;
+	}
 	for (UStaticMeshComponent* Puff : SteamParts)
 	{
 		if (Puff)

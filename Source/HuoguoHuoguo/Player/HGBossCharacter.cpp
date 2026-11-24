@@ -2,7 +2,9 @@
 
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Debug/HGPlaceholderPaint.h"
+#include "Debug/HGVoxelShapes.h"
 #include "Engine/StaticMesh.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -65,7 +67,49 @@ void AHGBossCharacter::BeginPlay()
 	HGPlaceholder::Paint(PlaceholderBody, FLinearColor(0.78f, 0.16f, 0.10f));   // 앞치마 빨강
 	HGPlaceholder::Paint(PlaceholderHead, FLinearColor(0.95f, 0.72f, 0.55f));   // 피부색
 	HGPlaceholder::Paint(PlaceholderHelmet, FLinearColor(0.55f, 0.85f, 0.95f)); // 헬멧 청록
+	if (HGVoxel::IsEnabled())
+	{
+		BuildVoxelBody();
+	}
 	SetSuitVisible(false);
+}
+
+void AHGBossCharacter::BuildVoxelBody()
+{
+	// 자리 표시 도형과 같은 모양을 복셀로. 캡슐 가운데가 원점이라 발은 Z -92 쪽이다. 얼굴 앞(+X)에 눈 두 개를 더한다.
+	TArray<FHGVoxelShape> Shapes;
+	auto Add = [&Shapes](const TCHAR* Shape, const FVector& Location, const FVector& Scale, const FLinearColor& Color, int32 Group = 0)
+	{
+		FHGVoxelShape& S = Shapes.AddDefaulted_GetRef();
+		S.Shape = Shape;
+		S.Location = Location;
+		S.Scale = Scale;
+		S.Color = Color;
+		S.Group = Group;
+	};
+	Add(TEXT("Cylinder"), FVector(0.f, 0.f, -20.f), FVector(0.85f, 0.85f, 1.3f), FLinearColor(0.78f, 0.16f, 0.10f));   // 앞치마 빨강
+	Add(TEXT("Sphere"), FVector(0.f, 0.f, 70.f), FVector(0.55f), FLinearColor(0.95f, 0.72f, 0.55f));                   // 피부색
+	for (const float Side : { -9.f, 9.f })
+	{
+		Add(TEXT("Cube"), FVector(25.f, Side, 74.f), FVector(0.05f, 0.06f, 0.08f), FLinearColor(0.08f, 0.06f, 0.06f));    // 눈
+	}
+	HGVoxel::Build(this, GetCapsuleComponent(), Shapes);
+
+	// 헬멧은 따로 복셀화한다. 같은 묶음에 넣으면 머리를 감싼 헬멧이 머리 칸을 덮어써서, 헬멧을 숨기면 머리까지 사라진다.
+	TArray<FHGVoxelShape> Helmet;
+	FHGVoxelShape& Glass = Helmet.AddDefaulted_GetRef();
+	Glass.Shape = TEXT("Sphere");
+	Glass.Location = FVector(0.f, 0.f, 72.f);
+	Glass.Scale = FVector(0.78f);
+	Glass.Color = FLinearColor(0.55f, 0.85f, 0.95f);
+	for (const FHGVoxelGroup& Group : HGVoxel::Build(this, GetCapsuleComponent(), Helmet))
+	{
+		HelmetVoxels.Add(Group.Component);
+	}
+	PlaceholderBody->SetVisibility(false);
+	PlaceholderHead->SetVisibility(false);
+	PlaceholderHelmet->SetVisibility(false);
+	bVoxelBody = true;
 }
 
 void AHGBossCharacter::Move(const FVector2D& Input)
@@ -90,6 +134,18 @@ void AHGBossCharacter::Move(const FVector2D& Input)
 
 void AHGBossCharacter::SetSuitVisible(bool bVisible)
 {
+	bSuitVisible = bVisible;
+	if (bVoxelBody)
+	{
+		for (UInstancedStaticMeshComponent* Helmet : HelmetVoxels)
+		{
+			if (Helmet)
+			{
+				Helmet->SetVisibility(bVisible);
+			}
+		}
+		return;
+	}
 	if (PlaceholderHelmet)
 	{
 		PlaceholderHelmet->SetVisibility(bVisible);

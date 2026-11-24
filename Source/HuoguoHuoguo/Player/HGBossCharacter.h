@@ -48,4 +48,15 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category = "Placeholder")
 	TObjectPtr<UStaticMeshComponent> PlaceholderHelmet;
+
+private:
+	// 복셀 그림체(hg.Voxel)일 때 자리 표시 도형 대신 쓰는 복셀 묶음. 헬멧은 따로 켜고 끈다.
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<class UInstancedStaticMeshComponent>> HelmetVoxels;
+
+	bool bVoxelBody = false;
+	bool bSuitVisible = false;
+
+	// 자리 표시 도형을 숨기고 같은 모양을 복셀로 만든다 (Debug/HGVoxelShapes).
+	void BuildVoxelBody();
 };

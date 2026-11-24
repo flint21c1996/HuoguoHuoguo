@@ -6,6 +6,7 @@
 
 class AHGShopBossCharacter;
 class UHGCustomerDirector;
+class UHGStationLighting;
 class UHGFurniturePlacer;
 
 /**
@@ -57,6 +58,10 @@ public:
 	// HGBuildCategory 2 : 분류를 고른다 (1 식탁, 2 의자, 3 장식. 배치 모드의 숫자 키와 같다).
 	UFUNCTION(Exec)
 	void HGBuildCategory(int32 Number);
+
+	// HGVoxel 0 : 비교용. 가구를 매끈한 기본 도형으로 그린다. 1이면 복셀(기본)로 되돌린다. 손님/사장님은 새로 나타날 때 바뀐다.
+	UFUNCTION(Exec)
+	void HGVoxel(int32 On);
 
 	// HGUnlock : 손에 든 잠긴 가구를 돈이나 재료를 내고 연다 (배치 모드의 U 키와 같다).
 	UFUNCTION(Exec)
@@ -152,6 +157,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Customers")
 	TObjectPtr<UHGCustomerDirector> CustomerDirector;
 
+	// 정거장 조명을 낮/밤에 맞춘다 (밤: 해를 줄이고 가구 불빛을 켠다).
+	UPROPERTY(VisibleAnywhere, Category = "Lighting")
+	TObjectPtr<UHGStationLighting> StationLighting;
+
 private:
 	// 조작 안내에 마지막으로 쓴 콤보 미리보기. 바뀔 때만 안내 줄을 다시 쓴다.
 	FString LastPreviewText;
@@ -179,6 +188,9 @@ private:
 	bool bRotateHeld = false;
 
 	void InitializeFromLevel();
+
+	// 지금 시간대가 밤(또는 문 닫을 시간)이면 밤 조명, 낮이면 낮 조명.
+	void ApplyPhaseLighting();
 	void BuildInputObjects();
 
 	// 두 컨텍스트에 공통인 이동/카메라/배치 모드 전환 키.

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Debug/HGVoxelShapes.h"
 #include "Shop/HGFurnitureData.h"
 #include "HGFurniture.generated.h"
 
@@ -73,6 +74,15 @@ public:
 	// 냄비 위 김을 켜고 끈다 (식탁만 김 부품이 있다). 켤 때 색을 정한다.
 	void SetSteam(bool bOn, const FLinearColor& Color = FLinearColor::White);
 
+	// 밤 불빛을 켜고 끈다 (등불, 홍등, 식탁 냄비, 수조에만 있다). 정거장 조명이 낮/밤에 따라 부른다.
+	void SetNightLight(bool bOn);
+
+	// 생김새를 지금 설정(복셀 여부)으로 다시 만든다. 유령/미리보기/김/밤 불빛 상태는 유지한다.
+	void Rebuild();
+
+	// 복셀 그림체 스위치 (콘솔 변수 hg.Voxel, 기본 켜짐). 켜면 기본 도형 부품을 10cm 정육면체로 바꿔 그린다 (Debug/HGVoxelShapes).
+	static bool IsVoxelStyle();
+
 protected:
 	// 행을 읽어 데이터를 담고 부품을 새로 만든다. 에디터에서 옮기거나 ID를 바꿀 때마다 다시 불린다.
 	virtual void OnConstruction(const FTransform& Transform) override;
@@ -103,6 +113,37 @@ private:
 
 	// 만든 부품을 모두 없앤다 (다시 만들기 전).
 	void ClearParts();
+
+	// ---- 복셀 생김새 (시제품) ----
+	// 복셀 모드에서는 AddPart가 부품을 바로 만들지 않고 모양만 적어 둔다(Captured). 충돌 부품은 보이지 않는 채로 그대로 만든다
+	// (배치 검사와 사장님 막기는 예전과 같다). 다 적은 뒤 VoxelizeCaptured가 모양 안에 드는 10cm 칸을 모아
+	// 색마다 인스턴스 메시 하나로 그린다. 나중 부품이 같은 칸을 덮어쓴다 (냄비 위 국물 등).
+	TArray<FHGVoxelShape> Captured;
+	bool bCapturing = false;
+	bool bAddingSteam = false;
+	// 이 동안 붙이는 부품은 밤에 빛난다 (등).
+	bool bAddingGlow = false;
+
+	void VoxelizeCaptured();
+
+	// 밤에 빛나는 부품 (발광 머티리얼, Glow 파라미터).
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UStaticMeshComponent>> GlowParts;
+
+	// ---- 밤 불빛 ----
+	// 생김새를 만들 때 불빛 자리와 색을 정해 두면(SetLightAnchor) 부품을 다 만든 뒤 점광원 하나를 붙인다.
+	void SetLightAnchor(const FVector& Location, const FLinearColor& Color, float Intensity);
+	bool bHasLightAnchor = false;
+	FVector LightLocation = FVector::ZeroVector;
+	FLinearColor LightColor = FLinearColor::White;
+	float LightIntensity = 0.f;
+	bool bNightLightOn = false;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UPointLightComponent> NightLight;
+
+	bool bSteamOn = false;
+	FLinearColor SteamColor = FLinearColor::White;
 
 	UPROPERTY(Transient)
 	FHGFurnitureRow Data;

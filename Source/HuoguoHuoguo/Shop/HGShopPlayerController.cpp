@@ -12,6 +12,8 @@
 #include "Shop/HGFurniture.h"
 #include "Shop/HGFurniturePlacer.h"
 #include "Shop/HGShopBossCharacter.h"
+#include "Shop/HGStationLighting.h"
+#include "HAL/IConsoleManager.h"
 #include "World/HGExplorerStart.h"
 #include "World/HGShopCameraAnchor.h"
 #include "World/HGTravelPad.h"
@@ -20,6 +22,7 @@ AHGShopPlayerController::AHGShopPlayerController()
 {
 	FurniturePlacer = CreateDefaultSubobject<UHGFurniturePlacer>(TEXT("FurniturePlacer"));
 	CustomerDirector = CreateDefaultSubobject<UHGCustomerDirector>(TEXT("CustomerDirector"));
+	StationLighting = CreateDefaultSubobject<UHGStationLighting>(TEXT("StationLighting"));
 }
 
 void AHGShopPlayerController::BeginPlay()
@@ -88,6 +91,10 @@ void AHGShopPlayerController::InitializeFromLevel()
 	CustomerDirector->OnMoneyChanged = [this]() { UpdateControlsHint(); };
 	CustomerDirector->Start(FurniturePlacer);
 
+	// 정거장 조명을 지금 시간대에 맞춘다 (밤이면 해를 줄이고 가구 불빛을 켠다). 행성에서 돌아와 시간대가 넘어가면 아래에서 다시 맞춘다.
+	StationLighting->Start();
+	ApplyPhaseLighting();
+
 	BuildInputObjects();
 	ApplyMappingContext(ShopContext);
 
@@ -110,6 +117,7 @@ void AHGShopPlayerController::InitializeFromLevel()
 		{
 			ShowMessage(FString::Printf(TEXT("행성에서 돌아오니 %s이 되었다"), *GI->DescribeTime()));
 			UpdatePlanetBoard();
+			ApplyPhaseLighting();
 		}
 		// 행성에서 가져온 재료를 알려 준다. 진열대/창고 UI가 생기면 그쪽으로 옮긴다.
 		HGBag();
@@ -379,6 +387,29 @@ void AHGShopPlayerController::HGPassTime()
 		ShowMessage(FString::Printf(TEXT("시간이 흘렀다: %s"), *GI->DescribeTime()));
 	}
 	UpdatePlanetBoard();
+	ApplyPhaseLighting();
+}
+
+void AHGShopPlayerController::ApplyPhaseLighting()
+{
+	const UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
+	StationLighting->Apply(GI && GI->GetDayPhase() != EHGDayPhase::Day);
+}
+
+void AHGShopPlayerController::HGVoxel(int32 On)
+{
+	// 콘솔 변수를 바꾸고 맵의 가구(유령 포함)를 모두 다시 만든다. 밤 불빛과 김 상태는 가구가 기억해 두었다가 되살린다.
+	if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("hg.Voxel")))
+	{
+		Var->Set(On != 0 ? 1 : 0, ECVF_SetByConsole);
+	}
+	int32 Count = 0;
+	for (TActorIterator<AHGFurniture> It(GetWorld()); It; ++It)
+	{
+		It->Rebuild();
+		++Count;
+	}
+	ShowMessage(FString::Printf(TEXT("가구 생김새: %s (%d개 다시 만듦)"), On != 0 ? TEXT("복셀") : TEXT("기본 도형"), Count));
 }
 
 void AHGShopPlayerController::HGBuild()
