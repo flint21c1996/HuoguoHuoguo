@@ -31,6 +31,16 @@ namespace
 		TEXT("행성 그림체 (복셀 + 노 맨즈 스카이 색): 각진 색 지형, 하늘 돔, 복셀 바위/나무/풀꽃, 각진 바위섬. 기본 1. 0이면 다음에 만드는 행성을 예전 매끈한 단색 모습으로 만든다 (비교와 성능 확인용)."),
 		ECVF_Default);
 
+	TAutoConsoleVariable<int32> CVarAsteroidField(
+		TEXT("hg.AsteroidField"), 0,
+		TEXT("시험용: 1이면 다음에 내려가는 행성을 소행성 지대로 바꾼다 (본 소행성 + 뛰어 건널 둘레 소행성). 0이면 시드가 정한 대로."),
+		ECVF_Default);
+
+	TAutoConsoleVariable<int32> CVarDerelict(
+		TEXT("hg.Derelict"), 0,
+		TEXT("시험용: 1이면 다음에 내려가는 행성을 폐우주선으로 바꾼다 (무중력 바깥 + 인공 중력 안쪽 방). 0이면 시드가 정한 대로."),
+		ECVF_Default);
+
 	TAutoConsoleVariable<int32> CVarPlanetFaceted(
 		TEXT("hg.PlanetFaceted"), 0,
 		TEXT("행성 그림체 지형 모양: 0 = 매끈한 땅(부드러운 색 얼룩, 지층 줄무늬, 비탈은 바위색), 1 = 각진 로우폴리 땅(면마다 한 색). 다음에 만드는 행성에 적용한다."),
@@ -134,9 +144,19 @@ void AHGPlanetGenerator::EnsureGenerated()
 
 	const double StartTime = FPlatformTime::Seconds();
 	ChoosePlanet();
-	BuildTerrain();
-	ScatterProps();
-	SpawnReturnPad();
+	if (Planet.bDerelict)
+	{
+		// 폐우주선: 땅이 없다. ScatterProps는 재료 종류(인스턴스 메시)만 준비하고, 우주선과 귀환 포드는 BuildDerelict가 만든다.
+		ScatterProps();
+		BuildDerelict();
+	}
+	else
+	{
+		BuildTerrain();
+		ScatterProps();
+		SpawnReturnPad();
+	}
+	BuildAsteroidField();
 	if (CVarPlanetMood.GetValueOnGameThread() != 0)
 	{
 		ApplyMoodPreview();
@@ -364,8 +384,9 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 			}
 		}
 	};
-	const int32 NearTrees = 14;
-	const int32 FarTrees = FMath::Clamp(FMath::RoundToInt(AreaM2 / 900.0), 10, 120);
+	// 소행성 지대의 본 소행성은 작아서 나무를 몇 그루만 둔다.
+	const int32 NearTrees = Planet.bDerelict ? 0 : Planet.bAsteroidField ? 2 : 14;
+	const int32 FarTrees = Planet.bDerelict ? 0 : Planet.bAsteroidField ? 1 : FMath::Clamp(FMath::RoundToInt(AreaM2 / 900.0), 10, 120);
 	for (int32 i = 0; i < NearTrees; ++i)
 	{
 		PlaceTree(RandomDirNearPole(3500.0 / R));
@@ -382,9 +403,11 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 	auto CapArea = [R](double Angle) { return 2.0 * UE_PI * R * R * (1.0 - FMath::Cos(Angle)) / 10000.0; };
 	const double Inner = 2500.0 / R;
 	const double Outer = 4500.0 / R;
-	const int32 InnerCount = FMath::Clamp(FMath::RoundToInt(CapArea(Inner) * 1.2), 0, 4000);
-	const int32 RingCount = FMath::Clamp(FMath::RoundToInt((CapArea(Outer) - CapArea(Inner)) * 0.4), 0, 3000);
-	const int32 FarCount = FMath::Clamp(FMath::RoundToInt((AreaM2 - CapArea(Outer)) / 25.0), 0, 6000);
+	// 폐우주선은 땅이 없어 식물도 없다.
+	const int32 FloraScale = Planet.bDerelict ? 0 : 1;
+	const int32 InnerCount = FloraScale * FMath::Clamp(FMath::RoundToInt(CapArea(Inner) * 1.2), 0, 4000);
+	const int32 RingCount = FloraScale * FMath::Clamp(FMath::RoundToInt((CapArea(Outer) - CapArea(Inner)) * 0.4), 0, 3000);
+	const int32 FarCount = FloraScale * FMath::Clamp(FMath::RoundToInt((AreaM2 - CapArea(Outer)) / 25.0), 0, 6000);
 	auto PlaceTuft = [&](const FVector& Dir)
 	{
 		const FTransform Frame = SurfaceFrame(Dir, Rng.FRandRange(0.f, UE_TWO_PI), -2.f);
@@ -533,7 +556,8 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 	// 4. 하늘의 볼거리: 떠 있는 바위섬과 복셀 구름. 둘 다 행성을 둘러 떠 있다.
 	//    바위섬은 복셀이 아니라 땅과 같은 방식의 메시로 만든다 (땅이 매끈하면 매끈하게, hg.PlanetFaceted 1이면 각지게): 윗면은 땅 색으로 살짝 울퉁불퉁하고,
 	//    아래는 고리 몇 겹이 점점 좁아지며 비뚤게 내려가 뾰족한 바위 끝으로 모인다. 땅 조각이 떨어져 떠 있는 느낌.
-	const int32 Islands = 9;
+	// 소행성 지대에는 떠 있는 바위섬 대신 뛰어 건널 소행성들이 있다 (BuildAsteroidField).
+	const int32 Islands = (Planet.bAsteroidField || Planet.bDerelict) ? 0 : 9;
 	const bool bFacetedIslands = CVarPlanetFaceted.GetValueOnGameThread() != 0;
 	TArray<FVector> IslandVertices;
 	TArray<FVector> IslandNormals;
@@ -822,7 +846,8 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 			else
 			{
 				Light->SetLightColor(Pal.Zenith);
-				Light->SetIntensity(Light->Intensity * 1.6f);
+				// 소행성 지대는 하늘이 거의 검어서 하늘빛 간접광이 약하다. 해 반대쪽 면이 새까만 실루엣이 되지 않게 보조광을 더 세게 둔다.
+				Light->SetIntensity(Light->Intensity * ((Planet.bAsteroidField || Planet.bDerelict) ? 4.f : 1.6f));
 			}
 		}
 	}
@@ -840,8 +865,11 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 		UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(SkyMaterial, Dome);
 		Mid->SetVectorParameterValue(TEXT("Center"), FLinearColor(GetActorLocation()));
 		// 하늘 꼭대기는 우주색 쪽으로 섞는다 (대기가 얇아 우주가 비쳐 보이고 별이 잘 보인다). 지평선 색은 그대로.
-		Mid->SetVectorParameterValue(TEXT("Zenith"), FMath::Lerp(Pal.Zenith, FLinearColor(0.02f, 0.02f, 0.07f), SpaceTint));
-		Mid->SetVectorParameterValue(TEXT("Horizon"), Pal.Horizon);
+		// 소행성 지대는 대기가 없는 우주 한가운데라 하늘을 거의 우주색으로 칠한다 (지평선도 어둡게).
+		const FLinearColor Space(0.02f, 0.02f, 0.07f);
+		const bool bOpenSpace = Planet.bAsteroidField || Planet.bDerelict;
+		Mid->SetVectorParameterValue(TEXT("Zenith"), FMath::Lerp(Pal.Zenith, Space, bOpenSpace ? 0.92f : SpaceTint));
+		Mid->SetVectorParameterValue(TEXT("Horizon"), bOpenSpace ? FMath::Lerp(Pal.Horizon, Space, 0.93f) : Pal.Horizon);
 		Mid->SetVectorParameterValue(TEXT("SunDir"), FLinearColor(SunDir));
 		Mid->SetScalarParameterValue(TEXT("Brightness"), SkyBrightness);
 		Dome->SetMaterial(0, Mid);
@@ -866,7 +894,7 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 
 	// 6. 우주가 보이는 하늘(별, 고리 행성, 위성, 정거장)과 지형 볼거리(탁상 바위, 아치).
 	BuildSkyBodies();
-	const int32 Landmarks = BuildLandmarks();
+	const int32 Landmarks = (Planet.bAsteroidField || Planet.bDerelict) ? 0 : BuildLandmarks();
 	UE_LOG(LogHuoguo, Log, TEXT("[Mood] 하늘: 별 %d개, 고리 행성/위성/정거장 %s. 지형 볼거리 %d개, 크레이터 %d개"),
 		StarCount, bSkyBodies ? TEXT("있음") : TEXT("없음"), Landmarks, Craters.Num());
 
@@ -1244,6 +1272,229 @@ int32 AHGPlanetGenerator::BuildLandmarks()
 	return Built;
 }
 
+void AHGPlanetGenerator::BuildAsteroidField()
+{
+	// 0번 천체는 늘 이 행성(소행성 지대면 착륙하는 본 소행성).
+	GravityBodies.Reset();
+	FHGGravityBody Main;
+	Main.Center = GetActorLocation();
+	Main.Radius = Planet.Radius;
+	Main.SurfaceGravity = Planet.GravityScale;
+	GravityBodies.Add(Main);
+	if (!Planet.bAsteroidField)
+	{
+		return;
+	}
+
+	FRandomStream Rng(static_cast<int32>(HashCombine(GetTypeHash(Planet.Seed), 0xa5f1e1du)));
+	const FMoodPalette Pal = MoodPalette(Planet.Biome);
+
+	// 둘레 소행성 하나: 중심(행성 중심 기준), 평균 반지름, 축마다 늘인 비율(찌그러진 감자 모양), 노이즈 이동값.
+	struct FRock
+	{
+		FVector Center;
+		float Radius;
+		FVector Squash;
+		FVector Offset;
+	};
+	TArray<FRock> Rocks;
+
+	// 배치 (플랫폼 게임식, 정해진 길 없음): 이미 놓인 소행성 하나에서 지표 사이 2.5 ~ 9m에 새 소행성을 붙여 나간다.
+	// 가까운 것(2.5 ~ 5m)은 1단 점프로, 먼 것(~9m)은 2단/3단 점프나 제트팩으로 건너간다. 어느 소행성이든 이웃에서 뛰어 닿을 수 있다.
+	// 발사대 같은 정해진 길은 두지 않는다 (사용자 결정: 너무 선형적이라 자유를 해친다).
+	// Centers/Radii의 0번은 본 소행성이고, i번(1 ~)은 Rocks[i - 1]이다. 중력 천체 번호도 같은 순서다.
+	TArray<FVector> Centers = { FVector::ZeroVector };
+	TArray<float> Radii = { Planet.Radius };
+
+	// Parent에서 지표 사이 GapMin ~ GapMax 떨어진 곳에 소행성 하나를 놓아 본다. Bias 쪽으로 치우친다. 실패하면 INDEX_NONE.
+	auto TryPlace = [&](int32 Parent, float GapMin, float GapMax, const FVector& Bias)
+	{
+		for (int32 Try = 0; Try < 40; ++Try)
+		{
+			const float Radius = Rng.FRand() < 0.15f ? Rng.FRandRange(700.f, 1000.f) : Rng.FRandRange(300.f, 650.f);
+			const float Gap = Rng.FRandRange(GapMin, GapMax);
+			const FVector Dir = (Rng.VRand() + Bias * 0.8f).GetSafeNormal();
+			const FVector Center = Centers[Parent] + Dir * (Radii[Parent] + Gap + Radius);
+			if (Center.Size() > 15000.f)
+			{
+				continue;
+			}
+			// 다른 소행성과 겹치지 않게 (늘인 모양과 노이즈를 생각해 반지름을 15% 크게 잡는다).
+			bool bClear = true;
+			for (int32 j = 0; j < Centers.Num() && bClear; ++j)
+			{
+				bClear = j == Parent || FVector::Dist(Center, Centers[j]) > (Radius + Radii[j]) * 1.15f + 200.f;
+			}
+			if (!bClear)
+			{
+				continue;
+			}
+			FRock Rock;
+			Rock.Center = Center;
+			Rock.Radius = Radius;
+			Rock.Squash = FVector(Rng.FRandRange(0.85f, 1.15f), Rng.FRandRange(0.85f, 1.15f), Rng.FRandRange(0.8f, 1.05f));
+			Rock.Offset = FVector(Rng.FRandRange(-500.f, 500.f), Rng.FRandRange(-500.f, 500.f), Rng.FRandRange(-500.f, 500.f));
+			Rocks.Add(Rock);
+			Centers.Add(Center);
+			Radii.Add(Radius);
+			return Centers.Num() - 1;
+		}
+		return static_cast<int32>(INDEX_NONE);
+	};
+
+	// 부모는 최근에 놓은 몇 개 중에서 고르고 본 소행성에서 멀어지는 쪽으로 치우쳐, 사방으로 뻗은 나뭇가지처럼 퍼지게 한다.
+	// 셋에 하나는 먼 간격(5 ~ 9m)이라 단계 점프나 제트팩을 써야 한다.
+	const int32 Count = Rng.RandRange(16, 22);
+	for (int32 i = 0; i < Count; ++i)
+	{
+		const int32 Parent = FMath::Max(0, Centers.Num() - 1 - Rng.RandRange(0, 4));
+		const bool bFar = Rng.FRand() < 0.33f;
+		TryPlace(Parent, bFar ? 500.f : 250.f, bFar ? 900.f : 500.f, Centers[Parent].GetSafeNormal());
+	}
+
+	// 소행성 표면 한 점 (행성 중심 기준): 방향 Dir로 노이즈 반지름만큼 나간 뒤 축마다 늘인다.
+	auto SurfacePoint = [](const FRock& Rock, const FVector& Dir)
+	{
+		const float Rad = Rock.Radius * (1.f + 0.22f * Fbm(Dir * 1.6 + Rock.Offset, 3));
+		return Rock.Center + Dir * Rad * Rock.Squash;
+	};
+
+	// 메시: 소행성마다 정육면체 여섯 면을 10칸 격자로 나눠 부풀린 구(큐브스피어). 매끈한 땅과 같은 색 규칙.
+	// 법선은 옆 두 방향으로 조금 옮긴 표면점과의 차이로 구한다 (면 경계에서도 같은 식이라 이음매가 보이지 않는다).
+	TArray<FVector> Verts, Norms;
+	TArray<FVector2D> UVs;
+	TArray<FColor> Colors;
+	TArray<int32> Tris;
+	struct FFace { FVector N, U, V; };
+	const FFace Faces[6] = {
+		{ FVector(1, 0, 0),  FVector(0, 1, 0),  FVector(0, 0, 1) },
+		{ FVector(-1, 0, 0), FVector(0, -1, 0), FVector(0, 0, 1) },
+		{ FVector(0, 1, 0),  FVector(-1, 0, 0), FVector(0, 0, 1) },
+		{ FVector(0, -1, 0), FVector(1, 0, 0),  FVector(0, 0, 1) },
+		{ FVector(0, 0, 1),  FVector(0, 1, 0),  FVector(-1, 0, 0) },
+		{ FVector(0, 0, -1), FVector(0, 1, 0),  FVector(1, 0, 0) },
+	};
+	const int32 Grid = 10;
+	const int32 Row = Grid + 1;
+	for (const FRock& Rock : Rocks)
+	{
+		for (const FFace& Face : Faces)
+		{
+			const int32 Base = Verts.Num();
+			for (int32 j = 0; j < Row; ++j)
+			{
+				for (int32 i = 0; i < Row; ++i)
+				{
+					const FVector Dir = CubeToSphere(Face.N + (2.0 * i / Grid - 1.0) * Face.U + (2.0 * j / Grid - 1.0) * Face.V);
+					const FVector P = SurfacePoint(Rock, Dir);
+					FVector T1, T2;
+					TangentBasis(Dir, T1, T2);
+					FVector N = FVector::CrossProduct(SurfacePoint(Rock, (Dir + T1 * 0.02).GetSafeNormal()) - P,
+						SurfacePoint(Rock, (Dir + T2 * 0.02).GetSafeNormal()) - P).GetSafeNormal();
+					if ((N | (P - Rock.Center)) < 0.0)
+					{
+						N = -N;
+					}
+					const float Patch = FMath::Clamp(0.5f + 1.6f * FMath::PerlinNoise3D(P / 500.0 + Rock.Offset), 0.f, 1.f);
+					const float Slope = 1.f - static_cast<float>(FMath::Abs(N | (P - Rock.Center).GetSafeNormal()));
+					const float Moss = FMath::SmoothStep(0.15f, 0.35f, FMath::PerlinNoise3D(P / 300.0 - Rock.Offset));
+					FLinearColor Color = FMath::Lerp(Pal.Ground, Pal.GroundB, FMath::SmoothStep(0.25f, 0.75f, Patch));
+					Color *= 1.f + 0.15f * FMath::PerlinNoise3D(P / 200.0);
+					Color = FMath::Lerp(Color, Pal.Grass[1] * 0.8f, Moss * 0.6f);
+					Color = FMath::Lerp(Color, Pal.Rock, FMath::SmoothStep(0.15f, 0.4f, Slope));
+					Color.A = 1.f;
+					Verts.Add(P);
+					Norms.Add(N);
+					UVs.Add(FVector2D::ZeroVector);
+					Colors.Add(Color.ToFColor(false));
+				}
+			}
+			for (int32 j = 0; j < Grid; ++j)
+			{
+				for (int32 i = 0; i < Grid; ++i)
+				{
+					const int32 V00 = Base + j * Row + i;
+					const int32 Quad[2][3] = { { V00, V00 + Row, V00 + 1 }, { V00 + 1, V00 + Row, V00 + Row + 1 } };
+					for (const auto& T : Quad)
+					{
+						// 앞면 법선 = (B - C) x (A - C)가 바깥(소행성 중심 반대)을 향하게 감는다.
+						int32 A = T[0], B = T[1], C = T[2];
+						const FVector FaceN = FVector::CrossProduct(Verts[B] - Verts[C], Verts[A] - Verts[C]);
+						if ((FaceN | ((Verts[A] + Verts[B] + Verts[C]) / 3.0 - Rock.Center)) < 0.0)
+						{
+							Swap(A, B);
+						}
+						Tris.Append({ A, B, C });
+					}
+				}
+			}
+		}
+
+		FHGGravityBody Body;
+		Body.Center = GetActorLocation() + Rock.Center;
+		Body.Radius = Rock.Radius * (Rock.Squash.X + Rock.Squash.Y + Rock.Squash.Z) / 3.f;
+		Body.SurfaceGravity = Planet.GravityScale;
+		GravityBodies.Add(Body);
+	}
+	if (Verts.Num() > 0)
+	{
+		UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this, TEXT("Asteroids"), RF_Transient);
+		Mesh->SetupAttachment(Terrain);
+		Mesh->SetCollisionProfileName(Terrain->GetCollisionProfileName());
+		Mesh->SetCanEverAffectNavigation(false);
+		Mesh->RegisterComponent();
+		Mesh->CreateMeshSection(0, Verts, Tris, Norms, UVs, Colors, TArray<FProcMeshTangent>(), true);
+		if (UMaterialInterface* VertexColorMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/HG/Materials/M_HG_VertexColor.M_HG_VertexColor")))
+		{
+			Mesh->SetMaterial(0, VertexColorMaterial);
+		}
+	}
+
+	// 재료: 소행성마다 1 ~ 2개. 본 소행성 재료(ScatterProps) 뒤에 번호를 이어 붙인다. 같은 시드면 같은 번호에 같은 재료와 자리다.
+	// 캔 기록과 시간대(낮/밤 재료) 규칙은 본 소행성과 같다.
+	UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
+	const UDataTable* Table = GI ? GI->GetIngredientTable() : nullptr;
+	int32 FieldMarkers = 0;
+	if (Table && !IngredientIds.IsEmpty() && IngredientMarkers.Num() == IngredientIds.Num())
+	{
+		const EHGDayPhase Phase = GI->GetDayPhase();
+		const FTransform ToWorld = Terrain->GetComponentTransform();
+		for (const FRock& Rock : Rocks)
+		{
+			const int32 PerRock = Rng.RandRange(1, 2);
+			for (int32 k = 0; k < PerRock; ++k)
+			{
+				const int32 Kind = Rng.RandRange(0, IngredientIds.Num() - 1);
+				const FVector Dir = Rng.VRand();
+				const FVector Surface = SurfacePoint(Rock, Dir);
+				const FVector Up = (Surface - Rock.Center).GetSafeNormal();
+				const FTransform Local(FRotationMatrix::MakeFromZ(Up).ToQuat(), Surface + Up * 22.f, FVector(MarkerScale));
+
+				const int32 Index = Markers.Num();
+				FHGIngredientMarker& Marker = Markers.AddDefaulted_GetRef();
+				Marker.Kind = Kind;
+				Marker.Instance = IngredientMarkers[Kind]->AddInstance(Local);
+				Marker.Location = ToWorld.TransformPosition(Local.GetLocation());
+				const FHGIngredientRow* RowData = Table->FindRow<FHGIngredientRow>(IngredientIds[Kind], TEXT("BuildAsteroidField"));
+				if (GI->IsMarkerHarvested(Planet.Seed, Index))
+				{
+					Marker.bHarvested = true;
+					HideInstance(Index);
+				}
+				else if (RowData && !HGDay::IsAvailable(RowData->AvailableAt, Phase))
+				{
+					Marker.bOtherTime = true;
+					HideInstance(Index);
+				}
+				++FieldMarkers;
+			}
+		}
+	}
+
+	UE_LOG(LogHuoguo, Log, TEXT("[Field] 소행성 지대: 둘레 소행성 %d개 (본 소행성 반지름 %.0fm), 재료 표식 %d개 추가, 지금 캘 수 있는 재료 %d"),
+		Rocks.Num(), Planet.Radius / 100.f, FieldMarkers, GetRemainingIngredientCount());
+}
+
 void AHGPlanetGenerator::ChoosePlanet()
 {
 	const UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
@@ -1254,6 +1505,16 @@ void AHGPlanetGenerator::ChoosePlanet()
 	else
 	{
 		Planet = bPreviewFromSeedOnly ? HGPlanet::MakePlanet(PreviewPlanet.Seed) : PreviewPlanet;
+	}
+	// 시험용: hg.AsteroidField 1이면 어느 행성이든 소행성 지대로 바꿔 내려간다 (같은 시드면 같은 지대).
+	if (CVarAsteroidField.GetValueOnGameThread() != 0 && !Planet.bAsteroidField)
+	{
+		HGPlanet::MakeAsteroidField(Planet);
+	}
+	// 시험용: hg.Derelict 1이면 폐우주선 (소행성 지대 강제보다 우선).
+	if (CVarDerelict.GetValueOnGameThread() != 0 && !Planet.bDerelict)
+	{
+		HGPlanet::MakeDerelict(Planet);
 	}
 
 	// 노이즈 이동값도 시드에서 뽑는다. 큰 값으로 옮겨서 행성마다 노이즈 공간의 전혀 다른 곳을 읽게 한다.
@@ -1276,7 +1537,7 @@ void AHGPlanetGenerator::ChoosePlanet()
 			Crater.Dir = CraterRng.VRand();
 			Crater.Radius = FMath::Max(CraterRng.FRandRange(500.f, 1400.f), CellLength * 5.f);
 			Crater.Depth = Crater.Radius * CraterRng.FRandRange(0.18f, 0.3f);
-			if (FMath::Acos(FMath::Clamp(Crater.Dir.Z, -1.0, 1.0)) * Planet.Radius > LandingFlatRadius * 2.5f + Crater.Radius)
+			if (FMath::Acos(FMath::Clamp(Crater.Dir.Z, -1.0, 1.0)) * Planet.Radius > FlatRadius() * 2.5f + Crater.Radius)
 			{
 				Craters.Add(Crater);
 				break;
@@ -1347,7 +1608,7 @@ float AHGPlanetGenerator::SurfaceRadiusAt(const FVector& Dir) const
 	// 그 바깥 한 배 거리 동안은 부드럽게 원래 높이로 되돌린다.
 	const float AngleFromPole = FMath::Acos(FMath::Clamp(Dir.Z, -1.0, 1.0));
 	const float ArcDistance = AngleFromPole * Planet.Radius;
-	const float Flatten = FMath::SmoothStep(LandingFlatRadius, LandingFlatRadius * 2.f, ArcDistance);
+	const float Flatten = FMath::SmoothStep(FlatRadius(), FlatRadius() * 2.f, ArcDistance);
 
 	// 크레이터: 가운데가 파인 그릇(깊이 x (1 - d²)) + 가장자리를 따라 솟은 둑(깊이의 0.35배, 폭 반지름의 0.25배).
 	// d = 크레이터 중심에서 반지름 단위 거리. 짧은 호는 현 길이로 근사한다 (크레이터는 행성보다 훨씬 작다).
@@ -1553,13 +1814,15 @@ void AHGPlanetGenerator::ScatterProps()
 	// 표면적(m^2)에 비례해서 개수를 정한다. 작은 행성이 휑하거나 큰 행성이 빽빽하지 않게 하기 위해서이다.
 	const double RadiusM = Planet.Radius / 100.0;
 	const double AreaM2 = 4.0 * UE_PI * RadiusM * RadiusM;
-	const int32 RockCount = FMath::Clamp(FMath::RoundToInt(AreaM2 / 2000.0 * Planet.Richness), 20, 1500);
+	// 소행성 지대의 본 소행성은 아주 작아서(반지름 10 ~ 15m) 최소 개수를 낮춘다. 재료는 둘레 소행성에도 더 놓는다 (BuildAsteroidField).
+	// 폐우주선은 땅이 없어 바위와 재료를 행성 표면에 놓지 않는다 (재료 종류 인스턴스 메시만 만든다).
+	const int32 RockCount = Planet.bDerelict ? 0 : FMath::Clamp(FMath::RoundToInt(AreaM2 / 2000.0 * Planet.Richness), Planet.bAsteroidField ? 6 : 20, 1500);
 	// 재료 표식은 낮 재료와 밤 재료를 다 만든 뒤 지금 시간대가 아닌 것을 숨긴다. 한 번에 보이는 것은 대략 절반이므로
 	// 한 시간대에 약 3500m²당 1개가 보이도록 두 배로 만든다.
-	const int32 IngredientCount = FMath::Clamp(FMath::RoundToInt(AreaM2 / 1750.0 * Planet.Richness), 24, 800);
+	const int32 IngredientCount = Planet.bDerelict ? 0 : FMath::Clamp(FMath::RoundToInt(AreaM2 / 1750.0 * Planet.Richness), Planet.bAsteroidField ? 6 : 24, 800);
 
 	// 착륙 지점 근처에는 아무것도 두지 않는다 (발판과 착륙한 사장님이 바위에 묻히지 않게).
-	const double MinPoleAngle = (LandingFlatRadius * 0.8) / Planet.Radius;
+	const double MinPoleAngle = (FlatRadius() * 0.8) / Planet.Radius;
 	auto RandomDir = [&Rng, MinPoleAngle]()
 	{
 		for (;;)
@@ -1768,6 +2031,11 @@ int32 AHGPlanetGenerator::GetRemainingIngredientCount() const
 
 FTransform AHGPlanetGenerator::GetLandingTransform() const
 {
+	// 폐우주선: 우주선을 바라보며 떠 있는 시작 자리.
+	if (Planet.bDerelict)
+	{
+		return DerelictStart;
+	}
 	// 착륙 지점은 북극(+Z)이다. 그 주변은 SurfaceRadiusAt에서 평평하게 다졌다.
 	// 캡슐 반높이(92) + 여유 3만큼 띄워서 발이 땅에 닿게 한다.
 	const FVector Up = FVector::UpVector;

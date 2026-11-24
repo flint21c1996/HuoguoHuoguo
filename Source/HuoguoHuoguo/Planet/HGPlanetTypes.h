@@ -21,6 +21,28 @@ enum class EHGPlanetSize : uint8
 };
 
 /**
+ * 중력을 가진 천체 하나 (행성 또는 소행성). 소행성 지대에서는 여러 개가 동시에 사장님을 끈다.
+ *
+ * 끄는 힘: 지표에서 FieldDepth(15m) 높이까지는 SurfaceGravity 그대로이고, 그 바깥에서는 거리 제곱에 반비례해 약해진다.
+ * 실제 중력(지표부터 거리 제곱으로 약해짐)이면 반지름 10m 소행성은 탈출 속도가 초속 10m 정도라서 점프 한 번에 튕겨 나간다.
+ * 게임에서는 소행성 둘레의 중력 껍질 안에서는 늘 같은 무게로 걷고 뛰게 하는 편이 손에 익는다 (슈퍼 마리오 갤럭시 방식).
+ */
+struct FHGGravityBody
+{
+	FVector Center = FVector::ZeroVector; // 월드 위치
+	float Radius = 1000.f;                // 평균 반지름(cm)
+	float SurfaceGravity = 0.5f;          // 지표 중력 배율 (1 = 지구)
+	float FieldDepth = 1500.f;            // 중력이 일정한 껍질 두께(cm)
+
+	// 중심에서 Distance 떨어진 곳에서 끄는 힘 (중력 배율).
+	float PullAt(float Distance) const
+	{
+		const float Edge = Radius + FieldDepth;
+		return Distance <= Edge ? SurfaceGravity : SurfaceGravity * FMath::Square(Edge / Distance);
+	}
+};
+
+/**
  * 행성 하나를 정하는 값 묶음.
  *
  * 행성은 맵 에셋이 아니라 이 값들로 존재한다. 같은 Seed로 MakePlanet을 부르면 언제나 같은 값이 나오고,
@@ -69,6 +91,15 @@ struct HUOGUOHUOGUO_API FHGPlanetSeed
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Planet")
 	int32 HoursLeft = 6;
 
+	// 소행성 지대인가. 그렇다면 Radius는 착륙하는 본 소행성의 반지름이고, 둘레에 뛰어 건너는 소행성들이 더 생긴다 (AHGPlanetGenerator).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Planet")
+	bool bAsteroidField = false;
+
+	// 폐우주선인가. 그렇다면 땅이 없는 우주 한가운데에 버려진 우주선 한 척이 떠 있다 (AHGPlanetGenerator::BuildDerelict).
+	// 밖에서는 제트팩으로 떠다니며 선체의 재료를 캐고, 에어록으로 들어가면 인공 중력이 살아 있는 방들을 걷는다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Planet")
+	bool bDerelict = false;
+
 	// 목록과 안내에 쓰는 한 줄 설명. 예) "크락-7 | 소형 바위 | 반지름 80m | 중력 0.6 | 6시간 후 이탈"
 	FString Describe() const;
 };
@@ -77,6 +108,12 @@ namespace HGPlanet
 {
 	// 시드 하나로 행성 하나를 만든다. 같은 시드 = 같은 행성.
 	HUOGUOHUOGUO_API FHGPlanetSeed MakePlanet(int32 Seed);
+
+	// 행성 값을 소행성 지대로 바꾼다: 본 소행성 반지름 10 ~ 15m, 지형은 울퉁불퉁하게. 시드로 정하므로 같은 시드면 같다.
+	HUOGUOHUOGUO_API void MakeAsteroidField(FHGPlanetSeed& Planet);
+
+	// 행성 값을 폐우주선으로 바꾼다 (소행성 지대는 해제). 군계는 선체에 자란 재료의 성격으로 남는다.
+	HUOGUOHUOGUO_API void MakeDerelict(FHGPlanetSeed& Planet);
 
 	// 궤도 주기(게임 내 날짜) Cycle에 정거장으로 접근하는 행성 Count개.
 	// 같은 주기에는 언제나 같은 목록이 나온다. 크기 등급이 한쪽으로 몰리지 않도록 작은 행성과 중간 행성을 섞는다.

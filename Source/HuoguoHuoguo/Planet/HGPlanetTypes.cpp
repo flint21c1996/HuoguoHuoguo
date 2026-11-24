@@ -11,6 +11,16 @@ namespace
 
 FString FHGPlanetSeed::Describe() const
 {
+	if (bDerelict)
+	{
+		return FString::Printf(TEXT("%s | 폐우주선 (선체에 %s 재료) | 무중력 + 안쪽 인공 중력 | %d시간 후 이탈"),
+			*Name, HGPlanet::BiomeName(Biome), HoursLeft);
+	}
+	if (bAsteroidField)
+	{
+		return FString::Printf(TEXT("%s | 소행성 지대 (%s) | 본 소행성 %.0fm | 중력 %.1f | %d시간 후 이탈"),
+			*Name, HGPlanet::BiomeName(Biome), Radius / 100.f, GravityScale, HoursLeft);
+	}
 	return FString::Printf(TEXT("%s | %s %s | 반지름 %.0fm | 중력 %.1f | %d시간 후 이탈"),
 		*Name, SizeClass == EHGPlanetSize::Small ? TEXT("소형") : TEXT("중형"), HGPlanet::BiomeName(Biome),
 		Radius / 100.f, GravityScale, HoursLeft);
@@ -50,7 +60,40 @@ namespace HGPlanet
 		}
 		P.Richness = Rng.FRandRange(0.6f, 1.4f);
 		P.HoursLeft = Rng.RandRange(2, 12);
+		// 열에 셋 정도는 소행성 지대다. 맨 뒤에서 뽑으므로 위 값들(이름, 군계, 크기 등)은 예전과 같다.
+		if (Rng.FRand() < 0.3f)
+		{
+			MakeAsteroidField(P);
+		}
+		// 남은 것 중 다섯에 하나 정도는 폐우주선. 역시 맨 뒤에서 뽑으므로 위 값들은 예전과 같다.
+		else if (Rng.FRand() < 0.2f)
+		{
+			MakeDerelict(P);
+		}
 		return P;
+	}
+
+	void MakeDerelict(FHGPlanetSeed& P)
+	{
+		P.bDerelict = true;
+		P.bAsteroidField = false;
+		P.SizeClass = EHGPlanetSize::Small;
+		// 반지름은 쓰지 않지만 맵의 다른 코드(재료 배치 등)가 기대하는 최소값을 둔다. 인공 중력은 지구의 0.8.
+		P.Radius = 1000.f;
+		P.GravityScale = 0.8f;
+	}
+
+	void MakeAsteroidField(FHGPlanetSeed& P)
+	{
+		// 시드에서 따로 수열을 만들어 MakePlanet의 수열과 섞이지 않게 한다 (콘솔 변수로 강제로 바꿀 때도 같은 값이 나온다).
+		FRandomStream Rng(static_cast<int32>(HashCombine(GetTypeHash(P.Seed), 0xa57e401du)));
+		P.bAsteroidField = true;
+		P.SizeClass = EHGPlanetSize::Small;
+		P.Radius = Rng.FRandRange(1000.f, 1500.f);
+		P.TerrainAmplitude = 0.12f;
+		P.TerrainFrequency = 2.2f;
+		// 소행성은 작아서 중력이 약하다. 너무 약하면 걷다가 떠 버리므로 0.35 ~ 0.5.
+		P.GravityScale = Rng.FRandRange(0.35f, 0.5f);
 	}
 
 	TArray<FHGPlanetSeed> MakeApproachingPlanets(int32 UniverseSeed, int32 Cycle, int32 Count)

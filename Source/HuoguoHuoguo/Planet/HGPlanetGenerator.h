@@ -10,6 +10,24 @@ class UInstancedStaticMeshComponent;
 class UBillboardComponent;
 class UStaticMesh;
 
+// 폐우주선의 상호작용 지점 종류.
+enum class EHGInteractType : uint8
+{
+	EnterShip, // 바깥 에어록 문: 안으로 들어간다 (인공 중력)
+	ExitShip,  // 안쪽 에어록 문: 밖으로 나간다 (무중력)
+	Blueprint, // 설계도 단말: 잠긴 가게 가구 하나를 연다
+};
+
+// 폐우주선의 상호작용 지점 하나 (E 키).
+struct FHGInteractable
+{
+	EHGInteractType Type = EHGInteractType::EnterShip;
+	FVector Location = FVector::ZeroVector;    // 상호작용 지점 (월드)
+	FVector Destination = FVector::ZeroVector; // 들어가기/나가기: 옮겨 갈 자리 (월드)
+	FName Furniture = NAME_None;               // 설계도: 열어 줄 가구 ID
+	bool bUsed = false;                        // 설계도: 이미 썼다
+};
+
 // 행성 위 재료 표식 하나. 번호(배열 순서)는 시드로 정해지므로 같은 행성이면 언제나 같은 표식을 가리킨다.
 struct FHGIngredientMarker
 {
@@ -86,6 +104,28 @@ public:
 
 	// 재료 종류(Kind)의 표시 색. 범위를 벗어나면 흰색.
 	FLinearColor GetIngredientColor(int32 Kind) const;
+
+	// ---- 폐우주선 ----
+
+	// 우주선의 "위" (월드). 안쪽 인공 중력은 이 반대 방향으로 끌고, 밖에서 떠다닐 때도 이 방향을 위로 삼아 시점을 맞춘다.
+	FVector GetShipUp() const { return ShipFrame.GetRotation().GetUpVector(); }
+
+	// From에서 MaxDistance 안의 가장 가까운 상호작용 지점 (쓴 설계도는 뺀다). 없으면 INDEX_NONE.
+	int32 FindNearestInteractable(const FVector& From, float MaxDistance) const;
+	const FHGInteractable& GetInteractable(int32 Index) const { return Interactables[Index]; }
+	int32 GetInteractableCount() const { return Interactables.Num(); }
+
+	// 우주선 윤곽 (월드, 바닥 높이의 네 모서리, 미니맵용). 폐우주선이 아니면 비어 있다.
+	TArray<FVector> GetShipOutline() const;
+
+	// 상호작용 안내 한 줄 ("[E] 우주선 안으로 들어가기" 등).
+	FString DescribeInteractable(int32 Index) const;
+
+	// 설계도 단말을 쓴다: 가구를 열고 결과 문장을 돌려준다. 같은 시드면 다시 내려와도 이미 쓴 것으로 남는다.
+	FString UseBlueprint(int32 Index);
+
+	// 중력을 가진 천체들. 0번은 늘 이 행성(소행성 지대면 착륙하는 본 소행성)이고, 소행성 지대면 둘레 소행성들이 뒤에 붙는다.
+	const TArray<FHGGravityBody>& GetGravityBodies() const { return GravityBodies; }
 
 	// 지형 볼거리(탁상 바위, 아치)의 바닥 가운데 위치 (월드). 만든 순서대로, 처음 둘이 착륙 지점 둘레다.
 	const TArray<FVector>& GetLandmarkLocations() const { return LandmarkLocations; }
@@ -223,6 +263,24 @@ private:
 		float Depth = 200.f;
 	};
 	TArray<FCrater> Craters;
+
+	// 중력 천체 (GetGravityBodies).
+	TArray<FHGGravityBody> GravityBodies;
+
+	// 폐우주선: 우주선 기준 변환(행성 중심 기준, 위 = 우주선 바닥의 반대), 시작 변환(월드, 우주선을 바라보며 떠 있음), 상호작용 지점.
+	FTransform ShipFrame = FTransform::Identity;
+	FTransform DerelictStart = FTransform::Identity;
+	TArray<FHGInteractable> Interactables;
+
+	// 폐우주선을 만든다 (HGDerelict.cpp): 선체와 방, 문, 재료(선체 밖, 안쪽 상자), 설계도 단말, 조명, 떠 있는 잔해, 귀환 포드.
+	void BuildDerelict();
+
+	// 착륙 지점을 평평하게 다지는 실제 반경. 소행성 지대의 본 소행성(반지름 10 ~ 15m)은 작아서 반지름의 30%로 줄인다.
+	float FlatRadius() const { return Planet.bAsteroidField ? FMath::Min(LandingFlatRadius, Planet.Radius * 0.3f) : LandingFlatRadius; }
+
+	// 소행성 지대: 본 소행성 둘레에 뛰어 건널 소행성 16 ~ 22개를 만들고(매끈한 메시, 충돌), 소행성마다 재료 1 ~ 2개를 놓는다.
+	// 행성이면 중력 천체 목록에 행성 하나만 넣는다.
+	void BuildAsteroidField();
 
 	// 지형 볼거리 위치 (월드, GetLandmarkLocations).
 	TArray<FVector> LandmarkLocations;
