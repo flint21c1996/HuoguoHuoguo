@@ -21,6 +21,10 @@
 `L_PlanetSurface`에 하나 배치. 행성 중심 = 액터 위치.
 - `ChoosePlanet()`: GameInstance의 `GetDivePlanet()`이 있으면 그것, 없으면(맵을 바로 열면) `PreviewPlanet`(`bPreviewFromSeedOnly`면 Seed만 쓰고 재생성). 시드로 노이즈 오프셋을 정한다.
 - `SurfaceRadiusAt(Dir)`: 지형의 유일한 높이 함수. 5옥타브 fBm(Perlin3D), 생물 군계 보정(얼음 완만, 버섯숲 둔덕 강조), 북극 `LandingFlatRadius`(10m) 평탄화 후 2배 거리까지 부드럽게 복귀.
+  - 들쭉날쭉함 `TerrainRuggedness`(기본 1, 0이면 큰 언덕만): 큰 언덕 위에 두 겹을 더 얹는다.
+    - 능선: 큰 언덕보다 2.7배 촘촘한 3겹 ridged noise(`(1 - |노이즈|)²`, 평균을 빼서 행성이 부풀지 않게). 세기 얼음 0.4, 버섯숲 0.5, 바위 0.7.
+    - 잔 굴곡: 약 9m 폭 2겹 fBm, 높이 얼음 45cm, 버섯숲 70cm, 바위 80cm (cm 고정이라 행성 크기와 상관없다). 중형 행성처럼 격자가 크면 폭을 격자 4칸 이상으로 늘리고 높이도 같은 비율로 키운다.
+  - 착륙 지점 평탄화는 세 겹 모두에 적용된다. 확인 (작은 행성 셋, 재료 옆으로 이동해 캡처): 바위 행성은 능선과 둔덕이 뚜렷, 버섯숲은 굴곡진 언덕, 얼음은 잔 둔덕. 생성 155 ~ 474ms.
 - `BuildTerrain()`: 큐브스피어. 면당 격자 = 반지름 * pi/2 / `TargetEdgeLength`(150), 상한 `MaxGridPerFace`(128).
   - 정육면체 점 → 구 사상(Nowell 식)으로 격자 크기를 고르게.
   - 법선은 접선 두 방향 유한 차분으로 계산 (면 이음매 명암 없음).
