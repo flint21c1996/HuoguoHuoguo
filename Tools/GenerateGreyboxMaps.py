@@ -124,6 +124,97 @@ def ensure_glow_material():
     unreal.log("[MapGen] 발광 머티리얼 생성: " + GLOW_MATERIAL)
 
 
+SKY_DOME_MATERIAL = "/Game/HG/Materials/M_HG_PlanetSky"
+VERTEX_COLOR_MATERIAL = "/Game/HG/Materials/M_HG_VertexColor"
+
+# 행성 하늘 돔: "위"를 행성 중심에서 카메라 쪽으로 계산해서, 둥근 행성 어디에 서 있어도 지평선이 맞게 보인다.
+# (엔진의 하늘 대기는 땅이 평평하다고 가정해서 북극에서만 맞았다.)
+SKY_HLSL = """
+float3 up = normalize(CamPos - Center);
+float3 v = normalize(-CamVec);
+float h = dot(v, up);
+float t = saturate(h * 1.2 + 0.05);
+float3 col = lerp(Horizon, Zenith, pow(t, 0.6));
+col = lerp(col, Horizon * 0.55, saturate(-h * 3.0));
+float s = saturate(dot(v, normalize(SunDir)));
+col += SunColor * (pow(s, 600.0) * 10.0 + pow(s, 8.0) * 0.3);
+return col * Brightness;
+"""
+
+
+def ensure_planet_materials():
+    """행성 그림체용 머티리얼 둘. 없을 때만 만든다 (있으면 에디터에서 고친 것을 존중).
+
+    M_HG_PlanetSky: 빛을 받지 않는(Unlit) 양면 하늘 돔. 파라미터 Center(행성 중심), Zenith(천정 색), Horizon(지평선 색),
+      SunDir(해 쪽 방향), SunColor, Brightness. 행성을 감싼 큰 구에 칠한다 (AHGPlanetGenerator).
+    M_HG_VertexColor: 꼭짓점 색을 바탕색으로 쓴다. 행성 지형이 면마다 다른 색(높이, 노이즈)을 꼭짓점 색으로 넣는다.
+    """
+    mel = unreal.MaterialEditingLibrary
+
+    if asset_lib.does_asset_exist(SKY_DOME_MATERIAL):
+        # 하늘(Is Sky) 표시: 실시간 캡처 스카이 라이트가 이 돔을 하늘로 보고 그늘에 하늘빛을 비춘다.
+        sky = unreal.load_asset(SKY_DOME_MATERIAL)
+        if not sky.get_editor_property("is_sky"):
+            sky.set_editor_property("is_sky", True)
+            mel.recompile_material(sky)
+            asset_lib.save_loaded_asset(sky)
+            unreal.log("[MapGen] 행성 하늘 머티리얼: 하늘(Is Sky) 표시를 켬")
+    else:
+        folder, name = SKY_DOME_MATERIAL.rsplit("/", 1)
+        mat = asset_tools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
+        mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+        mat.set_editor_property("two_sided", True)
+        mat.set_editor_property("is_sky", True)
+        custom = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, -300, 0)
+        custom.set_editor_property("code", SKY_HLSL)
+        custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+        names = ["CamPos", "CamVec", "Center", "Zenith", "Horizon", "SunDir", "SunColor", "Brightness"]
+        inputs = []
+        for n in names:
+            ci = unreal.CustomInput()
+            ci.set_editor_property("input_name", n)
+            inputs.append(ci)
+        custom.set_editor_property("inputs", inputs)
+        cam_pos = mel.create_material_expression(mat, unreal.MaterialExpressionCameraPositionWS, -800, -200)
+        cam_vec = mel.create_material_expression(mat, unreal.MaterialExpressionCameraVectorWS, -800, -100)
+        mel.connect_material_expressions(cam_pos, "", custom, "CamPos")
+        mel.connect_material_expressions(cam_vec, "", custom, "CamVec")
+        defaults = {
+            "Center": unreal.LinearColor(0, 0, 0, 0),
+            "Zenith": unreal.LinearColor(0.2, 0.45, 1.0, 1),
+            "Horizon": unreal.LinearColor(0.8, 0.9, 1.0, 1),
+            "SunDir": unreal.LinearColor(0, 0, 1, 0),
+            "SunColor": unreal.LinearColor(1.0, 0.95, 0.85, 1),
+        }
+        y = 0
+        for n, value in defaults.items():
+            p = mel.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -800, y)
+            p.set_editor_property("parameter_name", n)
+            p.set_editor_property("default_value", value)
+            mel.connect_material_expressions(p, "RGB", custom, n)
+            y += 120
+        bright = mel.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -800, y)
+        bright.set_editor_property("parameter_name", "Brightness")
+        bright.set_editor_property("default_value", 1.0)
+        mel.connect_material_expressions(bright, "", custom, "Brightness")
+        mel.connect_material_property(custom, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+        mel.recompile_material(mat)
+        asset_lib.save_loaded_asset(mat)
+        unreal.log("[MapGen] 행성 하늘 머티리얼 생성: " + SKY_DOME_MATERIAL)
+
+    if not asset_lib.does_asset_exist(VERTEX_COLOR_MATERIAL):
+        folder, name = VERTEX_COLOR_MATERIAL.rsplit("/", 1)
+        mat = asset_tools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
+        vc = mel.create_material_expression(mat, unreal.MaterialExpressionVertexColor, -400, 0)
+        mel.connect_material_property(vc, "", unreal.MaterialProperty.MP_BASE_COLOR)
+        rough = mel.create_material_expression(mat, unreal.MaterialExpressionConstant, -400, 200)
+        rough.set_editor_property("r", 0.9)
+        mel.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+        mel.recompile_material(mat)
+        asset_lib.save_loaded_asset(mat)
+        unreal.log("[MapGen] 꼭짓점 색 머티리얼 생성: " + VERTEX_COLOR_MATERIAL)
+
+
 # ---------------------------------------------------------------------------
 # 맵 생성과 배치 도우미
 # ---------------------------------------------------------------------------
@@ -507,6 +598,7 @@ def ensure_data_tables():
 ensure_data_tables()
 MATS = ensure_materials()
 ensure_glow_material()
+ensure_planet_materials()
 
 # 맵끼리 서로 참조(이동 발판의 목적지)하므로 빈 맵을 먼저 모두 만들고 나서 채운다.
 targets = []
