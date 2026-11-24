@@ -40,6 +40,18 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+	// 외형 축 둘. 보이는 부품(자리 표시 도형, 복셀)은 모두 VisualRoot 아래에 붙는다.
+	//   VisualPivot: 캡슐 가운데(몸 가운데). 공중제비처럼 몸 전체를 돌릴 때 이 축의 회전을 바꾼다.
+	//   VisualRoot: VisualPivot 아래 발 위치(캡슐 반높이만큼 아래). 눌림/늘어남은 이 축의 크기를 바꿔서 발이 땅에 붙은 채로 변한다.
+	UPROPERTY(VisibleAnywhere, Category = "Placeholder")
+	TObjectPtr<USceneComponent> VisualPivot;
+
+	UPROPERTY(VisibleAnywhere, Category = "Placeholder")
+	TObjectPtr<USceneComponent> VisualRoot;
+
+	// 캡슐 가운데에서 발까지 거리 (VisualRoot의 높이). 부품 위치는 캡슐 가운데 기준 값에 이만큼 더해 VisualRoot 기준으로 놓는다.
+	static constexpr float FeetOffset = 92.f;
+
 	UPROPERTY(VisibleAnywhere, Category = "Placeholder")
 	TObjectPtr<UStaticMeshComponent> PlaceholderBody;
 

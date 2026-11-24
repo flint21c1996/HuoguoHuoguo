@@ -32,12 +32,19 @@ AHGBossCharacter::AHGBossCharacter()
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 
+	// 외형 축: 몸 가운데(VisualPivot) 아래 발 위치(VisualRoot). 부품은 VisualRoot에 붙이고 위치를 발 기준으로 옮긴다.
+	VisualPivot = CreateDefaultSubobject<USceneComponent>(TEXT("VisualPivot"));
+	VisualPivot->SetupAttachment(GetCapsuleComponent());
+	VisualRoot = CreateDefaultSubobject<USceneComponent>(TEXT("VisualRoot"));
+	VisualRoot->SetupAttachment(VisualPivot);
+	VisualRoot->SetRelativeLocation(FVector(0.f, 0.f, -FeetOffset));
+
 	auto MakePart = [this](const TCHAR* Name, const FVector& Location, const FVector& Scale)
 	{
 		UStaticMeshComponent* Part = CreateDefaultSubobject<UStaticMeshComponent>(Name);
-		Part->SetupAttachment(GetCapsuleComponent());
+		Part->SetupAttachment(VisualRoot);
 		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		Part->SetRelativeLocation(Location);
+		Part->SetRelativeLocation(Location + FVector(0.f, 0.f, FeetOffset));
 		Part->SetRelativeScale3D(Scale);
 		return Part;
 	};
@@ -78,11 +85,12 @@ void AHGBossCharacter::BuildVoxelBody()
 {
 	// 자리 표시 도형과 같은 모양을 복셀로. 캡슐 가운데가 원점이라 발은 Z -92 쪽이다. 얼굴 앞(+X)에 눈 두 개를 더한다.
 	TArray<FHGVoxelShape> Shapes;
+	// 위치는 캡슐 가운데 기준 값으로 적고, 부품을 붙이는 VisualRoot(발 위치) 기준으로 FeetOffset만큼 올려 넣는다.
 	auto Add = [&Shapes](const TCHAR* Shape, const FVector& Location, const FVector& Scale, const FLinearColor& Color, int32 Group = 0)
 	{
 		FHGVoxelShape& S = Shapes.AddDefaulted_GetRef();
 		S.Shape = Shape;
-		S.Location = Location;
+		S.Location = Location + FVector(0.f, 0.f, FeetOffset);
 		S.Scale = Scale;
 		S.Color = Color;
 		S.Group = Group;
@@ -93,16 +101,16 @@ void AHGBossCharacter::BuildVoxelBody()
 	{
 		Add(TEXT("Cube"), FVector(25.f, Side, 74.f), FVector(0.05f, 0.06f, 0.08f), FLinearColor(0.08f, 0.06f, 0.06f));    // 눈
 	}
-	HGVoxel::Build(this, GetCapsuleComponent(), Shapes);
+	HGVoxel::Build(this, VisualRoot, Shapes);
 
 	// 헬멧은 따로 복셀화한다. 같은 묶음에 넣으면 머리를 감싼 헬멧이 머리 칸을 덮어써서, 헬멧을 숨기면 머리까지 사라진다.
 	TArray<FHGVoxelShape> Helmet;
 	FHGVoxelShape& Glass = Helmet.AddDefaulted_GetRef();
 	Glass.Shape = TEXT("Sphere");
-	Glass.Location = FVector(0.f, 0.f, 72.f);
+	Glass.Location = FVector(0.f, 0.f, 72.f + FeetOffset);
 	Glass.Scale = FVector(0.78f);
 	Glass.Color = FLinearColor(0.55f, 0.85f, 0.95f);
-	for (const FHGVoxelGroup& Group : HGVoxel::Build(this, GetCapsuleComponent(), Helmet))
+	for (const FHGVoxelGroup& Group : HGVoxel::Build(this, VisualRoot, Helmet))
 	{
 		HelmetVoxels.Add(Group.Component);
 	}
