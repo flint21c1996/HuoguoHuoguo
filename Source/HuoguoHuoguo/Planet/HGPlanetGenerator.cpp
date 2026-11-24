@@ -864,10 +864,11 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 		SkyComp->RecaptureSky();
 	}
 
-	// 6. 우주가 보이는 하늘(별, 고리 행성, 위성, 정거장).
+	// 6. 우주가 보이는 하늘(별, 고리 행성, 위성, 정거장)과 지형 볼거리(탁상 바위, 아치).
 	BuildSkyBodies();
-	UE_LOG(LogHuoguo, Log, TEXT("[Mood] 하늘: 별 %d개, 고리 행성/위성/정거장 %s. 크레이터 %d개"),
-		StarCount, bSkyBodies ? TEXT("있음") : TEXT("없음"), Craters.Num());
+	const int32 Landmarks = BuildLandmarks();
+	UE_LOG(LogHuoguo, Log, TEXT("[Mood] 하늘: 별 %d개, 고리 행성/위성/정거장 %s. 지형 볼거리 %d개, 크레이터 %d개"),
+		StarCount, bSkyBodies ? TEXT("있음") : TEXT("없음"), Landmarks, Craters.Num());
 
 	UE_LOG(LogHuoguo, Log, TEXT("[Mood] 행성 그림체: 군계 %d, 바위 칸 %d, 나무 %d그루(칸 %d), 풀과 꽃 %d포기, 바위섬 %d개(삼각형 %d), 구름 %d개(삼각형 %d), 복셀 인스턴스 %d, 색 묶음 %d"),
 		static_cast<int32>(Planet.Biome), RockVoxels, NearTrees + FarTrees, TreeVoxels, InnerCount + RingCount + FarCount,
@@ -1017,6 +1018,230 @@ void AHGPlanetGenerator::BuildSkyBodies()
 		HGVoxel::PaintGlow(LightAIsm, FLinearColor(1.f, 0.25f, 0.2f), 8.f);   // 마라 빨강 등불
 		HGVoxel::PaintGlow(LightBIsm, FLinearColor(0.2f, 0.95f, 0.9f), 8.f);  // 산소 청록
 	}
+}
+
+int32 AHGPlanetGenerator::BuildLandmarks()
+{
+	if (LandmarkCount <= 0)
+	{
+		return 0;
+	}
+	const FMoodPalette Pal = MoodPalette(Planet.Biome);
+	FRandomStream L(static_cast<int32>(HashCombine(GetTypeHash(Planet.Seed), 0x1a2bu)));
+	const double R = Planet.Radius;
+
+	// 모든 볼거리를 메시 하나에 모은다. 볼거리 하나는 지역 좌표(Frame 기준)로 꼭짓점을 만들고 Flush로 옮겨 담는다.
+	// 꼭짓점은 이웃 삼각형과 나눠 쓰고, 법선은 면 법선의 합(넓은 면일수록 크게)으로 부드럽게 만든다 (매끈한 땅과 같은 방식).
+	TArray<FVector> Verts, Norms;
+	TArray<FVector2D> UVs;
+	TArray<FColor> Colors;
+	TArray<int32> Tris;
+	TArray<FVector> V, NSum;
+	TArray<FLinearColor> Col;
+	TArray<int32> LocalTris;
+	auto AddVert = [&](const FVector& P, const FLinearColor& C)
+	{
+		V.Add(P);
+		NSum.Add(FVector::ZeroVector);
+		Col.Add(C);
+		return V.Num() - 1;
+	};
+	// Inside = 이 삼각형 안쪽의 한 점. 면 법선이 그 반대(바깥)를 향하도록 감는 순서를 맞춘다.
+	auto AddTri = [&](int32 A, int32 B, int32 C, const FVector& Inside)
+	{
+		FVector N = FVector::CrossProduct(V[B] - V[C], V[A] - V[C]);
+		if ((N | ((V[A] + V[B] + V[C]) / 3.0 - Inside)) < 0.0)
+		{
+			Swap(A, B);
+			N = -N;
+		}
+		NSum[A] += N;
+		NSum[B] += N;
+		NSum[C] += N;
+		LocalTris.Append({ A, B, C });
+	};
+	auto Flush = [&](const FTransform& Frame)
+	{
+		const int32 Base = Verts.Num();
+		for (int32 i = 0; i < V.Num(); ++i)
+		{
+			Verts.Add(Frame.TransformPosition(V[i]));
+			Norms.Add(Frame.TransformVectorNoScale(NSum[i].GetSafeNormal()));
+			UVs.Add(FVector2D::ZeroVector);
+			FLinearColor C = Col[i] * (1.f + 0.06f * L.FRandRange(-1.f, 1.f));
+			C.A = 1.f;
+			Colors.Add(C.ToFColor(false));
+		}
+		for (const int32 T : LocalTris)
+		{
+			Tris.Add(Base + T);
+		}
+		V.Reset();
+		NSum.Reset();
+		Col.Reset();
+		LocalTris.Reset();
+	};
+	// 지층 색: 높이 1.5m마다 바위색과 (바위 + 땅 얼룩) 색이 번갈아 나온다. 외계 사암 절벽 같은 줄무늬.
+	auto StrataColor = [&](float Z)
+	{
+		return (FMath::FloorToInt(Z / 150.f) & 1) ? FMath::Lerp(Pal.Rock, Pal.GroundB, 0.5f) : Pal.Rock * 1.08f;
+	};
+
+	// 탁상 바위(메사): 고리 일곱 겹이 조금씩 좁아지며 오르다 꼭대기 바로 밑에서 살짝 튀어나오고(처마), 평평한 윗면은 땅색.
+	// 맨 아래 고리는 땅속(높이의 -15%)이라 비탈에 놓여도 바닥이 뜨지 않는다.
+	auto BuildMesa = [&](float Base, float Height)
+	{
+		const int32 Sides = L.RandRange(8, 11);
+		struct FRing { float Z; float Rad; float Jit; };
+		const FRing Rings[] = {
+			{ -0.15f * Height, 1.15f, 0.10f }, { 0.f, 1.10f, 0.10f }, { 0.30f * Height, 0.95f, 0.12f }, { 0.55f * Height, 0.88f, 0.12f },
+			{ 0.80f * Height, 0.84f, 0.10f }, { 0.96f * Height, 0.92f, 0.08f }, { Height, 0.84f, 0.05f },
+		};
+		const int32 RingNum = UE_ARRAY_COUNT(Rings);
+		const float Twist = L.FRandRange(0.f, 0.3f);
+		for (int32 r = 0; r < RingNum; ++r)
+		{
+			for (int32 k = 0; k < Sides; ++k)
+			{
+				const float A = (k + L.FRandRange(-0.15f, 0.15f)) / Sides * UE_TWO_PI + Twist * r;
+				const float Rad = Base * Rings[r].Rad * (1.f + L.FRandRange(-Rings[r].Jit, Rings[r].Jit));
+				const float Z = Rings[r].Z + (r == RingNum - 1 ? 0.f : L.FRandRange(-30.f, 30.f));
+				AddVert(FVector(FMath::Cos(A) * Rad, FMath::Sin(A) * Rad, Z), r == RingNum - 1 ? Pal.Ground : StrataColor(Z));
+			}
+		}
+		const int32 Cap = AddVert(FVector(0.f, 0.f, Height * 1.03f), Pal.Ground);
+		auto At = [&](int32 Ring, int32 K) { return Ring * Sides + (K % Sides); };
+		for (int32 r = 0; r + 1 < RingNum; ++r)
+		{
+			for (int32 k = 0; k < Sides; ++k)
+			{
+				const FVector Inside(0.f, 0.f, (Rings[r].Z + Rings[r + 1].Z) * 0.5f);
+				AddTri(At(r, k), At(r + 1, k), At(r + 1, k + 1), Inside);
+				AddTri(At(r, k), At(r + 1, k + 1), At(r, k + 1), Inside);
+			}
+		}
+		for (int32 k = 0; k < Sides; ++k)
+		{
+			AddTri(Cap, At(RingNum - 1, k), At(RingNum - 1, k + 1), FVector(0.f, 0.f, Height * 0.9f));
+		}
+	};
+
+	// 아치: 반원 길을 따라 굵은 관을 쓸어 만든다. 발(양 끝)은 1m 땅속이고, 발 쪽이 굵고 꼭대기가 가늘다.
+	// 관의 단면 꼭짓점을 조금씩 흔들어 바위처럼 울퉁불퉁하게 한다.
+	auto BuildArch = [&](float Span, float Height, float Thick)
+	{
+		const int32 Along = 16;
+		const int32 Around = 8;
+		TArray<FVector> Centers;
+		for (int32 s = 0; s <= Along; ++s)
+		{
+			const float Angle = UE_PI * s / Along;
+			const FVector C(-0.5f * Span * FMath::Cos(Angle), 0.f, Height * FMath::Sin(Angle) - 100.f);
+			const FVector Tangent = FVector(0.5f * Span * FMath::Sin(Angle), 0.f, Height * FMath::Cos(Angle)).GetSafeNormal();
+			const FVector U = FVector::YAxisVector;
+			const FVector W = FVector::CrossProduct(Tangent, U).GetSafeNormal();
+			const float Rad = Thick * (1.35f - 0.45f * FMath::Sin(Angle));
+			Centers.Add(C);
+			for (int32 a = 0; a < Around; ++a)
+			{
+				const float B = UE_TWO_PI * a / Around;
+				const FVector P = C + (U * FMath::Cos(B) + W * FMath::Sin(B)) * Rad * (1.f + L.FRandRange(-0.08f, 0.08f));
+				AddVert(P, StrataColor(P.Z));
+			}
+		}
+		for (int32 s = 0; s < Along; ++s)
+		{
+			const FVector Inside = (Centers[s] + Centers[s + 1]) * 0.5f;
+			for (int32 a = 0; a < Around; ++a)
+			{
+				const int32 A0 = s * Around + a;
+				const int32 A1 = s * Around + (a + 1) % Around;
+				const int32 B0 = (s + 1) * Around + a;
+				const int32 B1 = (s + 1) * Around + (a + 1) % Around;
+				AddTri(A0, B0, B1, Inside);
+				AddTri(A0, B1, A1, Inside);
+			}
+		}
+	};
+
+	// 자리 고르기: 처음 둘은 착륙 지점에서 25 ~ 60m(걸어가 볼 만한 거리, 착륙하자마자 보인다), 나머지는 행성 아무 데나.
+	// 착륙 지점, 귀환 발판, 재료 표식 위에는 세우지 않는다 (재료가 바위 속에 묻혀 못 캐는 일을 막는다).
+	int32 Built = 0;
+	for (int32 i = 0; i < LandmarkCount; ++i)
+	{
+		for (int32 Try = 0; Try < 12; ++Try)
+		{
+			const bool bArch = L.FRand() < 0.4f;
+			const float Base = L.FRandRange(300.f, 650.f);
+			const float Height = bArch ? L.FRandRange(600.f, 1200.f) : L.FRandRange(600.f, 1600.f);
+			const float Span = L.FRandRange(800.f, 1600.f);
+			const float Thick = L.FRandRange(120.f, 200.f);
+			const float Footprint = bArch ? Span * 0.5f + Thick * 1.4f + 150.f : Base * 1.2f + 150.f;
+
+			FVector Dir;
+			if (i < 2)
+			{
+				const double Theta = FMath::Min(1.2, FMath::Lerp(2500.0, 6000.0, static_cast<double>(L.FRand())) / R);
+				const double Phi = L.FRandRange(0.f, UE_TWO_PI);
+				Dir = FVector(FMath::Sin(Theta) * FMath::Cos(Phi), FMath::Sin(Theta) * FMath::Sin(Phi), FMath::Cos(Theta));
+			}
+			else
+			{
+				Dir = L.VRand();
+			}
+			if (FMath::Acos(FMath::Clamp(Dir.Z, -1.0, 1.0)) * R < 1500.0 + Footprint)
+			{
+				continue;
+			}
+			const FTransform Frame = SurfaceFrame(Dir, L.FRandRange(0.f, UE_TWO_PI), bArch ? -120.f : -60.f);
+			const FVector WorldPos = GetActorLocation() + Frame.GetLocation();
+			if (bHasReturnPad && FVector::Dist(WorldPos, ReturnPadLocation) < Footprint + 600.f)
+			{
+				continue;
+			}
+			bool bBlocked = false;
+			for (const FHGIngredientMarker& Marker : Markers)
+			{
+				if (FVector::Dist(WorldPos, Marker.Location) < Footprint)
+				{
+					bBlocked = true;
+					break;
+				}
+			}
+			if (bBlocked)
+			{
+				continue;
+			}
+
+			if (bArch)
+			{
+				BuildArch(Span, Height, Thick);
+			}
+			else
+			{
+				BuildMesa(Base, Height);
+			}
+			Flush(Frame);
+			LandmarkLocations.Add(WorldPos);
+			UE_LOG(LogHuoguo, Log, TEXT("[Landmark] %d: %s, 착륙 지점에서 %.0fm"), Built, bArch ? TEXT("아치") : TEXT("탁상 바위"),
+				FMath::Acos(FMath::Clamp(Dir.Z, -1.0, 1.0)) * R / 100.0);
+			++Built;
+			break;
+		}
+	}
+
+	if (Verts.Num() > 0)
+	{
+		// 지형과 같은 충돌 설정이라 올라서고 부딪힐 수 있다 (사장님이 탁상 위로 점프해 올라가거나 아치 밑을 지나간다).
+		UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this, TEXT("Landmarks"), RF_Transient);
+		Mesh->SetupAttachment(Terrain);
+		Mesh->SetCollisionProfileName(Terrain->GetCollisionProfileName());
+		Mesh->SetCanEverAffectNavigation(false);
+		Mesh->RegisterComponent();
+		Mesh->CreateMeshSection(0, Verts, Tris, Norms, UVs, Colors, TArray<FProcMeshTangent>(), true);
+		Mesh->SetMaterial(0, Terrain->GetMaterial(0));
+	}
+	return Built;
 }
 
 void AHGPlanetGenerator::ChoosePlanet()

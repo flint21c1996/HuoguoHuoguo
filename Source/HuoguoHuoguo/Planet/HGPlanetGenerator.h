@@ -87,6 +87,9 @@ public:
 	// 재료 종류(Kind)의 표시 색. 범위를 벗어나면 흰색.
 	FLinearColor GetIngredientColor(int32 Kind) const;
 
+	// 지형 볼거리(탁상 바위, 아치)의 바닥 가운데 위치 (월드). 만든 순서대로, 처음 둘이 착륙 지점 둘레다.
+	const TArray<FVector>& GetLandmarkLocations() const { return LandmarkLocations; }
+
 	// 귀환 발판 위치. 발판이 없으면 false.
 	bool GetReturnPadLocation(FVector& OutLocation) const;
 
@@ -172,6 +175,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Planet|Sky")
 	bool bSkyBodies = true;
 
+	// 지형 볼거리: 탁상 바위/아치를 몇 개 세울지 (착륙 지점 둘레 2개 + 나머지). 0이면 세우지 않는다.
+	UPROPERTY(EditAnywhere, Category = "Planet|Landmarks", meta = (ClampMin = "0", ClampMax = "40"))
+	int32 LandmarkCount = 8;
+
 	// 그림체: 외계 식물의 빛나는 끝(구슬, 관 끝, 덩굴 끝)이 스스로 빛나는 세기 (발광 머티리얼 Glow).
 	UPROPERTY(EditAnywhere, Category = "Planet|Mood")
 	float FloraGlow = 1.5f;
@@ -217,8 +224,14 @@ private:
 	};
 	TArray<FCrater> Craters;
 
+	// 지형 볼거리 위치 (월드, GetLandmarkLocations).
+	TArray<FVector> LandmarkLocations;
+
 	// 하늘의 고리 행성, 위성, 정거장, 별 (ApplyMoodPreview에서 부른다).
 	void BuildSkyBodies();
+
+	// 탁상 바위와 아치 (매끈한 메시, 충돌 있음). 재료 표식과 귀환 발판 자리는 피한다.
+	int32 BuildLandmarks();
 
 	/**
 	 * 행성 그림체 (콘솔 변수 hg.PlanetMood, 기본 1). 모양은 복셀, 색과 하늘은 노 맨즈 스카이에서 배운 방향이다.
