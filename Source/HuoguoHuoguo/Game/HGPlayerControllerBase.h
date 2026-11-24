@@ -63,6 +63,9 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Debug")
 	float DevSequenceInterval = 1.5f;
 
+	// 지금 쓰는 HGSeq 명령 간격 (콘솔 변수 hg.SeqInterval이 0보다 크면 그 값).
+	float GetSequenceInterval() const;
+
 	// 이동 발판 암전 시간(초). 어두워지는 시간과 밝아지는 시간에 각각 쓴다.
 	UPROPERTY(EditAnywhere, Category = "Travel")
 	float TravelFadeTime = 0.35f;

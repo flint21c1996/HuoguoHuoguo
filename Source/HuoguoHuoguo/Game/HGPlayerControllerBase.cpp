@@ -18,6 +18,22 @@
 #include "World/HGExplorerStart.h"
 #include "World/HGTravelPad.h"
 
+namespace
+{
+	// 시험용: HGSeq 명령 간격(초). 0이면 컨트롤러 기본값(DevSequenceInterval). 맵을 옮긴 뒤 이어지는 명령에도 적용된다.
+	// 점프처럼 짧은 간격으로 키를 이어 눌러야 하는 시험에 쓴다. 예) HGSeq hg.SeqInterval 0.3|HGDive 3|...
+	TAutoConsoleVariable<float> CVarSeqInterval(
+		TEXT("hg.SeqInterval"), 0.f,
+		TEXT("시험용: HGSeq 명령 간격(초). 0이면 기본 1.5초. 맵을 옮긴 뒤 이어지는 명령에도 적용된다."),
+		ECVF_Default);
+}
+
+float AHGPlayerControllerBase::GetSequenceInterval() const
+{
+	const float Override = CVarSeqInterval.GetValueOnGameThread();
+	return Override > 0.f ? Override : DevSequenceInterval;
+}
+
 void AHGPlayerControllerBase::BeginPlay()
 {
 	Super::BeginPlay();
@@ -27,7 +43,7 @@ void AHGPlayerControllerBase::BeginPlay()
 	UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
 	if (IsLocalController() && GI && !GI->GetDevSequence().IsEmpty())
 	{
-		GetWorldTimerManager().SetTimer(DevSequenceTimer, this, &AHGPlayerControllerBase::RunNextDevCommand, DevSequenceInterval, true);
+		GetWorldTimerManager().SetTimer(DevSequenceTimer, this, &AHGPlayerControllerBase::RunNextDevCommand, GetSequenceInterval(), true);
 	}
 }
 
@@ -51,8 +67,8 @@ void AHGPlayerControllerBase::HGSeq(const FString& Commands)
 		Part.TrimStartAndEndInline();
 	}
 	GI->GetDevSequence() = MoveTemp(Parts);
-	UE_LOG(LogHuoguo, Log, TEXT("[Seq] 명령 %d개를 %.1f초 간격으로 실행"), GI->GetDevSequence().Num(), DevSequenceInterval);
-	GetWorldTimerManager().SetTimer(DevSequenceTimer, this, &AHGPlayerControllerBase::RunNextDevCommand, DevSequenceInterval, true);
+	UE_LOG(LogHuoguo, Log, TEXT("[Seq] 명령 %d개를 %.1f초 간격으로 실행"), GI->GetDevSequence().Num(), GetSequenceInterval());
+	GetWorldTimerManager().SetTimer(DevSequenceTimer, this, &AHGPlayerControllerBase::RunNextDevCommand, GetSequenceInterval(), true);
 }
 
 void AHGPlayerControllerBase::RunNextDevCommand()
