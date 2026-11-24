@@ -77,7 +77,7 @@ bool FHGShopGrid::IsSideNeighbor(const FIntRect& Rect, const FIntPoint& Tile)
 
 FIntRect HGShopGrid::GetFurnitureRect(const FHGShopGrid& Grid, const AHGFurniture* Furniture)
 {
-	const FIntPoint Size = FHGShopGrid::RotateSize(Furniture->Footprint, Furniture->GetActorRotation().Yaw);
+	const FIntPoint Size = FHGShopGrid::RotateSize(Furniture->GetFootprint(), Furniture->GetActorRotation().Yaw);
 	return Grid.RectFromCenter(Furniture->GetActorLocation(), Size);
 }
 
@@ -104,6 +104,8 @@ void HGShopGrid::GatherItems(UWorld* World, const FHGShopGrid& Grid, TArray<FHGG
 		FHGGridItem& Item = OutItems.AddDefaulted_GetRef();
 		Item.Actor = *It;
 		Item.Id = It->FurnitureId;
+		Item.Category = It->GetCategory();
+		Item.Tags = It->GetTags();
 		Item.Rect = GetFurnitureRect(Grid, *It);
 	}
 }

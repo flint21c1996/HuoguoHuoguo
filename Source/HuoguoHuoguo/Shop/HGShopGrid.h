@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "Shop/HGFurnitureData.h"
 #include "HGShopGrid.generated.h"
 
 class AHGFurniture;
@@ -91,7 +92,12 @@ struct FHGGridItem
 {
 	TWeakObjectPtr<AHGFurniture> Actor;
 	FName Id;
+	EHGFurnitureCategory Category = EHGFurnitureCategory::Decor;
+	TArray<FName> Tags;
 	FIntRect Rect;
+
+	bool IsTable() const { return Category == EHGFurnitureCategory::Table; }
+	bool IsChair() const { return Category == EHGFurnitureCategory::Chair; }
 };
 
 namespace HGShopGrid

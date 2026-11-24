@@ -160,6 +160,7 @@ void AHGShopPlayerController::SetupInputComponent()
 	Input->BindAction(RotateFurnitureAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnRotateFurniture);
 	Input->BindAction(RemoveFurnitureAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnRemoveFurniture);
 	Input->BindAction(SelectFurnitureAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnSelectFurniture);
+	Input->BindAction(CycleFurnitureAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnCycleFurniture);
 	Input->BindAction(PassTimeAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnPassTime);
 }
 
@@ -181,6 +182,7 @@ void AHGShopPlayerController::BuildInputObjects()
 	RotateFurnitureAction = MakeAction(TEXT("IA_Shop_RotateFurniture"), EInputActionValueType::Boolean);
 	RemoveFurnitureAction = MakeAction(TEXT("IA_Shop_RemoveFurniture"), EInputActionValueType::Boolean);
 	SelectFurnitureAction = MakeAction(TEXT("IA_Shop_SelectFurniture"), EInputActionValueType::Axis1D);
+	CycleFurnitureAction = MakeAction(TEXT("IA_Shop_CycleFurniture"), EInputActionValueType::Axis1D);
 	PassTimeAction = MakeAction(TEXT("IA_Shop_PassTime"), EInputActionValueType::Boolean);
 
 	// 숫자 키: 액션 하나에 키 여러 개를 매핑하고, 배율 수정자로 키마다 값을 1, 2, 3...으로 다르게 낸다.
@@ -196,17 +198,19 @@ void AHGShopPlayerController::BuildInputObjects()
 		MapScaledKey(ShopContext, SelectPlanetAction, NumberKeys[i], static_cast<float>(i + 1));
 	}
 
-	// 배치 모드: 이동, 카메라는 그대로 두고 숫자 키는 가구 고르기로, 좌클릭/R/X는 배치 조작으로 쓴다.
+	// 배치 모드: 이동, 카메라는 그대로 두고, 숫자 키 1~3은 분류(식탁/의자/장식), Z/C는 분류 안에서 이전/다음 가구,
+	// 좌클릭/R/X는 배치 조작으로 쓴다. 가구가 수십 종이라 숫자 키 하나에 가구 하나를 붙일 수 없다 (정식 UI는 가구 목록 화면).
 	BuildContext = NewObject<UInputMappingContext>(this, TEXT("IMC_ShopBuild"));
 	MapCommonKeys(BuildContext);
 	BuildContext->MapKey(PlaceAction, EKeys::LeftMouseButton);
 	BuildContext->MapKey(RotateFurnitureAction, EKeys::R);
 	BuildContext->MapKey(RemoveFurnitureAction, EKeys::X);
-	const int32 FurnitureCount = FMath::Min(FurniturePlacer->Catalog.Num(), static_cast<int32>(UE_ARRAY_COUNT(NumberKeys)));
-	for (int32 i = 0; i < FurnitureCount; ++i)
+	for (int32 i = 0; i < 3; ++i)
 	{
 		MapScaledKey(BuildContext, SelectFurnitureAction, NumberKeys[i], static_cast<float>(i + 1));
 	}
+	MapDirectionalKey(BuildContext, CycleFurnitureAction, EKeys::Z, false, true);
+	MapDirectionalKey(BuildContext, CycleFurnitureAction, EKeys::C, false, false);
 }
 
 void AHGShopPlayerController::MapCommonKeys(UInputMappingContext* Context)
@@ -239,18 +243,9 @@ void AHGShopPlayerController::UpdateControlsHint() const
 {
 	if (FurniturePlacer->IsBuilding())
 	{
-		FString Choices;
-		for (int32 i = 0; i < FurniturePlacer->Catalog.Num(); ++i)
-		{
-			if (const UClass* Class = FurniturePlacer->Catalog[i])
-			{
-				Choices += FString::Printf(TEXT("%s%d %s"), i > 0 ? TEXT(" / ") : TEXT(""), i + 1,
-					*Class->GetDefaultObject<AHGFurniture>()->DisplayName.ToString());
-			}
-		}
 		const FString& Preview = FurniturePlacer->GetPreviewText();
-		SetControlsHint(FString::Printf(TEXT("[가구 배치] 손에 든 것: %s | %s | 좌클릭 놓기/집기 | R 회전 | X 치우기/취소 | B 끝%s%s"),
-			*FurniturePlacer->GetHeldName().ToString(), *Choices, Preview.IsEmpty() ? TEXT("") : TEXT("\n>> "), *Preview));
+		SetControlsHint(FString::Printf(TEXT("[가구 배치] 손에 든 것: %s\n1 식탁 / 2 의자 / 3 장식 | Z/C 이전/다음 가구 | 좌클릭 놓기/집기 | R 회전 | X 치우기/취소 | B 끝%s%s"),
+			*FurniturePlacer->DescribeHeld(), Preview.IsEmpty() ? TEXT("") : TEXT("\n>> "), *Preview));
 	}
 	else
 	{
@@ -343,7 +338,17 @@ void AHGShopPlayerController::OnRemoveFurniture(const FInputActionValue& Value)
 
 void AHGShopPlayerController::OnSelectFurniture(const FInputActionValue& Value)
 {
-	HGBuildSelect(FMath::RoundToInt(Value.Get<float>()));
+	HGBuildCategory(FMath::RoundToInt(Value.Get<float>()));
+}
+
+void AHGShopPlayerController::OnCycleFurniture(const FInputActionValue& Value)
+{
+	const float Dir = Value.Get<float>();
+	if (!FMath::IsNearlyZero(Dir))
+	{
+		FurniturePlacer->CycleInCategory(Dir > 0.f ? 1 : -1);
+		UpdateControlsHint();
+	}
 }
 
 void AHGShopPlayerController::OnPassTime(const FInputActionValue& Value)
@@ -396,15 +401,40 @@ void AHGShopPlayerController::HGBuild()
 	UpdateControlsHint();
 }
 
-void AHGShopPlayerController::HGBuildSelect(int32 Number)
+void AHGShopPlayerController::HGBuildCategory(int32 Number)
 {
-	if (!FurniturePlacer->SelectCatalog(Number - 1))
+	const EHGFurnitureCategory Categories[] = { EHGFurnitureCategory::Table, EHGFurnitureCategory::Chair, EHGFurnitureCategory::Decor };
+	if (Number < 1 || Number > 3 || !FurniturePlacer->SelectCategory(Categories[Number - 1]))
 	{
-		ShowMessage(FString::Printf(TEXT("%d번 가구는 목록에 없다"), Number), FColor::Red);
+		ShowMessage(FString::Printf(TEXT("%d번 분류에 가구가 없다"), Number), FColor::Red);
 		return;
 	}
-	ShowMessage(FString::Printf(TEXT("배치할 가구: %s"), *FurniturePlacer->GetHeldName().ToString()));
 	UpdateControlsHint();
+}
+
+void AHGShopPlayerController::HGBuildSelect(FName FurnitureId)
+{
+	if (!FurniturePlacer->SelectFurniture(FurnitureId))
+	{
+		ShowMessage(FString::Printf(TEXT("가구 목록에 '%s'가 없다 (Data/Furniture.csv의 Name)"), *FurnitureId.ToString()), FColor::Red);
+		return;
+	}
+	ShowMessage(FString::Printf(TEXT("배치할 가구: %s"), *FurniturePlacer->DescribeHeld()));
+	UpdateControlsHint();
+}
+
+void AHGShopPlayerController::HGFurnitureList()
+{
+	for (const FName& Id : FurniturePlacer->GetCatalog())
+	{
+		if (const FHGFurnitureRow* Row = HGFurnitureData::FindRow(Id))
+		{
+			const FIntPoint Size = Row->GetFootprint();
+			UE_LOG(LogHuoguo, Log, TEXT("[Furniture] %s %s [%s] %dx%d, Style %s, Pot %s, 값 %d, 손님 +%d%%, 꼬리표 %s"),
+				HGFurnitureData::CategoryName(Row->Category), *Row->DisplayName.ToString(), *Id.ToString(), Size.X, Size.Y,
+				*Row->Style.ToString(), *Row->Pot.ToString(), Row->Price, Row->BonusPercent, *Row->Tags);
+		}
+	}
 }
 
 void AHGShopPlayerController::HGCursorAt(float X, float Y)

@@ -4,16 +4,20 @@
 #include "Debug/HGPlaceholderPaint.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
+#include "HuoguoHuoguo.h"
 #include "Materials/MaterialInstanceDynamic.h"
-#include "UObject/ConstructorHelpers.h"
 
 namespace
 {
-	// 자리 표시 색. 정거장 블록아웃 맵의 팔레트와 비슷하게 맞춘다.
+	// 자리 표시 기본 색. 행의 ColorA/ColorB가 비었을 때 쓴다.
 	const FLinearColor WoodColor(0.45f, 0.27f, 0.14f);
 	const FLinearColor SteelColor(0.50f, 0.53f, 0.57f);
-	const FLinearColor BrothColor(0.78f, 0.16f, 0.08f);
+	const FLinearColor RedBroth(0.78f, 0.16f, 0.08f);    // 홍탕 (마라)
+	const FLinearColor WhiteBroth(0.92f, 0.88f, 0.78f);  // 백탕
 	const FLinearColor SeatColor(0.90f, 0.85f, 0.75f);
+	const FLinearColor ClayColor(0.62f, 0.32f, 0.20f);
+	const FLinearColor LeafColor(0.18f, 0.55f, 0.22f);
 
 	// 미리보기 색. 원래 색 대신 이 색으로 칠한다.
 	FLinearColor PreviewColor(EHGFurniturePreview State)
@@ -32,35 +36,81 @@ AHGFurniture::AHGFurniture()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
-	// 액터 원점 = 바닥 위 가구 중심. 부품은 모두 이 기준으로 위치를 잡는다.
+	// 액터 원점 = 바닥 위 가구 가운데 = 차지한 칸 사각형의 가운데. 부품은 모두 이 기준으로 위치를 잡는다.
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
 }
 
-UStaticMesh* AHGFurniture::LoadBasicShape(const TCHAR* Shape)
+TArray<FName> AHGFurniture::GetFurnitureIdOptions() const
 {
-	// static이 아닌 지역 변수로 찾는다. 함수 하나로 여러 도형을 불러오므로 static이면 처음 찾은 도형만 남는다.
-	const FString Path = FString::Printf(TEXT("/Engine/BasicShapes/%s.%s"), Shape, Shape);
-	ConstructorHelpers::FObjectFinder<UStaticMesh> Finder(*Path);
-	return Finder.Succeeded() ? Finder.Object : nullptr;
+	const UDataTable* Table = HGFurnitureData::LoadTable();
+	return Table ? Table->GetRowNames() : TArray<FName>();
 }
 
-UStaticMeshComponent* AHGFurniture::AddPart(FName Name, UStaticMesh* Mesh, const FVector& Location, const FVector& Scale, const FLinearColor& Color, bool bCollide)
+FText AHGFurniture::GetDisplayName() const
 {
-	UStaticMeshComponent* Part = CreateDefaultSubobject<UStaticMeshComponent>(Name);
-	Part->SetupAttachment(Root);
-	Part->SetStaticMesh(Mesh);
-	Part->SetRelativeLocation(Location);
-	Part->SetRelativeScale3D(Scale);
-	if (bCollide)
+	return bHasData && !Data.DisplayName.IsEmpty() ? Data.DisplayName : FText::FromName(FurnitureId);
+}
+
+// ---------------------------------------------------------------------------
+// 만들기
+// ---------------------------------------------------------------------------
+
+void AHGFurniture::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	// 행을 찾아 담는다. 못 찾으면 1x1 장식 기본값으로 두고 회색 상자를 만든다 (CSV에서 지운 ID 등).
+	if (const FHGFurnitureRow* Row = HGFurnitureData::FindRow(FurnitureId))
 	{
-		// 벽이나 카운터처럼 사장님과 손님을 막는다. 커서 가리키기(Visibility 추적)에도 걸린다.
-		Part->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+		Data = *Row;
+		bHasData = true;
 	}
 	else
 	{
-		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Data = FHGFurnitureRow();
+		bHasData = false;
+		if (!FurnitureId.IsNone() && GetWorld() && GetWorld()->IsGameWorld())
+		{
+			UE_LOG(LogHuoguo, Warning, TEXT("가구 데이터에 '%s' 행이 없다 (Data/Furniture.csv)"), *FurnitureId.ToString());
+		}
 	}
+	Tags = HGFurnitureData::ParseTags(Data.Tags);
+
+	ClearParts();
+	BuildParts();
+	Repaint();
+}
+
+void AHGFurniture::ClearParts()
+{
+	for (UStaticMeshComponent* Part : Parts)
+	{
+		if (IsValid(Part))
+		{
+			Part->DestroyComponent();
+		}
+	}
+	Parts.Reset();
+	SteamParts.Reset();
+	PartColors.Reset();
+	PartCollides.Reset();
+}
+
+UStaticMeshComponent* AHGFurniture::AddPart(const TCHAR* Shape, const FVector& Location, const FVector& Scale, const FLinearColor& Color,
+	bool bCollide, const FRotator& Rotation)
+{
+	UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *FString::Printf(TEXT("/Engine/BasicShapes/%s.%s"), Shape, Shape));
+
+	// 생성 스크립트에서 만든 부품으로 표시한다. 에디터에서 가구를 옮겨 생성 스크립트가 다시 돌면 엔진이 지우고, 맵에 저장되지 않는다.
+	UStaticMeshComponent* Part = NewObject<UStaticMeshComponent>(this, NAME_None, RF_Transient);
+	Part->CreationMethod = EComponentCreationMethod::UserConstructionScript;
+	Part->SetupAttachment(Root);
+	Part->SetStaticMesh(Mesh);
+	Part->SetRelativeLocationAndRotation(Location, Rotation);
+	Part->SetRelativeScale3D(Scale);
+	ApplyCollision(Part, bCollide);
+	Part->RegisterComponent();
 
 	Parts.Add(Part);
 	PartColors.Add(Color);
@@ -68,40 +118,266 @@ UStaticMeshComponent* AHGFurniture::AddPart(FName Name, UStaticMesh* Mesh, const
 	return Part;
 }
 
-void AHGFurniture::SetPartColor(UStaticMeshComponent* Part, const FLinearColor& Color)
+void AHGFurniture::ApplyCollision(UStaticMeshComponent* Part, bool bCollide) const
 {
-	const int32 Index = Parts.IndexOfByKey(Part);
-	if (Index == INDEX_NONE || PartColors[Index].Equals(Color))
+	if (!bCollide)
 	{
+		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Part->SetCanEverAffectNavigation(false);
 		return;
 	}
-	PartColors[Index] = Color;
-	Repaint();
+	if (bGhost)
+	{
+		// 질의 전용(물리 시뮬레이션 없음) + 모든 채널 겹침: 아무것도 막지 않는다(막기는 양쪽이 모두 Block일 때만 일어난다).
+		// 충돌 모양(바디)은 만들어지므로 UWorld::ComponentOverlapMulti로 "이 모양이 이 자리에서 무엇과 겹치는지"를 물을 수 있다.
+		// 겹침 이벤트는 끈다. 유령이 지나갈 때마다 발판 같은 트리거가 반응하면 안 되기 때문이다.
+		Part->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		Part->SetCollisionResponseToAllChannels(ECR_Overlap);
+		Part->SetGenerateOverlapEvents(false);
+		Part->SetCanEverAffectNavigation(false);
+		Part->SetCastShadow(false);
+	}
+	else
+	{
+		// 벽이나 카운터처럼 사장님을 막는다.
+		Part->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+	}
 }
 
-void AHGFurniture::OnConstruction(const FTransform& Transform)
+void AHGFurniture::BuildParts()
 {
-	Super::OnConstruction(Transform);
-	Repaint();
+	const FLinearColor A = HGFurnitureData::ParseColor(Data.ColorA, FLinearColor(-1.f, -1.f, -1.f));
+	const FLinearColor B = HGFurnitureData::ParseColor(Data.ColorB, FLinearColor(-1.f, -1.f, -1.f));
+	switch (Data.Category)
+	{
+	case EHGFurnitureCategory::Table: BuildTable(A, B); break;
+	case EHGFurnitureCategory::Chair: BuildChair(A, B); break;
+	default:                          BuildDecor(A, B); break;
+	}
 }
+
+namespace
+{
+	// 행 색이 비었으면(음수 표시) 기본 색.
+	FLinearColor Or(const FLinearColor& Color, const FLinearColor& Fallback)
+	{
+		return Color.R < 0.f ? Fallback : Color;
+	}
+}
+
+void AHGFurniture::BuildTable(const FLinearColor& InA, const FLinearColor& InB)
+{
+	const FLinearColor Top = Or(InA, WoodColor);
+	const FLinearColor Pot = Or(InB, SteelColor);
+	const FIntPoint Size = GetFootprint();
+	const float W = Size.X * 100.f;
+	const float D = Size.Y * 100.f;
+	const float MinSide = FMath::Min(W, D);
+
+	if (Data.Style == TEXT("Square"))
+	{
+		// 사각 상판(칸보다 15씩 작게)과 네 모서리 다리.
+		AddPart(TEXT("Cube"), FVector(0.f, 0.f, 78.f), FVector((W - 30.f) / 100.f, (D - 30.f) / 100.f, 0.08f), Top);
+		for (const FVector2D& Corner : { FVector2D(1, 1), FVector2D(1, -1), FVector2D(-1, 1), FVector2D(-1, -1) })
+		{
+			AddPart(TEXT("Cube"), FVector(Corner.X * (W * 0.5f - 30.f), Corner.Y * (D * 0.5f - 30.f), 37.f), FVector(0.08f, 0.08f, 0.74f), Top * 0.7f);
+		}
+	}
+	else
+	{
+		// 둥근 상판(칸의 78%), 가운데 다리, 바닥 받침. 의자는 바로 옆 칸에 놓이므로 상판 밑으로 들어가지 않는다.
+		AddPart(TEXT("Cylinder"), FVector(0.f, 0.f, 78.f), FVector(W * 0.78f / 100.f, D * 0.78f / 100.f, 0.08f), Top);
+		AddPart(TEXT("Cylinder"), FVector(0.f, 0.f, 38.f), FVector(MinSide * 0.1f / 100.f, MinSide * 0.1f / 100.f, 0.76f), SteelColor);
+		AddPart(TEXT("Cylinder"), FVector(0.f, 0.f, 2.f), FVector(MinSide * 0.35f / 100.f, MinSide * 0.35f / 100.f, 0.04f), SteelColor);
+	}
+
+	// 냄비 크기: 식탁 짧은 변의 30% (2x2 식탁이면 지름 60). 큰 냄비는 1.5배.
+	const float PotSize = MinSide * 0.3f / 100.f * (Data.Pot == TEXT("Big") ? 1.5f : 1.f);
+	BuildPot(PotSize, Pot);
+
+	// 김: 냄비 위로 작아지며 올라가는 구 세 개. 장식이라 충돌이 없고, 손님이 먹는 동안만 보인다.
+	const float S = PotSize / 0.6f;
+	const FVector Offsets[] = { FVector(-6.f, 4.f, 122.f), FVector(5.f, -3.f, 146.f), FVector(-2.f, 2.f, 172.f) };
+	const float Sizes[] = { 0.34f, 0.26f, 0.18f };
+	for (int32 i = 0; i < 3; ++i)
+	{
+		UStaticMeshComponent* Puff = AddPart(TEXT("Sphere"), FVector(Offsets[i].X * S, Offsets[i].Y * S, Offsets[i].Z), FVector(Sizes[i] * S), FLinearColor::White, false);
+		Puff->SetCastShadow(false);
+		Puff->SetVisibility(false);
+		SteamParts.Add(Puff);
+	}
+}
+
+void AHGFurniture::BuildPot(float P, const FLinearColor& PotColor)
+{
+	// 냄비는 모두 장식(충돌 없음)이다. 상판 윗면 높이 82 위에 놓인다. P = 냄비 지름(m).
+	const FName Pot = Data.Pot;
+	if (Pot == TEXT("NineGrid"))
+	{
+		// 구궁격: 네모난 냄비를 가로세로 두 줄씩 칸막이로 나눈 9칸 냄비.
+		AddPart(TEXT("Cube"), FVector(0.f, 0.f, 92.f), FVector(P, P, 0.2f), PotColor, false);
+		AddPart(TEXT("Cube"), FVector(0.f, 0.f, 102.f), FVector(P * 0.9f, P * 0.9f, 0.01f), RedBroth, false);
+		const float Third = P * 100.f / 6.f;
+		for (const float Offset : { -Third, Third })
+		{
+			AddPart(TEXT("Cube"), FVector(Offset, 0.f, 103.f), FVector(0.02f, P * 0.9f, 0.03f), PotColor, false);
+			AddPart(TEXT("Cube"), FVector(0.f, Offset, 103.f), FVector(P * 0.9f, 0.02f, 0.03f), PotColor, false);
+		}
+		return;
+	}
+
+	AddPart(TEXT("Cylinder"), FVector(0.f, 0.f, 92.f), FVector(P, P, 0.2f), PotColor, false);
+	if (Pot == TEXT("YinYang"))
+	{
+		// 원앙 냄비: 가운데 칸막이로 나눠 한쪽은 홍탕, 한쪽은 백탕. 반원 대신 납작한 타원 두 개로 표시한다.
+		AddPart(TEXT("Cylinder"), FVector(-P * 22.f, 0.f, 102.5f), FVector(P * 0.42f, P * 0.84f, 0.01f), RedBroth, false);
+		AddPart(TEXT("Cylinder"), FVector(P * 22.f, 0.f, 102.5f), FVector(P * 0.42f, P * 0.84f, 0.01f), WhiteBroth, false);
+		AddPart(TEXT("Cube"), FVector(0.f, 0.f, 103.f), FVector(0.02f, P * 0.9f, 0.03f), PotColor, false);
+		return;
+	}
+	// 단일 냄비(Single)와 큰 냄비(Big): 홍탕 하나.
+	AddPart(TEXT("Cylinder"), FVector(0.f, 0.f, 102.5f), FVector(P * 0.87f, P * 0.87f, 0.01f), RedBroth, false);
+}
+
+void AHGFurniture::BuildChair(const FLinearColor& InA, const FLinearColor& InB)
+{
+	// 의자는 1x1칸. 앞쪽(+X)이 손님이 보는 방향, 등받이는 -X 쪽.
+	const FLinearColor A = Or(InA, WoodColor);
+	const FLinearColor B = Or(InB, SeatColor);
+	const FName Style = Data.Style;
+	if (Style == TEXT("Stool"))
+	{
+		// 둥근 등받이 없는 의자.
+		AddPart(TEXT("Cylinder"), FVector(0.f, 0.f, 22.5f), FVector(0.48f, 0.48f, 0.45f), A);
+		AddPart(TEXT("Cylinder"), FVector(0.f, 0.f, 46.f), FVector(0.5f, 0.5f, 0.03f), B, false);
+	}
+	else if (Style == TEXT("Cushion"))
+	{
+		// 방석 의자: 두툼한 방석과 높은 등받이.
+		AddPart(TEXT("Cylinder"), FVector(0.f, 0.f, 20.f), FVector(0.56f, 0.56f, 0.40f), A);
+		AddPart(TEXT("Cylinder"), FVector(0.f, 0.f, 44.f), FVector(0.54f, 0.54f, 0.08f), B, false);
+		AddPart(TEXT("Cube"), FVector(-24.f, 0.f, 74.f), FVector(0.1f, 0.52f, 0.6f), A);
+	}
+	else if (Style == TEXT("Arm"))
+	{
+		// 팔걸이 의자: 네모난 좌석, 방석, 높은 등받이, 양쪽 팔걸이.
+		AddPart(TEXT("Cube"), FVector(0.f, 0.f, 21.f), FVector(0.6f, 0.6f, 0.42f), A);
+		AddPart(TEXT("Cube"), FVector(2.f, 0.f, 45.f), FVector(0.52f, 0.52f, 0.08f), B, false);
+		AddPart(TEXT("Cube"), FVector(-26.f, 0.f, 80.f), FVector(0.1f, 0.6f, 0.75f), A);
+		for (const float Side : { -27.f, 27.f })
+		{
+			AddPart(TEXT("Cube"), FVector(0.f, Side, 58.f), FVector(0.5f, 0.08f, 0.26f), A);
+		}
+	}
+	else
+	{
+		// 나무 의자(Wood, 기본): 둥근 좌석과 등받이 판.
+		AddPart(TEXT("Cylinder"), FVector(0.f, 0.f, 22.5f), FVector(0.56f, 0.56f, 0.45f), B);
+		AddPart(TEXT("Cube"), FVector(-24.f, 0.f, 70.f), FVector(0.08f, 0.5f, 0.5f), A);
+	}
+}
+
+void AHGFurniture::BuildDecor(const FLinearColor& InA, const FLinearColor& InB)
+{
+	const FName Style = Data.Style;
+	const FIntPoint Size = GetFootprint();
+	const float W = Size.X * 100.f;
+	const float D = Size.Y * 100.f;
+
+	if (Style == TEXT("Bush"))
+	{
+		// 화분: 토분 + 둥근 잎 덤불. A = 잎, B = 화분.
+		AddPart(TEXT("Cylinder"), FVector(0.f, 0.f, 22.5f), FVector(0.5f, 0.5f, 0.45f), Or(InB, ClayColor));
+		AddPart(TEXT("Sphere"), FVector(0.f, 0.f, 78.f), FVector(0.72f, 0.72f, 0.66f), Or(InA, LeafColor));
+	}
+	else if (Style == TEXT("Bamboo"))
+	{
+		// 대나무: 네모 화분에 높이가 다른 대 셋, 대 끝마다 작은 잎.
+		const FLinearColor Leaf = Or(InA, FLinearColor(0.35f, 0.65f, 0.25f));
+		AddPart(TEXT("Cube"), FVector(0.f, 0.f, 17.5f), FVector(0.5f, 0.5f, 0.35f), Or(InB, FLinearColor(0.30f, 0.30f, 0.32f)));
+		const FVector Stalks[] = { FVector(-10.f, -8.f, 170.f), FVector(10.f, -4.f, 200.f), FVector(0.f, 11.f, 150.f) };
+		for (const FVector& Stalk : Stalks)
+		{
+			AddPart(TEXT("Cylinder"), FVector(Stalk.X, Stalk.Y, 35.f + (Stalk.Z - 35.f) * 0.5f), FVector(0.06f, 0.06f, (Stalk.Z - 35.f) / 100.f), Leaf);
+			AddPart(TEXT("Sphere"), FVector(Stalk.X, Stalk.Y, Stalk.Z), FVector(0.22f, 0.22f, 0.14f), Leaf * 0.8f, false);
+		}
+	}
+	else if (Style == TEXT("Lantern"))
+	{
+		// 등불: 받침, 가는 기둥, 꼭대기의 둥근 등. A = 등, B = 기둥.
+		const FLinearColor Pole = Or(InB, SteelColor);
+		AddPart(TEXT("Cylinder"), FVector(0.f, 0.f, 3.f), FVector(0.42f, 0.42f, 0.06f), Pole);
+		AddPart(TEXT("Cylinder"), FVector(0.f, 0.f, 80.f), FVector(0.07f, 0.07f, 1.5f), Pole);
+		AddPart(TEXT("Sphere"), FVector(0.f, 0.f, 165.f), FVector(0.46f, 0.46f, 0.56f), Or(InA, FLinearColor(0.95f, 0.22f, 0.10f)));
+	}
+	else if (Style == TEXT("PaperLantern"))
+	{
+		// 홍등: 나무 틀에 매단 붉은 종이 등과 위아래 금색 테.
+		const FLinearColor Frame = Or(InB, FLinearColor(0.85f, 0.65f, 0.20f));
+		AddPart(TEXT("Cube"), FVector(0.f, 0.f, 4.f), FVector(0.5f, 0.5f, 0.08f), WoodColor);
+		AddPart(TEXT("Cube"), FVector(-30.f, 0.f, 100.f), FVector(0.07f, 0.07f, 1.9f), WoodColor);
+		AddPart(TEXT("Cube"), FVector(-5.f, 0.f, 192.f), FVector(0.55f, 0.06f, 0.06f), WoodColor);
+		AddPart(TEXT("Sphere"), FVector(10.f, 0.f, 140.f), FVector(0.55f, 0.55f, 0.48f), Or(InA, FLinearColor(0.90f, 0.10f, 0.08f)));
+		AddPart(TEXT("Cylinder"), FVector(10.f, 0.f, 165.f), FVector(0.28f, 0.28f, 0.05f), Frame, false);
+		AddPart(TEXT("Cylinder"), FVector(10.f, 0.f, 115.f), FVector(0.28f, 0.28f, 0.05f), Frame, false);
+	}
+	else if (Style == TEXT("SauceBar"))
+	{
+		// 소스 바: 칸보다 조금 작은 긴 바와 소스 그릇 셋 (마장 갈색, 고추기름 빨강, 파 초록).
+		AddPart(TEXT("Cube"), FVector(0.f, 0.f, 42.5f), FVector((W - 20.f) / 100.f, (D - 20.f) / 100.f, 0.85f), Or(InA, WoodColor));
+		AddPart(TEXT("Cube"), FVector(0.f, 0.f, 87.f), FVector((W - 14.f) / 100.f, (D - 14.f) / 100.f, 0.04f), Or(InB, SteelColor));
+		const FLinearColor Sauces[] = { FLinearColor(0.45f, 0.28f, 0.12f), RedBroth, FLinearColor(0.30f, 0.62f, 0.20f) };
+		for (int32 i = 0; i < 3; ++i)
+		{
+			const float Along = (i - 1) * (W >= D ? W : D) * 0.28f;
+			const FVector Location = W >= D ? FVector(Along, 0.f, 93.f) : FVector(0.f, Along, 93.f);
+			AddPart(TEXT("Cylinder"), Location, FVector(0.28f, 0.28f, 0.08f), Sauces[i], false);
+		}
+	}
+	else if (Style == TEXT("Tank"))
+	{
+		// 수조: 받침장 위 유리 수조(청록)와 물고기 둘.
+		AddPart(TEXT("Cube"), FVector(0.f, 0.f, 30.f), FVector((W - 20.f) / 100.f, (D - 20.f) / 100.f, 0.6f), Or(InB, WoodColor));
+		AddPart(TEXT("Cube"), FVector(0.f, 0.f, 97.f), FVector((W - 30.f) / 100.f, (D - 30.f) / 100.f, 0.74f), Or(InA, FLinearColor(0.35f, 0.75f, 0.85f)));
+		AddPart(TEXT("Sphere"), FVector(W * 0.15f, D * 0.05f, 100.f), FVector(0.18f, 0.08f, 0.1f), FLinearColor(1.0f, 0.5f, 0.1f), false);
+		AddPart(TEXT("Sphere"), FVector(-W * 0.2f, -D * 0.05f, 85.f), FVector(0.16f, 0.07f, 0.09f), FLinearColor(1.0f, 0.85f, 0.2f), false);
+	}
+	else if (Style == TEXT("Screen"))
+	{
+		// 병풍: 긴 변을 따라 지그재그로 선 판 여러 장. 판마다 A, B 색을 번갈아 칠한다.
+		const bool bAlongX = W >= D;
+		const float Length = (bAlongX ? W : D) - 20.f;
+		const int32 Panels = FMath::Max(2, FMath::RoundToInt(Length / 45.f));
+		const float PanelWidth = Length / Panels;
+		for (int32 i = 0; i < Panels; ++i)
+		{
+			const float Along = -Length * 0.5f + PanelWidth * (i + 0.5f);
+			const float Zig = (i % 2 == 0) ? 18.f : -18.f;
+			const FLinearColor Color = (i % 2 == 0) ? Or(InA, FLinearColor(0.85f, 0.80f, 0.65f)) : Or(InB, FLinearColor(0.55f, 0.15f, 0.12f));
+			const FVector Location = bAlongX ? FVector(Along, 0.f, 85.f) : FVector(0.f, Along, 85.f);
+			const FRotator Rotation(0.f, (bAlongX ? 0.f : 90.f) + Zig, 0.f);
+			AddPart(TEXT("Cube"), Location, FVector(PanelWidth / 100.f, 0.04f, 1.6f), Color, true, Rotation);
+		}
+	}
+	else
+	{
+		// 모르는 Style: 칸 크기의 회색 상자. CSV에 오타가 있으면 이렇게 보인다.
+		AddPart(TEXT("Cube"), FVector(0.f, 0.f, 40.f), FVector((W - 20.f) / 100.f, (D - 20.f) / 100.f, 0.8f), Or(InA, FLinearColor(0.5f, 0.5f, 0.5f)));
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 상태
+// ---------------------------------------------------------------------------
 
 void AHGFurniture::MakeGhost()
 {
 	bGhost = true;
 	for (int32 i = 0; i < Parts.Num(); ++i)
 	{
-		UStaticMeshComponent* Part = Parts[i];
-		Part->SetCanEverAffectNavigation(false);
-		Part->SetCastShadow(false);
-		if (PartCollides[i])
+		if (Parts[i])
 		{
-			// 질의 전용(물리 시뮬레이션 없음) + 모든 채널 겹침: 아무것도 막지 않는다(막기는 양쪽이 모두 Block일 때만 일어난다).
-			// 커서 추적(LineTraceSingle)은 막는 것만 맞히므로 유령에는 걸리지 않는다.
-			// 충돌 모양(바디)은 만들어지므로 UWorld::ComponentOverlapMulti로 "이 모양이 이 자리에서 무엇과 겹치는지"를 물을 수 있다.
-			// 겹침 이벤트는 끈다. 유령이 지나갈 때마다 발판 같은 트리거가 반응하면 안 되기 때문이다.
-			Part->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-			Part->SetCollisionResponseToAllChannels(ECR_Overlap);
-			Part->SetGenerateOverlapEvents(false);
+			ApplyCollision(Parts[i], PartCollides[i]);
 		}
 	}
 }
@@ -124,6 +400,32 @@ void AHGFurniture::GetCollidingParts(TArray<UStaticMeshComponent*>& OutParts) co
 		if (PartCollides[i] && Parts[i])
 		{
 			OutParts.Add(Parts[i]);
+		}
+	}
+}
+
+void AHGFurniture::SetPartColor(UStaticMeshComponent* Part, const FLinearColor& Color)
+{
+	const int32 Index = Parts.IndexOfByKey(Part);
+	if (Index == INDEX_NONE || PartColors[Index].Equals(Color))
+	{
+		return;
+	}
+	PartColors[Index] = Color;
+	Repaint();
+}
+
+void AHGFurniture::SetSteam(bool bOn, const FLinearColor& Color)
+{
+	for (UStaticMeshComponent* Puff : SteamParts)
+	{
+		if (Puff)
+		{
+			if (bOn)
+			{
+				SetPartColor(Puff, Color);
+			}
+			Puff->SetVisibility(bOn);
 		}
 	}
 }
@@ -151,104 +453,72 @@ void AHGFurniture::Repaint()
 	}
 }
 
+// ---------------------------------------------------------------------------
+
 AHGTable::AHGTable()
 {
-	DisplayName = NSLOCTEXT("HG", "Furniture_Table", "식탁");
 	FurnitureId = TEXT("Table");
-	Footprint = FIntPoint(2, 2);
-
-	UStaticMesh* Cylinder = LoadBasicShape(TEXT("Cylinder"));
-	// 상판: 지름 156, 두께 8, 윗면 높이 82. 의자 좌석(높이 45)보다 높아서 의자를 밑으로 밀어 넣을 수 있다.
-	AddPart(TEXT("Top"), Cylinder, FVector(0.f, 0.f, 78.f), FVector(1.56f, 1.56f, 0.08f), WoodColor);
-	// 가운데 다리와 바닥 받침. 바닥에 닿는 것은 이 둘뿐이다.
-	AddPart(TEXT("Leg"), Cylinder, FVector(0.f, 0.f, 38.f), FVector(0.2f, 0.2f, 0.76f), SteelColor);
-	AddPart(TEXT("Base"), Cylinder, FVector(0.f, 0.f, 2.f), FVector(0.7f, 0.7f, 0.04f), SteelColor);
-	// 훠궈 냄비와 국물. 장식이라 충돌이 없다.
-	AddPart(TEXT("Pot"), Cylinder, FVector(0.f, 0.f, 92.f), FVector(0.6f, 0.6f, 0.2f), SteelColor, false);
-	AddPart(TEXT("Broth"), Cylinder, FVector(0.f, 0.f, 102.5f), FVector(0.52f, 0.52f, 0.01f), BrothColor, false);
-
-	// 김: 냄비 위로 작아지며 올라가는 구 세 개. 장식이라 충돌이 없고, 손님이 먹는 동안만 보인다.
-	UStaticMesh* Sphere = LoadBasicShape(TEXT("Sphere"));
-	const FVector SteamOffsets[] = { FVector(-6.f, 4.f, 122.f), FVector(5.f, -3.f, 146.f), FVector(-2.f, 2.f, 172.f) };
-	const float SteamSizes[] = { 0.34f, 0.26f, 0.18f };
-	for (int32 i = 0; i < static_cast<int32>(UE_ARRAY_COUNT(SteamSizes)); ++i)
-	{
-		UStaticMeshComponent* Puff = AddPart(*FString::Printf(TEXT("Steam_%d"), i), Sphere, SteamOffsets[i], FVector(SteamSizes[i]), FLinearColor::White, false);
-		Puff->SetCastShadow(false);
-		Puff->SetVisibility(false);
-		SteamParts.Add(Puff);
-	}
-}
-
-void AHGTable::SetSteam(bool bOn, const FLinearColor& Color)
-{
-	for (UStaticMeshComponent* Puff : SteamParts)
-	{
-		if (Puff)
-		{
-			if (bOn)
-			{
-				SetPartColor(Puff, Color);
-			}
-			Puff->SetVisibility(bOn);
-		}
-	}
 }
 
 AHGChair::AHGChair()
 {
-	DisplayName = NSLOCTEXT("HG", "Furniture_Chair", "의자");
 	FurnitureId = TEXT("Chair");
-	bFacesTable = true;
-
-	UStaticMesh* Cylinder = LoadBasicShape(TEXT("Cylinder"));
-	UStaticMesh* Cube = LoadBasicShape(TEXT("Cube"));
-	// 좌석: 지름 56, 높이 45 (원통 그대로 바닥까지 채운 단순한 의자).
-	AddPart(TEXT("Seat"), Cylinder, FVector(0.f, 0.f, 22.5f), FVector(0.56f, 0.56f, 0.45f), SeatColor);
-	// 등받이: 좌석 뒤쪽(-X) 끝에 세운 판. 높이 45~95.
-	AddPart(TEXT("Back"), Cube, FVector(-24.f, 0.f, 70.f), FVector(0.08f, 0.5f, 0.5f), WoodColor);
 }
 
-AHGPlanter::AHGPlanter()
+// ---------------------------------------------------------------------------
+// 가구 데이터 도우미 (HGFurnitureData.h)
+// ---------------------------------------------------------------------------
+
+const UDataTable* HGFurnitureData::LoadTable()
 {
-	DisplayName = NSLOCTEXT("HG", "Furniture_Planter", "화분");
-	FurnitureId = TEXT("Planter");
-
-	UStaticMesh* Cylinder = LoadBasicShape(TEXT("Cylinder"));
-	UStaticMesh* Sphere = LoadBasicShape(TEXT("Sphere"));
-	// 토분: 지름 50, 높이 45. 그 위에 둥근 잎 덤불 (지름 72). 둘 다 충돌이 있어 커서로 가리킬 수 있다.
-	AddPart(TEXT("Pot"), Cylinder, FVector(0.f, 0.f, 22.5f), FVector(0.5f, 0.5f, 0.45f), FLinearColor(0.62f, 0.32f, 0.20f));
-	AddPart(TEXT("Leaves"), Sphere, FVector(0.f, 0.f, 78.f), FVector(0.72f, 0.72f, 0.66f), FLinearColor(0.18f, 0.55f, 0.22f));
-}
-
-AHGSauceBar::AHGSauceBar()
-{
-	DisplayName = NSLOCTEXT("HG", "Furniture_SauceBar", "소스 바");
-	FurnitureId = TEXT("SauceBar");
-	Footprint = FIntPoint(2, 1);
-
-	UStaticMesh* Cube = LoadBasicShape(TEXT("Cube"));
-	UStaticMesh* Cylinder = LoadBasicShape(TEXT("Cylinder"));
-	// 몸체: 길이 180(X), 폭 80(Y), 높이 85. 2x1칸(200 x 100) 안에 들어가도록 칸보다 조금 작다.
-	AddPart(TEXT("Body"), Cube, FVector(0.f, 0.f, 42.5f), FVector(1.8f, 0.8f, 0.85f), WoodColor);
-	AddPart(TEXT("Top"), Cube, FVector(0.f, 0.f, 87.f), FVector(1.86f, 0.86f, 0.04f), SteelColor);
-	// 소스 그릇 셋 (마장 갈색, 고추기름 빨강, 파 초록). 장식이라 충돌이 없다.
-	const FLinearColor SauceColors[] = { FLinearColor(0.45f, 0.28f, 0.12f), BrothColor, FLinearColor(0.30f, 0.62f, 0.20f) };
-	for (int32 i = 0; i < 3; ++i)
+	// 이미 불러온 에셋이면 찾기만 하고, 아니면 불러온다. 배치 컴포넌트가 UPROPERTY로 잡고 있어 게임 중에는 내려가지 않는다.
+	if (const UDataTable* Found = FindObject<UDataTable>(nullptr, TablePath))
 	{
-		AddPart(*FString::Printf(TEXT("Sauce_%d"), i), Cylinder, FVector(-55.f + i * 55.f, 0.f, 93.f), FVector(0.28f, 0.28f, 0.08f), SauceColors[i], false);
+		return Found;
 	}
+	return LoadObject<UDataTable>(nullptr, TablePath);
 }
 
-AHGLantern::AHGLantern()
+const FHGFurnitureRow* HGFurnitureData::FindRow(FName FurnitureId)
 {
-	DisplayName = NSLOCTEXT("HG", "Furniture_Lantern", "등불");
-	FurnitureId = TEXT("Lantern");
+	const UDataTable* Table = LoadTable();
+	return (Table && !FurnitureId.IsNone()) ? Table->FindRow<FHGFurnitureRow>(FurnitureId, TEXT("FurnitureData"), false) : nullptr;
+}
 
-	UStaticMesh* Cylinder = LoadBasicShape(TEXT("Cylinder"));
-	UStaticMesh* Sphere = LoadBasicShape(TEXT("Sphere"));
-	// 바닥 받침, 가는 기둥(높이 150), 꼭대기의 붉은 등 (가게 천장 등불과 같은 색).
-	AddPart(TEXT("Base"), Cylinder, FVector(0.f, 0.f, 3.f), FVector(0.42f, 0.42f, 0.06f), SteelColor);
-	AddPart(TEXT("Pole"), Cylinder, FVector(0.f, 0.f, 80.f), FVector(0.07f, 0.07f, 1.5f), SteelColor);
-	AddPart(TEXT("Lamp"), Sphere, FVector(0.f, 0.f, 165.f), FVector(0.46f, 0.46f, 0.56f), FLinearColor(0.95f, 0.22f, 0.10f));
+FLinearColor HGFurnitureData::ParseColor(const FString& Hex, const FLinearColor& Fallback)
+{
+	FString Text = Hex.TrimStartAndEnd();
+	Text.RemoveFromStart(TEXT("#"));
+	if (Text.Len() != 6)
+	{
+		return Fallback;
+	}
+	// FColor::FromHex는 sRGB 값이다. 머티리얼 색 파라미터는 선형이므로 바꿔 준다 (엑셀에 적은 색이 화면에서 비슷하게 보이도록).
+	return FLinearColor::FromSRGBColor(FColor::FromHex(Text));
+}
+
+TArray<FName> HGFurnitureData::ParseTags(const FString& Tags)
+{
+	TArray<FString> Parts;
+	Tags.ParseIntoArray(Parts, TEXT("|"), true);
+	TArray<FName> Result;
+	for (FString& Part : Parts)
+	{
+		Part.TrimStartAndEndInline();
+		if (!Part.IsEmpty())
+		{
+			Result.Add(FName(*Part));
+		}
+	}
+	return Result;
+}
+
+const TCHAR* HGFurnitureData::CategoryName(EHGFurnitureCategory Category)
+{
+	switch (Category)
+	{
+	case EHGFurnitureCategory::Table: return TEXT("식탁");
+	case EHGFurnitureCategory::Chair: return TEXT("의자");
+	default:                          return TEXT("장식");
+	}
 }

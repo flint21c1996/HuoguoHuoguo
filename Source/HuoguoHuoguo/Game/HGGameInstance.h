@@ -11,7 +11,7 @@ struct FHGIngredientRow;
 
 /**
  * 정거장 가게에 놓인 가구 하나의 기록.
- * 가구 클래스는 경영 파트(Shop/) 것이지만 공통 폴더가 경영 파트를 include하지 않도록 AActor 클래스로 들고 있는다.
+ * 무슨 가구인지는 가구 ID(Data/Furniture.csv 행 이름)로 남긴다. 다시 놓을 때 경영 파트가 그 행으로 가구를 만든다.
  */
 USTRUCT()
 struct FHGPlacedFurniture
@@ -19,7 +19,7 @@ struct FHGPlacedFurniture
 	GENERATED_BODY()
 
 	UPROPERTY()
-	TSubclassOf<AActor> Class;
+	FName FurnitureId;
 
 	// 바닥 위 가구 중심 위치.
 	UPROPERTY()

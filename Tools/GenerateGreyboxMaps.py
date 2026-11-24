@@ -397,6 +397,7 @@ DATA_DIR = "/Game/HG/Data"
 DATA_TABLES = (
     ("DT_Ingredients", "Data/Ingredients.csv", "HGIngredientRow"),
     ("DT_Combos", "Data/Combos.csv", "HGComboRow"),
+    ("DT_Furniture", "Data/Furniture.csv", "HGFurnitureRow"),
 )
 
 

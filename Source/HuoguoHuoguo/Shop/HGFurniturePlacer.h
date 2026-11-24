@@ -40,10 +40,6 @@ class HUOGUOHUOGUO_API UHGFurniturePlacer : public UActorComponent
 public:
 	UHGFurniturePlacer();
 
-	// 고를 수 있는 가구 목록. 숫자 키 1, 2, ... 순서다. 나중에 블루프린트 가구(BP_Table 등)로 바꿔 끼운다.
-	UPROPERTY(EditAnywhere, Category = "Furniture")
-	TArray<TSubclassOf<AHGFurniture>> Catalog;
-
 	// 가게 바닥 칸 규칙 (칸 크기, 바닥 범위, 배치 영역, 손님 입구).
 	UPROPERTY(EditAnywhere, Category = "Furniture")
 	FHGShopGrid Grid;
@@ -60,8 +56,26 @@ public:
 	void EndBuild();
 	bool IsBuilding() const { return bBuilding; }
 
-	// 목록에서 가구를 고른다 (0부터). 옮기던 가구가 있으면 원래 자리로 되돌린 뒤 바꾼다. 범위 밖이면 false.
-	bool SelectCatalog(int32 Index);
+	// ---- 가구 고르기 ----
+	// 고를 수 있는 가구 = 가구 DataTable(Data/Furniture.csv)의 모든 행, 행 순서대로. 처음 부를 때 불러온다.
+	const TArray<FName>& GetCatalog();
+
+	// 분류를 고른다 (숫자 키 1 식탁, 2 의자, 3 장식). 그 분류에서 마지막으로 골랐던 가구(처음이면 첫 가구)를 든다.
+	bool SelectCategory(EHGFurnitureCategory Category);
+
+	// 같은 분류 안에서 이전/다음 가구 (Z/C). Direction = -1 / +1, 끝에서 돌아간다.
+	void CycleInCategory(int32 Direction);
+
+	// ID로 가구를 고른다 (개발 명령). 목록에 없으면 false.
+	bool SelectFurniture(FName FurnitureId);
+
+	// 위 셋 모두 옮기던 가구가 있으면 원래 자리로 되돌린 뒤 바꾼다.
+
+	// 지금 손에 든 가구 ID: 옮기는 중이면 그 가구, 아니면 고른 가구.
+	FName GetHeldId() const;
+
+	// 손에 든 가구 한 줄 설명: "원앙 냄비 원탁 (식탁 2/6, 2x2, 값 180, 손님 +10%)".
+	FString DescribeHeld();
 
 	// 손에 든 가구(유령)를 돌린다.
 	void RotateHeld(float Degrees);
@@ -121,20 +135,31 @@ private:
 
 	bool bBuilding = false;
 	bool bGhostValid = false;
-	int32 CatalogIndex = 0;
 	float HeldYaw = 0.f;
+
+	// 가구 목록 (DataTable 행 이름, 행 순서). 표를 UPROPERTY로 잡아 두어 게임 중에 내려가지 않게 한다.
+	UPROPERTY() TObjectPtr<const UDataTable> FurnitureTable;
+	TArray<FName> Catalog;
+	bool bCatalogLoaded = false;
+
+	// 고른 가구와, 분류마다 마지막으로 골랐던 가구 (분류 키를 다시 누르면 그 가구로 돌아간다).
+	FName SelectedId;
+	TMap<EHGFurnitureCategory, FName> LastInCategory;
 
 	// 이미 놓인 가구를 집어 옮기는 중인지와 원래 자리. 취소하면 원래 자리에 다시 놓는다.
 	bool bMoving = false;
-	TSubclassOf<AHGFurniture> MovingClass;
+	FName MovingId;
 	FTransform MovingFrom;
 
 	TOptional<FVector> CursorWorldOverride;
 
 	APlayerController* GetPC() const;
 
-	// 손에 든 가구 종류: 옮기는 중이면 그 가구, 아니면 목록에서 고른 것.
-	TSubclassOf<AHGFurniture> GetHeldClass() const;
+	// 분류의 가구 ID들 (행 순서).
+	TArray<FName> GetCategoryItems(EHGFurnitureCategory Category);
+
+	// 손에 든 것을 바꾼다 (옮기던 가구는 되돌리고 유령을 새로 만든다).
+	void HoldFurniture(FName FurnitureId);
 
 	// 커서 위치에서 화면 안쪽으로 나가는 광선. 실패하면 false.
 	bool GetCursorRay(FVector& OutOrigin, FVector& OutDirection) const;
@@ -168,10 +193,12 @@ private:
 	// 유령(Id, Rect)을 놓으면 생길 콤보 안내 문장.
 	FString BuildPreviewText(FName Id, const FIntRect& Rect, const TArray<FHGGridItem>& Items) const;
 
-	AHGFurniture* SpawnFurniture(TSubclassOf<AHGFurniture> Class, const FVector& Location, float Yaw) const;
+	// 가구 ID로 실제 가구(또는 bGhost면 유령)를 만든다. 클래스는 행의 ActorClass, 비었으면 AHGFurniture.
+	AHGFurniture* SpawnFurniture(FName FurnitureId, const FVector& Location, float Yaw, bool bGhost = false) const;
 
-	// 맵에 처음 배치된 가구를 칸에 맞춰 옮긴다. 맞출 수 없는 가구(영역 밖, 칸 겹침)는 치운다.
-	void SnapMapFurnitureToGrid();
+	// 맵에 처음 배치된 가구를 ID와 자리만 읽고 지운 뒤, 데이터로 만든 가구를 가장 가까운 칸에 다시 놓는다.
+	// 맞출 수 없는 가구(영역 밖, 칸 겹침)는 놓지 않는다.
+	void ReplaceMapFurniture();
 
 	// 맵의 실제 가구 전부를 GameInstance에 기록한다.
 	void SaveLayout() const;

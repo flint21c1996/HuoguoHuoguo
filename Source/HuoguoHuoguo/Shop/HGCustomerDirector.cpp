@@ -221,18 +221,18 @@ bool UHGCustomerDirector::TrySpawnCustomer(FString& OutResult)
 	}
 
 	// 빈자리: 식탁을 바라보는 의자 (의자 바로 앞 칸이 식탁). (의자, 식탁) 짝으로 모은다.
-	TArray<TPair<AHGFurniture*, AHGTable*>> Seats;
+	TArray<TPair<AHGFurniture*, AHGFurniture*>> Seats;
 	for (const FHGGridItem& Chair : Items)
 	{
 		AHGFurniture* ChairActor = Chair.Actor.Get();
-		if (!ChairActor || !ChairActor->IsA<AHGChair>() || Reserved.Contains(ChairActor))
+		if (!ChairActor || !ChairActor->IsChair() || Reserved.Contains(ChairActor))
 		{
 			continue;
 		}
 		const FIntPoint Front = HGShopGrid::GetFrontTile(Grid, ChairActor);
 		for (const FHGGridItem& Table : Items)
 		{
-			AHGTable* TableActor = Cast<AHGTable>(Table.Actor.Get());
+			AHGFurniture* TableActor = Table.IsTable() ? Table.Actor.Get() : nullptr;
 			if (TableActor && Table.Rect.Contains(Front))
 			{
 				Seats.Emplace(ChairActor, TableActor);
@@ -253,7 +253,7 @@ bool UHGCustomerDirector::TrySpawnCustomer(FString& OutResult)
 	}
 	TSet<FIntPoint> Occupied;
 	GatherOccupied(Items, Occupied);
-	for (const TPair<AHGFurniture*, AHGTable*>& Seat : Seats)
+	for (const TPair<AHGFurniture*, AHGFurniture*>& Seat : Seats)
 	{
 		TArray<FVector> Points;
 		const FIntPoint ChairTile = Grid.WorldToTile(Seat.Key->GetActorLocation());
@@ -314,7 +314,7 @@ void UHGCustomerDirector::SendHome(FVisit& Visit)
 void UHGCustomerDirector::Pay(FVisit& Visit)
 {
 	UHGGameInstance* GI = GetWorld()->GetGameInstance<UHGGameInstance>();
-	AHGTable* Table = Visit.Table.Get();
+	AHGFurniture* Table = Visit.Table.Get();
 	if (!GI || !Table)
 	{
 		return;
@@ -352,7 +352,13 @@ void UHGCustomerDirector::Pay(FVisit& Visit)
 	HGShopGrid::GatherItems(GetWorld(), Grid, Items);
 	const UDataTable* ComboTable = GI->GetComboTable();
 	const FHGComboResult Combos = HGCombo::EvaluateTable(ComboTable, HGShopGrid::GetFurnitureRect(Grid, Table), Items);
-	const int32 Total = FMath::RoundToInt(BasePrice * (100 + Combos.BonusPercent) / 100.f);
+
+	// 가구 보너스: 식탁(냄비 등급)과 앉은 의자의 BonusPercent (Data/Furniture.csv). 콤보 보너스와 모두 더한다.
+	const int32 TableBonus = Table->GetData().BonusPercent;
+	const AHGFurniture* Chair = Visit.Chair.Get();
+	const int32 ChairBonus = Chair ? Chair->GetData().BonusPercent : 0;
+	const int32 TotalBonus = Combos.BonusPercent + TableBonus + ChairBonus;
+	const int32 Total = FMath::RoundToInt(BasePrice * (100 + TotalBonus) / 100.f);
 	GI->AddMoney(Total);
 	++ServedCount;
 	for (const FName& Id : Combos.Ids)
@@ -374,8 +380,10 @@ void UHGCustomerDirector::Pay(FVisit& Visit)
 		EatenParts.Add(FString::Printf(TEXT("%s %d"), *Name, Eaten[Name]));
 	}
 	const FString ComboText = Combos.Num() > 0 ? Combos.Describe(ComboTable) : FString(TEXT("없음"));
-	Message(FString::Printf(TEXT("손님 계산 +%d (꼬치 %s = %d, 콤보 %s) | 가진 돈 %d"),
-		Total, *FString::Join(EatenParts, TEXT(", ")), BasePrice, *ComboText, GI->GetMoney()));
+	Message(FString::Printf(TEXT("손님 계산 +%d (꼬치 %s = %d, %s +%d%%, %s +%d%%, 콤보 %s) | 가진 돈 %d"),
+		Total, *FString::Join(EatenParts, TEXT(", ")), BasePrice,
+		*Table->GetDisplayName().ToString(), TableBonus, Chair ? *Chair->GetDisplayName().ToString() : TEXT("의자"), ChairBonus,
+		*ComboText, GI->GetMoney()));
 	if (OnMoneyChanged)
 	{
 		OnMoneyChanged();
@@ -384,7 +392,7 @@ void UHGCustomerDirector::Pay(FVisit& Visit)
 
 void UHGCustomerDirector::RefreshSteam()
 {
-	TSet<AHGTable*> EatingTables;
+	TSet<AHGFurniture*> EatingTables;
 	for (const FVisit& Visit : Visits)
 	{
 		if (Visit.State == EVisitState::Eating && Visit.Table.IsValid())
@@ -400,9 +408,9 @@ void UHGCustomerDirector::RefreshSteam()
 	{
 		HGShopGrid::GatherItems(GetWorld(), GetGrid(), Items);
 	}
-	for (TActorIterator<AHGTable> It(GetWorld()); It; ++It)
+	for (TActorIterator<AHGFurniture> It(GetWorld()); It; ++It)
 	{
-		if (It->IsGhost())
+		if (It->IsGhost() || !It->IsTable())
 		{
 			continue;
 		}
@@ -538,14 +546,14 @@ FString UHGCustomerDirector::DescribeTables() const
 	int32 Index = 0;
 	for (const FHGGridItem& Table : Items)
 	{
-		if (!Table.Actor.IsValid() || !Table.Actor->IsA<AHGTable>())
+		if (!Table.Actor.IsValid() || !Table.IsTable())
 		{
 			continue;
 		}
 		int32 SeatCount = 0;
 		for (const FHGGridItem& Chair : Items)
 		{
-			if (Chair.Actor.IsValid() && Chair.Actor->IsA<AHGChair>() && Table.Rect.Contains(HGShopGrid::GetFrontTile(Grid, Chair.Actor.Get())))
+			if (Chair.Actor.IsValid() && Chair.IsChair() && Table.Rect.Contains(HGShopGrid::GetFrontTile(Grid, Chair.Actor.Get())))
 			{
 				++SeatCount;
 			}

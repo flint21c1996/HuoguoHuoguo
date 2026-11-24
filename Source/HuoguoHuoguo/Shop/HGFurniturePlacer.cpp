@@ -30,20 +30,13 @@ namespace
 
 	bool IsTableItem(const FHGGridItem& Item)
 	{
-		return Item.Actor.IsValid() && Item.Actor->IsA<AHGTable>();
+		return Item.IsTable();
 	}
 }
 
 UHGFurniturePlacer::UHGFurniturePlacer()
 {
 	PrimaryComponentTick.bCanEverTick = false;
-
-	// 기본 목록: 1 = 식탁(2x2), 2 = 의자(1x1), 3 = 화분(1x1), 4 = 등불(1x1), 5 = 소스 바(2x1).
-	Catalog.Add(AHGTable::StaticClass());
-	Catalog.Add(AHGChair::StaticClass());
-	Catalog.Add(AHGPlanter::StaticClass());
-	Catalog.Add(AHGLantern::StaticClass());
-	Catalog.Add(AHGSauceBar::StaticClass());
 }
 
 APlayerController* UHGFurniturePlacer::GetPC() const
@@ -51,19 +44,135 @@ APlayerController* UHGFurniturePlacer::GetPC() const
 	return Cast<APlayerController>(GetOwner());
 }
 
-TSubclassOf<AHGFurniture> UHGFurniturePlacer::GetHeldClass() const
+// ---------------------------------------------------------------------------
+// 가구 목록 (Data/Furniture.csv -> DT_Furniture)
+// ---------------------------------------------------------------------------
+
+const TArray<FName>& UHGFurniturePlacer::GetCatalog()
 {
-	if (bMoving)
+	if (!bCatalogLoaded)
 	{
-		return MovingClass;
+		bCatalogLoaded = true;
+		FurnitureTable = HGFurnitureData::LoadTable();
+		if (FurnitureTable)
+		{
+			Catalog = FurnitureTable->GetRowNames();
+			UE_LOG(LogHuoguo, Log, TEXT("가구 목록: %d종 (식탁 %d, 의자 %d, 장식 %d)"), Catalog.Num(),
+				GetCategoryItems(EHGFurnitureCategory::Table).Num(), GetCategoryItems(EHGFurnitureCategory::Chair).Num(),
+				GetCategoryItems(EHGFurnitureCategory::Decor).Num());
+		}
+		else
+		{
+			UE_LOG(LogHuoguo, Error, TEXT("가구 DataTable(%s)을 불러오지 못했다. Tools/Invoke-HGMapGen.ps1로 Data/Furniture.csv를 읽어 들일 것"),
+				HGFurnitureData::TablePath);
+		}
+		if (SelectedId.IsNone() && !Catalog.IsEmpty())
+		{
+			SelectedId = Catalog[0];
+		}
 	}
-	return Catalog.IsValidIndex(CatalogIndex) ? Catalog[CatalogIndex] : nullptr;
+	return Catalog;
+}
+
+TArray<FName> UHGFurniturePlacer::GetCategoryItems(EHGFurnitureCategory Category)
+{
+	TArray<FName> Items;
+	for (const FName& Id : GetCatalog())
+	{
+		const FHGFurnitureRow* Row = HGFurnitureData::FindRow(Id);
+		if (Row && Row->Category == Category)
+		{
+			Items.Add(Id);
+		}
+	}
+	return Items;
+}
+
+FName UHGFurniturePlacer::GetHeldId() const
+{
+	return bMoving ? MovingId : SelectedId;
 }
 
 FText UHGFurniturePlacer::GetHeldName() const
 {
-	const TSubclassOf<AHGFurniture> Class = GetHeldClass();
-	return Class ? Class->GetDefaultObject<AHGFurniture>()->DisplayName : FText::GetEmpty();
+	const FHGFurnitureRow* Row = HGFurnitureData::FindRow(GetHeldId());
+	return Row ? Row->DisplayName : FText::FromName(GetHeldId());
+}
+
+FString UHGFurniturePlacer::DescribeHeld()
+{
+	const FName Id = GetHeldId();
+	const FHGFurnitureRow* Row = HGFurnitureData::FindRow(Id);
+	if (!Row)
+	{
+		return Id.IsNone() ? FString(TEXT("없음")) : Id.ToString();
+	}
+	const TArray<FName> Same = GetCategoryItems(Row->Category);
+	const FIntPoint Size = Row->GetFootprint();
+	FString Text = FString::Printf(TEXT("%s (%s %d/%d, %dx%d, 값 %d"), *Row->DisplayName.ToString(), HGFurnitureData::CategoryName(Row->Category),
+		Same.IndexOfByKey(Id) + 1, Same.Num(), Size.X, Size.Y, Row->Price);
+	if (Row->BonusPercent != 0)
+	{
+		Text += FString::Printf(TEXT(", 손님 +%d%%"), Row->BonusPercent);
+	}
+	if (!Row->Tags.IsEmpty())
+	{
+		Text += FString::Printf(TEXT(", %s"), *Row->Tags);
+	}
+	return Text + TEXT(")");
+}
+
+void UHGFurniturePlacer::HoldFurniture(FName FurnitureId)
+{
+	CancelMove();
+	SelectedId = FurnitureId;
+	if (const FHGFurnitureRow* Row = HGFurnitureData::FindRow(FurnitureId))
+	{
+		LastInCategory.Add(Row->Category, FurnitureId);
+	}
+	if (bBuilding)
+	{
+		RespawnGhost();
+		UpdateCursor();
+	}
+}
+
+bool UHGFurniturePlacer::SelectCategory(EHGFurnitureCategory Category)
+{
+	const TArray<FName> Items = GetCategoryItems(Category);
+	if (Items.IsEmpty())
+	{
+		return false;
+	}
+	const FName* Last = LastInCategory.Find(Category);
+	HoldFurniture(Last && Items.Contains(*Last) ? *Last : Items[0]);
+	return true;
+}
+
+void UHGFurniturePlacer::CycleInCategory(int32 Direction)
+{
+	const FHGFurnitureRow* Row = HGFurnitureData::FindRow(GetHeldId());
+	if (!Row)
+	{
+		return;
+	}
+	const TArray<FName> Items = GetCategoryItems(Row->Category);
+	if (Items.IsEmpty())
+	{
+		return;
+	}
+	const int32 Index = FMath::Max(0, Items.IndexOfByKey(GetHeldId()));
+	HoldFurniture(Items[(Index + Direction + Items.Num()) % Items.Num()]);
+}
+
+bool UHGFurniturePlacer::SelectFurniture(FName FurnitureId)
+{
+	if (!GetCatalog().Contains(FurnitureId))
+	{
+		return false;
+	}
+	HoldFurniture(FurnitureId);
+	return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +181,7 @@ FText UHGFurniturePlacer::GetHeldName() const
 
 void UHGFurniturePlacer::RestoreLayout()
 {
+	GetCatalog();
 	UHGGameInstance* GI = GetWorld()->GetGameInstance<UHGGameInstance>();
 	if (!GI)
 	{
@@ -81,8 +191,8 @@ void UHGFurniturePlacer::RestoreLayout()
 
 	if (!GI->HasShopLayout())
 	{
-		// 게임을 켜고 처음 정거장에 왔다. 맵에 배치된 가구가 처음 배치다. 칸에 맞춰 옮긴 뒤 기록한다.
-		SnapMapFurnitureToGrid();
+		// 게임을 켜고 처음 정거장에 왔다. 맵에 배치된 가구가 처음 배치다. 데이터로 다시 만들어 칸에 맞춘 뒤 기록한다.
+		ReplaceMapFurniture();
 		SaveLayout();
 		UE_LOG(LogHuoguo, Log, TEXT("가구 배치: 맵에 배치된 가구 %d개를 처음 배치로 기록"), GI->GetShopLayout().Num());
 		return;
@@ -102,61 +212,84 @@ void UHGFurniturePlacer::RestoreLayout()
 	int32 Restored = 0;
 	for (const FHGPlacedFurniture& Item : GI->GetShopLayout())
 	{
-		if (Item.Class && Item.Class->IsChildOf(AHGFurniture::StaticClass()))
-		{
-			Restored += SpawnFurniture(Item.Class.Get(), Item.Location, Item.Yaw) ? 1 : 0;
-		}
+		Restored += SpawnFurniture(Item.FurnitureId, Item.Location, Item.Yaw) ? 1 : 0;
 	}
 	UE_LOG(LogHuoguo, Log, TEXT("가구 배치: 기록에서 %d개를 다시 놓음 (맵의 처음 가구 %d개는 치움)"), Restored, MapFurniture.Num());
 }
 
-void UHGFurniturePlacer::SnapMapFurnitureToGrid()
+void UHGFurniturePlacer::ReplaceMapFurniture()
 {
-	// 맵 에셋의 가구는 칸 배치 이전의 자유 좌표에 놓여 있다. 맵을 고치지 않고 실행할 때 가장 가까운 칸으로 옮긴다.
-	// 식탁 같은 일반 가구를 먼저 맞추고, 의자(bFacesTable)는 식탁이 자리 잡은 뒤에 맞춰서 식탁 쪽으로 돌린다.
-	TArray<AHGFurniture*> First;
-	TArray<AHGFurniture*> Second;
+	// 맵 에셋의 가구(AHGTable, AHGChair 액터)는 칸 배치와 데이터 이전에 놓였다. 맵을 고치지 않고, 실행할 때
+	// ID와 자리만 읽어 지우고 데이터로 다시 만든다. 맵에서 불러온 액터는 생성 스크립트가 다시 돌지 않아 부품이 없을 수 있기 때문이다.
+	struct FMapItem
+	{
+		FName Id;
+		FVector Location;
+		float Yaw;
+	};
+	TArray<FMapItem> First;
+	TArray<FMapItem> Second;
+	TArray<AHGFurniture*> MapActors;
 	for (TActorIterator<AHGFurniture> It(GetWorld()); It; ++It)
 	{
-		(It->bFacesTable ? Second : First).Add(*It);
+		const FHGFurnitureRow* Row = HGFurnitureData::FindRow(It->FurnitureId);
+		const FMapItem Item{ It->FurnitureId, It->GetActorLocation(), It->GetActorRotation().Yaw };
+		// 식탁 같은 일반 가구를 먼저 놓고, 의자는 식탁이 자리 잡은 뒤에 놓아서 식탁 쪽으로 돌린다.
+		(Row && Row->Category == EHGFurnitureCategory::Chair ? Second : First).Add(Item);
+		MapActors.Add(*It);
+	}
+	for (AHGFurniture* Actor : MapActors)
+	{
+		Actor->Destroy();
 	}
 
 	TArray<FHGGridItem> Placed;
-	int32 Moved = 0;
-	int32 Removed = 0;
-	auto SnapOne = [&](AHGFurniture* Furniture)
+	int32 Made = 0;
+	int32 Skipped = 0;
+	auto PlaceOne = [&](const FMapItem& Item)
 	{
-		float Yaw = SnapYaw(Furniture->GetActorRotation().Yaw);
-		FIntRect Rect = Grid.SnapRect(Furniture->GetActorLocation(), FHGShopGrid::RotateSize(Furniture->Footprint, Yaw));
-		if (Furniture->bFacesTable)
+		const FHGFurnitureRow* Row = HGFurnitureData::FindRow(Item.Id);
+		if (!Row)
+		{
+			UE_LOG(LogHuoguo, Warning, TEXT("가구 배치: 맵의 가구 ID '%s'가 가구 데이터에 없어 놓지 않음"), *Item.Id.ToString());
+			++Skipped;
+			return;
+		}
+		float Yaw = SnapYaw(Item.Yaw);
+		const FIntRect Rect = Grid.SnapRect(Item.Location, FHGShopGrid::RotateSize(Row->GetFootprint(), Yaw));
+		if (Row->Category == EHGFurnitureCategory::Chair)
 		{
 			Yaw = FaceTableYaw(Rect, Placed, Yaw);
 		}
-		const FVector OldLocation = Furniture->GetActorLocation();
-		Furniture->SetActorLocationAndRotation(Grid.RectCenter(Rect), FRotator(0.f, Yaw, 0.f));
-		if (!CheckPlacement(Furniture, Rect, Placed))
+		AHGFurniture* Furniture = SpawnFurniture(Item.Id, Grid.RectCenter(Rect), Yaw);
+		if (!Furniture || !CheckPlacement(Furniture, Rect, Placed))
 		{
-			UE_LOG(LogHuoguo, Warning, TEXT("가구 배치: 맵의 %s (%.0f, %.0f)를 칸에 맞출 수 없어 치움 (%s)"),
-				*Furniture->DisplayName.ToString(), OldLocation.X, OldLocation.Y, *LastRejectReason);
-			Furniture->Destroy();
-			++Removed;
+			UE_LOG(LogHuoguo, Warning, TEXT("가구 배치: 맵의 %s (%.0f, %.0f)를 칸에 맞출 수 없어 놓지 않음 (%s)"),
+				*Item.Id.ToString(), Item.Location.X, Item.Location.Y, *LastRejectReason);
+			if (Furniture)
+			{
+				Furniture->Destroy();
+			}
+			++Skipped;
 			return;
 		}
-		FHGGridItem& Item = Placed.AddDefaulted_GetRef();
-		Item.Actor = Furniture;
-		Item.Id = Furniture->FurnitureId;
-		Item.Rect = Rect;
-		++Moved;
+		FHGGridItem& Added = Placed.AddDefaulted_GetRef();
+		Added.Actor = Furniture;
+		Added.Id = Item.Id;
+		Added.Category = Row->Category;
+		Added.Tags = Furniture->GetTags();
+		Added.Rect = Rect;
+		++Made;
 	};
-	for (AHGFurniture* Furniture : First)
+	for (const FMapItem& Item : First)
 	{
-		SnapOne(Furniture);
+		PlaceOne(Item);
 	}
-	for (AHGFurniture* Furniture : Second)
+	for (const FMapItem& Item : Second)
 	{
-		SnapOne(Furniture);
+		PlaceOne(Item);
 	}
-	UE_LOG(LogHuoguo, Log, TEXT("가구 배치: 맵의 가구 %d개를 칸에 맞춤, %d개는 치움"), Moved, Removed);
+	UE_LOG(LogHuoguo, Log, TEXT("가구 배치: 맵의 가구 %d개를 데이터로 다시 만들어 칸에 맞춤, %d개는 놓지 않음"), Made, Skipped);
 }
 
 void UHGFurniturePlacer::SaveLayout() const
@@ -176,23 +309,44 @@ void UHGFurniturePlacer::SaveLayout() const
 			continue;
 		}
 		FHGPlacedFurniture& Item = Layout.AddDefaulted_GetRef();
-		Item.Class = It->GetClass();
+		Item.FurnitureId = It->FurnitureId;
 		Item.Location = It->GetActorLocation();
 		Item.Yaw = It->GetActorRotation().Yaw;
 	}
 	GI->SetShopLayout(Layout);
 }
 
-AHGFurniture* UHGFurniturePlacer::SpawnFurniture(TSubclassOf<AHGFurniture> Class, const FVector& Location, float Yaw) const
+AHGFurniture* UHGFurniturePlacer::SpawnFurniture(FName FurnitureId, const FVector& Location, float Yaw, bool bGhost) const
 {
-	if (!Class)
+	const FHGFurnitureRow* Row = HGFurnitureData::FindRow(FurnitureId);
+	if (!Row)
 	{
 		return nullptr;
 	}
-	// 자리 검사는 이미 CheckPlacement에서 끝냈다. 엔진의 스폰 충돌 처리가 위치를 몰래 옮기지 않도록 항상 그 자리에 만든다.
-	FActorSpawnParameters Params;
-	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	return GetWorld()->SpawnActor<AHGFurniture>(Class, Location, FRotator(0.f, Yaw, 0.f), Params);
+	// 행에 블루프린트 클래스가 있으면 그것, 없으면 기본 가구 클래스.
+	UClass* Class = Row->ActorClass.IsNull() ? nullptr : Row->ActorClass.LoadSynchronous();
+	if (!Class)
+	{
+		Class = AHGFurniture::StaticClass();
+	}
+
+	// 미뤄서 스폰하고, 스폰을 끝내기(FinishSpawning = 생성 스크립트 실행) 전에 ID를 정한다. 생성 스크립트가 그 ID의 행으로 부품을 만든다.
+	// 유령이면 그 전에 유령으로 표시해서 부품이 처음부터 유령 충돌로 만들어진다 (충돌이 켜진 상태로 한 프레임도 존재하지 않는다).
+	// 자리 검사는 따로 한다. 엔진의 스폰 충돌 처리가 위치를 몰래 옮기지 않도록 항상 그 자리에 만든다.
+	const FTransform Transform(FRotator(0.f, Yaw, 0.f), Location);
+	AHGFurniture* Furniture = GetWorld()->SpawnActorDeferred<AHGFurniture>(Class, Transform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	if (!Furniture)
+	{
+		return nullptr;
+	}
+	Furniture->FurnitureId = FurnitureId;
+	if (bGhost)
+	{
+		Furniture->MakeGhost();
+		Furniture->SetActorHiddenInGame(true);
+	}
+	Furniture->FinishSpawning(Transform);
+	return Furniture;
 }
 
 // ---------------------------------------------------------------------------
@@ -205,6 +359,7 @@ void UHGFurniturePlacer::BeginBuild()
 	{
 		return;
 	}
+	GetCatalog();
 	bBuilding = true;
 	ShowGridOverlay();
 	RespawnGhost();
@@ -225,21 +380,6 @@ void UHGFurniturePlacer::EndBuild()
 	bBuilding = false;
 }
 
-bool UHGFurniturePlacer::SelectCatalog(int32 Index)
-{
-	if (!Catalog.IsValidIndex(Index) || !Catalog[Index])
-	{
-		return false;
-	}
-	CancelMove();
-	CatalogIndex = Index;
-	if (bBuilding)
-	{
-		RespawnGhost();
-	}
-	return true;
-}
-
 void UHGFurniturePlacer::RotateHeld(float Degrees)
 {
 	HeldYaw = SnapYaw(HeldYaw + Degrees);
@@ -250,21 +390,10 @@ void UHGFurniturePlacer::RotateHeld(float Degrees)
 void UHGFurniturePlacer::RespawnGhost()
 {
 	DestroyGhost();
-	const TSubclassOf<AHGFurniture> Class = GetHeldClass();
-	if (!Class)
-	{
-		return;
-	}
-
-	// 미뤄서 스폰(SpawnActorDeferred)하고, 스폰을 끝내기(FinishSpawning) 전에 유령으로 바꾼다.
-	// 그래야 충돌이 켜진 실제 가구 상태로 한 프레임도 존재하지 않는다. 처음에는 숨겨 두고 커서 위치가 정해지면 보인다.
-	const FTransform SpawnTransform(FRotator(0.f, HeldYaw, 0.f), FVector(0.f, 0.f, Grid.FloorZ));
-	Ghost = GetWorld()->SpawnActorDeferred<AHGFurniture>(Class, SpawnTransform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	// 처음에는 숨겨 두고 커서 위치가 정해지면 보인다.
+	Ghost = SpawnFurniture(GetHeldId(), FVector(0.f, 0.f, Grid.FloorZ), HeldYaw, true);
 	if (Ghost)
 	{
-		Ghost->MakeGhost();
-		Ghost->SetActorHiddenInGame(true);
-		Ghost->FinishSpawning(SpawnTransform);
 		Ghost->SetPreviewState(EHGFurniturePreview::Invalid);
 	}
 	bGhostValid = false;
@@ -303,9 +432,9 @@ void UHGFurniturePlacer::CancelMove()
 	{
 		return;
 	}
-	SpawnFurniture(MovingClass, MovingFrom.GetLocation(), MovingFrom.Rotator().Yaw);
+	SpawnFurniture(MovingId, MovingFrom.GetLocation(), MovingFrom.Rotator().Yaw);
 	bMoving = false;
-	MovingClass = nullptr;
+	MovingId = NAME_None;
 	SaveLayout();
 	RefreshOccupiedCells();
 	if (bBuilding)
@@ -490,8 +619,8 @@ void UHGFurniturePlacer::UpdateCursor()
 
 	// 3. 빈 칸이면 손에 든 가구를 놓아 본다. 가리킨 칸이 가구의 첫 칸이 되고, 가구 크기만큼 칸을 차지한다.
 	float Yaw = HeldYaw;
-	const FIntRect Rect = Grid.CursorRect(Point, FHGShopGrid::RotateSize(Ghost->Footprint, Yaw));
-	if (Ghost->bFacesTable)
+	const FIntRect Rect = Grid.CursorRect(Point, FHGShopGrid::RotateSize(Ghost->GetFootprint(), Yaw));
+	if (Ghost->FacesTable())
 	{
 		Yaw = FaceTableYaw(Rect, Items, HeldYaw);
 	}
@@ -603,7 +732,7 @@ bool UHGFurniturePlacer::CheckPlacement(const AHGFurniture* Candidate, const FIn
 	{
 		if (Item.Actor.Get() != Candidate && FHGShopGrid::Overlaps(Item.Rect, Rect))
 		{
-			LastRejectReason = FString::Printf(TEXT("칸이 겹침: %s"), Item.Actor.IsValid() ? *Item.Actor->DisplayName.ToString() : *Item.Id.ToString());
+			LastRejectReason = FString::Printf(TEXT("칸이 겹침: %s"), Item.Actor.IsValid() ? *Item.Actor->GetDisplayName().ToString() : *Item.Id.ToString());
 			return false;
 		}
 	}
@@ -652,8 +781,13 @@ FString UHGFurniturePlacer::BuildPreviewText(FName Id, const FIntRect& Rect, con
 	FHGGridItem& GhostItem = With.AddDefaulted_GetRef();
 	GhostItem.Id = Id;
 	GhostItem.Rect = Rect;
+	if (Ghost)
+	{
+		GhostItem.Category = Ghost->GetCategory();
+		GhostItem.Tags = Ghost->GetTags();
+	}
 
-	if (Ghost && Ghost->IsA<AHGTable>())
+	if (Ghost && Ghost->IsTable())
 	{
 		// 식탁: 이 자리 둘레에 이미 있는 장식으로 생기는 콤보.
 		const FHGComboResult Result = HGCombo::EvaluateTable(Table, Rect, With);
@@ -702,10 +836,10 @@ FString UHGFurniturePlacer::Click()
 		AHGFurniture* Picked = Hovered;
 		SetHovered(nullptr);
 		bMoving = true;
-		MovingClass = Picked->GetClass();
+		MovingId = Picked->FurnitureId;
 		MovingFrom = Picked->GetActorTransform();
 		HeldYaw = SnapYaw(MovingFrom.Rotator().Yaw);
-		const FString Name = Picked->DisplayName.ToString();
+		const FString Name = Picked->GetDisplayName().ToString();
 		Picked->Destroy();
 		RefreshOccupiedCells();
 		RespawnGhost();
@@ -723,7 +857,7 @@ FString UHGFurniturePlacer::Click()
 	const FVector Location = Ghost->GetActorLocation();
 	const float Yaw = Ghost->GetActorRotation().Yaw;
 	const FIntRect Rect = HGShopGrid::GetFurnitureRect(Grid, Ghost);
-	AHGFurniture* Placed = SpawnFurniture(GetHeldClass(), Location, Yaw);
+	AHGFurniture* Placed = SpawnFurniture(GetHeldId(), Location, Yaw);
 	if (!Placed)
 	{
 		return TEXT("가구를 만들지 못했다");
@@ -731,13 +865,13 @@ FString UHGFurniturePlacer::Click()
 	if (bMoving)
 	{
 		bMoving = false;
-		MovingClass = nullptr;
+		MovingId = NAME_None;
 		RespawnGhost();
 	}
 	SaveLayout();
 	RefreshOccupiedCells();
 
-	FString Result = FString::Printf(TEXT("놓았다: %s (칸 %d,%d, 방향 %.0f)"), *Placed->DisplayName.ToString(), Rect.Min.X, Rect.Min.Y, Yaw);
+	FString Result = FString::Printf(TEXT("놓았다: %s (칸 %d,%d, 방향 %.0f)"), *Placed->GetDisplayName().ToString(), Rect.Min.X, Rect.Min.Y, Yaw);
 
 	// 이 가구가 닿는(또는 이 가구 자신인) 식탁에서 처음 만든 콤보를 기록하고 알린다.
 	UHGGameInstance* GI = GetWorld()->GetGameInstance<UHGGameInstance>();
@@ -789,7 +923,7 @@ FString UHGFurniturePlacer::RemoveOrCancel()
 	}
 	AHGFurniture* Target = Hovered;
 	SetHovered(nullptr);
-	const FString Name = Target->DisplayName.ToString();
+	const FString Name = Target->GetDisplayName().ToString();
 	Target->Destroy();
 	SaveLayout();
 	RefreshOccupiedCells();
@@ -812,10 +946,10 @@ FString UHGFurniturePlacer::DescribeLayout() const
 	for (int32 i = 0; i < Layout.Num(); ++i)
 	{
 		const FHGPlacedFurniture& Item = Layout[i];
-		const AHGFurniture* Default = Item.Class ? Cast<AHGFurniture>(Item.Class->GetDefaultObject()) : nullptr;
-		const FIntRect Rect = Default ? Grid.RectFromCenter(Item.Location, FHGShopGrid::RotateSize(Default->Footprint, Item.Yaw)) : FIntRect();
-		Text += FString::Printf(TEXT("\n  %d) %s (%.0f, %.0f) 칸 %d,%d~%d,%d 방향 %.0f"), i + 1,
-			Default ? *Default->DisplayName.ToString() : TEXT("?"), Item.Location.X, Item.Location.Y,
+		const FHGFurnitureRow* Row = HGFurnitureData::FindRow(Item.FurnitureId);
+		const FIntRect Rect = Row ? Grid.RectFromCenter(Item.Location, FHGShopGrid::RotateSize(Row->GetFootprint(), Item.Yaw)) : FIntRect();
+		Text += FString::Printf(TEXT("\n  %d) %s [%s] (%.0f, %.0f) 칸 %d,%d~%d,%d 방향 %.0f"), i + 1,
+			Row ? *Row->DisplayName.ToString() : TEXT("?"), *Item.FurnitureId.ToString(), Item.Location.X, Item.Location.Y,
 			Rect.Min.X, Rect.Min.Y, Rect.Max.X - 1, Rect.Max.Y - 1, Item.Yaw);
 	}
 	return Text;
@@ -833,5 +967,5 @@ FString UHGFurniturePlacer::DescribeCursor() const
 			bGhostValid ? TEXT("놓을 수 있음") : *FString::Printf(TEXT("놓을 수 없음(%s)"), *LastRejectReason))
 		: FString(TEXT("유령 숨김"));
 	return FString::Printf(TEXT("%s, 가리킨 가구 %s, 옮기는 중 %s, 미리보기 \"%s\""), *GhostText,
-		Hovered ? *Hovered->DisplayName.ToString() : TEXT("없음"), bMoving ? TEXT("예") : TEXT("아니오"), *PreviewText);
+		Hovered ? *Hovered->GetDisplayName().ToString() : TEXT("없음"), bMoving ? TEXT("예") : TEXT("아니오"), *PreviewText);
 }

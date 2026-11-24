@@ -7,7 +7,6 @@
 
 class AHGCustomer;
 class AHGFurniture;
-class AHGTable;
 class UHGFurniturePlacer;
 
 /**
@@ -82,7 +81,7 @@ private:
 	{
 		TWeakObjectPtr<AHGCustomer> Customer;
 		TWeakObjectPtr<AHGFurniture> Chair;
-		TWeakObjectPtr<AHGTable> Table;
+		TWeakObjectPtr<AHGFurniture> Table;
 		EVisitState State = EVisitState::ToSeat;
 		float Timer = 0.f;
 	};

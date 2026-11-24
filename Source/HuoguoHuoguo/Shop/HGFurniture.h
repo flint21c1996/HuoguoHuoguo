@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Shop/HGFurnitureData.h"
 #include "HGFurniture.generated.h"
 
 class UStaticMesh;
@@ -18,21 +19,20 @@ enum class EHGFurniturePreview : uint8
 };
 
 /**
- * 경영 파트에서 사장님이 배치하는 가구의 공통 부모.
+ * 경영 파트에서 사장님이 배치하는 가구. 모든 가구가 이 클래스 하나다.
  *
- * 외형은 엔진 기본 도형을 조합한 "부품"으로 만든다. 하위 클래스가 생성자에서 AddPart로 부품을 붙인다.
- * 나중에 아트 메시가 생기면 이 클래스를 상속한 블루프린트(BP_Table 등)에서 메시만 바꾸면 된다.
- *
- * 배치는 칸(그리드) 단위다 (FHGShopGrid). 가구마다 차지하는 칸 수 Footprint가 있고, 가구끼리는 칸이 겹치면 안 된다.
- * 벽, 카운터, 사장님과의 겹침은 부품의 실제 충돌 모양으로 따로 검사한다.
- * 가구 종류 ID(FurnitureId)는 콤보 규칙(Data/Combos.csv의 Needs 열)이 가리키는 이름이다.
+ * 무슨 가구인지는 데이터가 정한다: FurnitureId = `Data/Furniture.csv`(DT_Furniture)의 행 이름.
+ * OnConstruction(에디터에 놓을 때, 실행 중 스폰할 때)이 그 행을 읽어
+ *   - 이름, 분류(식탁/의자/장식), 칸 크기, 보너스, 꼬리표를 액터에 담고
+ *   - 분류 + Style(+ 식탁은 Pot)로 엔진 기본 도형을 조합해 생김새를 만든다 (BuildParts).
+ * 그래서 새 가구는 CSV에 한 줄을 더하면 생긴다. 블루프린트 아트가 생기면 행의 ActorClass로 바꾼다.
  *
  * 가구 하나가 같은 클래스로 두 가지 역할을 한다.
- *   - 실제 가구: 부품이 BlockAll로 사장님과 손님을 막는다.
+ *   - 실제 가구: 충돌 부품이 BlockAll로 사장님을 막는다.
  *   - 유령(미리보기): 배치 모드에서 커서를 따라다니며 초록/빨강으로 칠해지는 사본.
  *     충돌은 "질의 전용 + 모든 채널 겹침"이라서 아무것도 막지 않지만, 충돌 모양은 남아 있어 겹침 검사에 쓸 수 있다.
  */
-UCLASS(Abstract)
+UCLASS()
 class HUOGUOHUOGUO_API AHGFurniture : public AActor
 {
 	GENERATED_BODY()
@@ -40,23 +40,27 @@ class HUOGUOHUOGUO_API AHGFurniture : public AActor
 public:
 	AHGFurniture();
 
-	// 화면 안내와 메시지에 쓰는 이름 ("식탁", "의자").
-	UPROPERTY(EditDefaultsOnly, Category = "Furniture")
-	FText DisplayName;
-
-	// 가구 종류 ID ("Table", "Chair", "Planter", "Lantern"). 콤보 규칙이 이 이름으로 가구를 가리킨다.
-	UPROPERTY(EditDefaultsOnly, Category = "Furniture")
+	// 가구 종류 (DT_Furniture 행 이름). 맵에 놓은 가구는 에디터 디테일 패널에서 목록으로 고른다.
+	UPROPERTY(EditAnywhere, Category = "Furniture", meta = (GetOptions = "GetFurnitureIdOptions"))
 	FName FurnitureId;
 
-	// 차지하는 칸 수 (회전 0도 기준, X = 액터 앞쪽 방향). 가구 원점(가운데)은 이 칸 사각형의 가운데에 온다.
-	UPROPERTY(EditDefaultsOnly, Category = "Furniture")
-	FIntPoint Footprint = FIntPoint(1, 1);
+	UFUNCTION()
+	TArray<FName> GetFurnitureIdOptions() const;
+
+	// 데이터에서 읽은 값. 행을 찾지 못했으면 기본값(1x1 장식, 이름 = ID).
+	bool HasData() const { return bHasData; }
+	const FHGFurnitureRow& GetData() const { return Data; }
+	FText GetDisplayName() const;
+	EHGFurnitureCategory GetCategory() const { return Data.Category; }
+	bool IsTable() const { return Data.Category == EHGFurnitureCategory::Table; }
+	bool IsChair() const { return Data.Category == EHGFurnitureCategory::Chair; }
+	FIntPoint GetFootprint() const { return Data.GetFootprint(); }
+	const TArray<FName>& GetTags() const { return Tags; }
 
 	// 놓을 때 바로 옆(상하좌우) 식탁 쪽으로 저절로 돌아앉는다 (의자).
-	UPROPERTY(EditDefaultsOnly, Category = "Furniture")
-	bool bFacesTable = false;
+	bool FacesTable() const { return IsChair(); }
 
-	// 유령으로 바꾼다. 스폰 직후(FinishSpawning 전)에 불러야 한 프레임도 사장님을 막지 않는다.
+	// 유령으로 바꾼다. SpawnActorDeferred 뒤 FinishSpawning 전에 부르면 부품이 처음부터 유령 충돌로 만들어진다.
 	void MakeGhost();
 	bool IsGhost() const { return bGhost; }
 
@@ -66,31 +70,51 @@ public:
 	// 충돌이 있는 부품들. 배치 검사가 이 부품들의 충돌 모양으로 겹침을 확인한다.
 	void GetCollidingParts(TArray<UStaticMeshComponent*>& OutParts) const;
 
+	// 냄비 위 김을 켜고 끈다 (식탁만 김 부품이 있다). 켤 때 색을 정한다.
+	void SetSteam(bool bOn, const FLinearColor& Color = FLinearColor::White);
+
 protected:
-	// 에디터에 배치했을 때와 실행 중 스폰했을 때 모두 불린다. 여기서 부품 색을 칠한다 (생성자에서는 동적 머티리얼을 만들 수 없다).
+	// 행을 읽어 데이터를 담고 부품을 새로 만든다. 에디터에서 옮기거나 ID를 바꿀 때마다 다시 불린다.
 	virtual void OnConstruction(const FTransform& Transform) override;
 
+	// 분류와 Style로 기본 도형 부품을 만든다. 크기는 칸 수(Footprint)에 맞춘다.
+	virtual void BuildParts();
+
 	/**
-	 * 생성자에서 부품 하나를 붙인다. 엔진 기본 도형은 1m(100유닛) 크기이고 중심이 원점이므로
-	 * Location은 부품 중심의 위치(액터 원점 = 바닥 위 가구 중심), Scale 1 = 1m다.
-	 * bCollide가 false면 장식(냄비 등)이라 충돌도 배치 검사도 하지 않는다.
+	 * 부품 하나를 붙인다 (실행 중 생성, 맵에 저장되지 않음). Shape = "Cube", "Cylinder", "Sphere".
+	 * 엔진 기본 도형은 1m(100유닛) 크기이고 중심이 원점이므로, Location은 부품 중심(액터 원점 = 바닥 위 가구 가운데), Scale 1 = 1m.
+	 * bCollide가 false면 장식(냄비, 김 등)이라 충돌도 배치 검사도 하지 않는다.
 	 */
-	UStaticMeshComponent* AddPart(FName Name, UStaticMesh* Mesh, const FVector& Location, const FVector& Scale, const FLinearColor& Color, bool bCollide = true);
+	UStaticMeshComponent* AddPart(const TCHAR* Shape, const FVector& Location, const FVector& Scale, const FLinearColor& Color,
+		bool bCollide = true, const FRotator& Rotation = FRotator::ZeroRotator);
 
 	// 부품 하나의 원래 색을 바꾼다 (식탁 김 색 등). 미리보기 중이면 미리보기가 끝난 뒤에 보인다.
 	void SetPartColor(UStaticMeshComponent* Part, const FLinearColor& Color);
-
-	// 엔진 기본 도형을 불러온다 (생성자 안에서만 부를 수 있다). Shape = "Cube", "Cylinder", "Sphere".
-	static UStaticMesh* LoadBasicShape(const TCHAR* Shape);
 
 	UPROPERTY(VisibleAnywhere, Category = "Furniture")
 	TObjectPtr<USceneComponent> Root;
 
 private:
-	// Transient: 맵에 저장하지 않는다. 맵에 저장된 가구를 불러오면 생성자가 만든 부품 목록이 맵에 저장된 옛 목록으로
-	// 덮어써져서, 나중에 추가한 부품(식탁 김 등)이 목록에서 빠지고 색이 칠해지지 않은 적이 있다.
+	// 분류별 생김새.
+	void BuildTable(const FLinearColor& A, const FLinearColor& B);
+	void BuildPot(float PotSize, const FLinearColor& PotColor);
+	void BuildChair(const FLinearColor& A, const FLinearColor& B);
+	void BuildDecor(const FLinearColor& A, const FLinearColor& B);
+
+	// 만든 부품을 모두 없앤다 (다시 만들기 전).
+	void ClearParts();
+
+	UPROPERTY(Transient)
+	FHGFurnitureRow Data;
+
+	bool bHasData = false;
+	TArray<FName> Tags;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UStaticMeshComponent>> Parts;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UStaticMeshComponent>> SteamParts;
 
 	// 부품마다의 원래 색과 충돌 여부. Parts와 같은 순서다.
 	TArray<FLinearColor> PartColors;
@@ -101,12 +125,15 @@ private:
 
 	// 지금 상태(원래 색 / 미리보기 색)로 모든 부품을 다시 칠한다.
 	void Repaint();
+
+	// 부품 충돌을 지금 상태(실제 / 유령)에 맞춘다.
+	void ApplyCollision(UStaticMeshComponent* Part, bool bCollide) const;
 };
 
 /**
- * 식탁: 둥근 상판, 가운데 다리, 바닥 받침, 상판 위 훠궈 냄비(장식). 2x2칸.
- * 지름 1.56m, 상판 높이 0.78m. 이 식탁을 바라보는 바로 옆 칸의 의자가 이 식탁의 자리다.
- * 냄비 위 김(구 세 개)은 손님이 먹는 동안만 보이고, 색이 식탁 상태(콤보 수)를 보여 준다.
+ * 맵 에셋(L_Station)에 이미 놓여 있는 식탁/의자 액터의 클래스. 새로 쓰지 않는다.
+ * 칸 배치 이전에 이 클래스로 맵에 놓았기 때문에 맵을 불러오려면 남아 있어야 한다. 기본 ID만 다르다.
+ * 게임을 시작하면 경영 파트가 이 액터들을 ID와 자리만 읽고 AHGFurniture로 다시 만든다.
  */
 UCLASS()
 class HUOGUOHUOGUO_API AHGTable : public AHGFurniture
@@ -115,19 +142,8 @@ class HUOGUOHUOGUO_API AHGTable : public AHGFurniture
 
 public:
 	AHGTable();
-
-	// 김을 켜고 끈다. 켤 때 색을 정한다.
-	void SetSteam(bool bOn, const FLinearColor& Color = FLinearColor::White);
-
-private:
-	UPROPERTY(Transient)
-	TArray<TObjectPtr<UStaticMeshComponent>> SteamParts;
 };
 
-/**
- * 의자: 둥근 좌석과 등받이. 1x1칸. 앞쪽(액터의 +X)이 손님이 바라보는 방향이고 등받이는 -X 쪽에 있다.
- * 식탁 바로 옆 칸에 놓으면 저절로 식탁을 보게 돌아간다.
- */
 UCLASS()
 class HUOGUOHUOGUO_API AHGChair : public AHGFurniture
 {
@@ -135,37 +151,4 @@ class HUOGUOHUOGUO_API AHGChair : public AHGFurniture
 
 public:
 	AHGChair();
-};
-
-/** 화분 (장식, 1x1칸). 식탁 둘레에 두면 콤보 재료가 된다. */
-UCLASS()
-class HUOGUOHUOGUO_API AHGPlanter : public AHGFurniture
-{
-	GENERATED_BODY()
-
-public:
-	AHGPlanter();
-};
-
-/**
- * 소스 바 (2x1칸). 훠궈 손님이 찍어 먹을 소스 그릇 셋을 올린 긴 바. 식탁 둘레에 두면 콤보 재료가 된다.
- * 회전 0도에서 액터 앞쪽(X)으로 2칸, 옆(Y)으로 1칸. R로 돌리면 세로로 2칸이 된다.
- */
-UCLASS()
-class HUOGUOHUOGUO_API AHGSauceBar : public AHGFurniture
-{
-	GENERATED_BODY()
-
-public:
-	AHGSauceBar();
-};
-
-/** 등불 (장식, 1x1칸). 식탁 둘레에 두면 콤보 재료가 된다. */
-UCLASS()
-class HUOGUOHUOGUO_API AHGLantern : public AHGFurniture
-{
-	GENERATED_BODY()
-
-public:
-	AHGLantern();
 };
