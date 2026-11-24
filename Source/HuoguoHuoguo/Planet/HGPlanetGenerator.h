@@ -157,6 +157,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Planet|Mood")
 	bool bSkyClouds = false;
 
+	// 그림체: 외계 식물의 빛나는 끝(구슬, 관 끝, 덩굴 끝)이 스스로 빛나는 세기 (발광 머티리얼 Glow).
+	UPROPERTY(EditAnywhere, Category = "Planet|Mood")
+	float FloraGlow = 1.5f;
+
 	// 그림체: 구름이 스스로 빛나는 세기 (발광 머티리얼 Glow).
 	UPROPERTY(EditAnywhere, Category = "Planet|Mood")
 	float CloudGlow = 0.6f;

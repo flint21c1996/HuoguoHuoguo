@@ -370,67 +370,139 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 		PlaceTree(RandomDirAway());
 	}
 
-	// 3. 풀과 꽃: 착륙 지점 둘레 25m는 1m²당 3포기, 25~45m는 1포기, 나머지는 10m²당 1포기.
+	// 3. 외계 식물: 지구 풀잎/데이지 대신 낯선 모양 다섯 가지 (사용자 의견: "풀이 너무 지구스럽다").
+	//    끝이 스스로 빛나는 것(발광 머티리얼)이 많아서 낮에도 "다른 별의 생물" 느낌을 준다.
+	//    한 포기가 예전 풀보다 커서(칸이 많아서) 밀도는 낮춘다: 착륙 지점 둘레 25m는 1m²당 1.2포기, 25~45m는 0.4포기, 나머지는 25m²당 1포기.
 	const float FloraVoxel = 8.f;
 	auto CapArea = [R](double Angle) { return 2.0 * UE_PI * R * R * (1.0 - FMath::Cos(Angle)) / 10000.0; };
 	const double Inner = 2500.0 / R;
 	const double Outer = 4500.0 / R;
-	const int32 InnerCount = FMath::Clamp(FMath::RoundToInt(CapArea(Inner) * 3.0), 0, 9000);
-	const int32 RingCount = FMath::Clamp(FMath::RoundToInt(CapArea(Outer) - CapArea(Inner)), 0, 6000);
-	const int32 FarCount = FMath::Clamp(FMath::RoundToInt((AreaM2 - CapArea(Outer)) / 10.0), 0, 12000);
+	const int32 InnerCount = FMath::Clamp(FMath::RoundToInt(CapArea(Inner) * 1.2), 0, 4000);
+	const int32 RingCount = FMath::Clamp(FMath::RoundToInt((CapArea(Outer) - CapArea(Inner)) * 0.4), 0, 3000);
+	const int32 FarCount = FMath::Clamp(FMath::RoundToInt((AreaM2 - CapArea(Outer)) / 25.0), 0, 6000);
 	auto PlaceTuft = [&](const FVector& Dir)
 	{
 		const FTransform Frame = SurfaceFrame(Dir, Rng.FRandRange(0.f, UE_TWO_PI), -2.f);
 		const float Kind = Rng.FRand();
 		const uint32 H = Rng.GetCurrentSeed();
-		if (Kind < 0.7f)
+		// 네 포기 중 하나는 칸을 1.5배로 키워 크기를 섞는다.
+		const float V = Rng.FRand() < 0.25f ? FloraVoxel * 1.5f : FloraVoxel;
+		const FLinearColor Stem = Pal.Grass[Rng.RandRange(0, 1)];
+		const FLinearColor Tip = Pal.Flower[Rng.RandRange(0, 1)];
+		// 칸 좌표(X, Y, Z)에 칸 하나. Z = 0이 땅에 닿는 칸.
+		auto Put = [&](int32 X, int32 Y, int32 Z, const FLinearColor& Color, bool bGlow = false)
 		{
-			// 풀잎: 1~3포기, 2~4칸 높이.
-			const int32 Blades = Rng.RandRange(1, 3);
-			for (int32 b = 0; b < Blades; ++b)
+			AddVoxel(Frame, FVector(X * V, Y * V, (Z + 0.5f) * V), V, Color, false, bGlow);
+		};
+
+		if (Kind < 0.3f)
+		{
+			// 등불 식물: 휘어 오르는 가는 줄기(3~7칸) 끝에 빛나는 둥근 구슬 (3x3x3에서 모서리 8칸을 뺀 모양).
+			const int32 Height = Rng.RandRange(3, 7);
+			const float Curve = Rng.FRandRange(-2.f, 2.f);
+			int32 X = 0;
+			for (int32 z = 0; z < Height; ++z)
 			{
-				const FVector Base(Rng.RandRange(-1, 1) * FloraVoxel, Rng.RandRange(-1, 1) * FloraVoxel, 0.f);
-				const FLinearColor Color = ShadeOf(Pal.Grass[Rng.RandRange(0, 1)], H + b);
-				const int32 Height = Rng.RandRange(2, 4);
-				for (int32 z = 0; z < Height; ++z)
+				X = FMath::RoundToInt(Curve * FMath::Square(static_cast<float>(z) / Height));
+				Put(X, 0, z, ShadeOf(Stem, H + z));
+			}
+			for (int32 dx = -1; dx <= 1; ++dx)
+			{
+				for (int32 dy = -1; dy <= 1; ++dy)
 				{
-					AddVoxel(Frame, Base + FVector(0.f, 0.f, (z + 0.5f) * FloraVoxel), FloraVoxel, Color, false);
+					for (int32 dz = -1; dz <= 1; ++dz)
+					{
+						if (FMath::Abs(dx) + FMath::Abs(dy) + FMath::Abs(dz) < 3)
+						{
+							Put(X + dx, dy, Height + 1 + dz, Tip, true);
+						}
+					}
 				}
 			}
 		}
-		else if (Kind < 0.92f)
+		else if (Kind < 0.55f)
 		{
-			// 꽃: 줄기 2~3칸 + 십자 모양 꽃송이.
-			const int32 Stem = Rng.RandRange(2, 3);
-			for (int32 z = 0; z < Stem; ++z)
+			// 관 산호: 높이가 다른 관 3~5개가 모여 서고, 관 끝마다 빛나는 칸 하나.
+			const int32 Tubes = Rng.RandRange(3, 5);
+			for (int32 t = 0; t < Tubes; ++t)
 			{
-				AddVoxel(Frame, FVector(0.f, 0.f, (z + 0.5f) * FloraVoxel), FloraVoxel, Pal.Grass[1], false);
+				const int32 OX = Rng.RandRange(-2, 2);
+				const int32 OY = Rng.RandRange(-2, 2);
+				const int32 Height = Rng.RandRange(2, 6);
+				for (int32 z = 0; z < Height; ++z)
+				{
+					Put(OX, OY, z, ShadeOf(Stem, H + t * 7 + z));
+				}
+				Put(OX, OY, Height, Tip, true);
 			}
-			const FLinearColor Petal = Pal.Flower[Rng.RandRange(0, 1)];
-			const float Top = (Stem + 0.5f) * FloraVoxel;
-			for (const FVector& Off : { FVector(0, 0, 0), FVector(1, 0, 0), FVector(-1, 0, 0), FVector(0, 1, 0), FVector(0, -1, 0) })
+		}
+		else if (Kind < 0.75f)
+		{
+			// 나선 덩굴: 위로 갈수록 좁아지는 나선을 그리며 오르고, 위 절반은 끝 색에 가깝게, 맨 끝은 빛난다.
+			const int32 Height = Rng.RandRange(6, 10);
+			const float Phase = Rng.FRandRange(0.f, UE_TWO_PI);
+			const float Turn = Rng.FRand() < 0.5f ? 0.7f : -0.7f;
+			const FLinearColor Upper = FMath::Lerp(Stem, Tip, 0.5f);
+			for (int32 z = 0; z <= Height; ++z)
 			{
-				AddVoxel(Frame, FVector(Off.X * FloraVoxel, Off.Y * FloraVoxel, Top), FloraVoxel, Off.IsZero() ? FLinearColor(1.f, 0.9f, 0.3f) : Petal, false);
+				const float A = Phase + Turn * z;
+				const float Rad = 1.6f * (1.f - 0.5f * z / Height);
+				const int32 X = FMath::RoundToInt(FMath::Cos(A) * Rad);
+				const int32 Y = FMath::RoundToInt(FMath::Sin(A) * Rad);
+				if (z == Height)
+				{
+					Put(X, Y, z, Tip, true);
+				}
+				else
+				{
+					Put(X, Y, z, ShadeOf(z < Height / 2 ? Stem : Upper, H + z));
+				}
+			}
+		}
+		else if (Kind < 0.9f)
+		{
+			// 가시 꼬투리: 둥근 몸통(3x3x3, 모서리 뺌)에 사방과 위로 가시가 돋는다. 그림자를 드리운다.
+			for (int32 dx = -1; dx <= 1; ++dx)
+			{
+				for (int32 dy = -1; dy <= 1; ++dy)
+				{
+					for (int32 dz = 0; dz <= 2; ++dz)
+					{
+						if (FMath::Abs(dx) + FMath::Abs(dy) + FMath::Abs(dz - 1) < 3)
+						{
+							AddVoxel(Frame, FVector(dx * V, dy * V, (dz + 0.5f) * V), V, ShadeOf(Pal.Shrub, H + dx * 7 + dy * 13 + dz), true);
+						}
+					}
+				}
+			}
+			const int32 Spike = Rng.RandRange(1, 2);
+			for (int32 s = 1; s <= Spike; ++s)
+			{
+				Put(1 + s, 0, 1, Tip);
+				Put(-1 - s, 0, 1, Tip);
+				Put(0, 1 + s, 1, Tip);
+				Put(0, -1 - s, 1, Tip);
+				Put(0, 0, 2 + s, Tip);
 			}
 		}
 		else
 		{
-			// 덤불: 3x3x2 덩어리 (칸 16cm), 위쪽 모서리는 비운다.
-			for (int32 x = -1; x <= 1; ++x)
+			// 갈래 식물: 짧은 줄기에서 양쪽과 가운데로 갈라져 비스듬히 오르고, 가지 끝 셋이 빛난다 (사슴뿔 / 부채 모양).
+			Put(0, 0, 0, ShadeOf(Stem, H));
+			Put(0, 0, 1, ShadeOf(Stem, H + 1));
+			for (int32 Side = -1; Side <= 1; Side += 2)
 			{
-				for (int32 y = -1; y <= 1; ++y)
+				for (int32 Step = 1; Step <= 3; ++Step)
 				{
-					for (int32 z = 0; z < 2; ++z)
-					{
-						if (z == 1 && FMath::Abs(x) + FMath::Abs(y) == 2)
-						{
-							continue;
-						}
-						AddVoxel(Frame, FVector(x * 2.f * FloraVoxel, y * 2.f * FloraVoxel, (z + 0.5f) * 2.f * FloraVoxel), FloraVoxel * 2.f,
-							ShadeOf(Pal.Shrub, H + x * 7 + y * 13 + z), true);
-					}
+					Put(Side * Step, 0, 1 + Step, ShadeOf(Stem, H + Step));
 				}
+				Put(Side * 4, 0, 5, Tip, true);
 			}
+			for (int32 z = 2; z <= 4; ++z)
+			{
+				Put(0, 0, z, ShadeOf(Stem, H + z));
+			}
+			Put(0, 0, 5, Tip, true);
 		}
 	};
 	for (int32 i = 0; i < InnerCount; ++i)
@@ -663,7 +735,7 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 		Ism->AddInstances(Batch.Value, false, false);
 		if (BatchGlow[Batch.Key])
 		{
-			HGVoxel::PaintGlow(Ism, BatchColor[Batch.Key], CloudGlow);
+			HGVoxel::PaintGlow(Ism, BatchColor[Batch.Key], FloraGlow);
 		}
 		else
 		{
