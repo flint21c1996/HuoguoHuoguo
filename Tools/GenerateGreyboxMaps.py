@@ -86,6 +86,7 @@ def ensure_materials():
     return materials
 
 
+
 # ---------------------------------------------------------------------------
 # 맵 생성과 배치 도우미
 # ---------------------------------------------------------------------------
@@ -149,6 +150,35 @@ def add_lighting():
     sky_comp.set_intensity(1.2)
 
 
+# 정거장 노출(EV100, 프로젝트의 "확장 휘도 범위" 기준, 클수록 어둡다). 자동 노출을 두면 멀리 줌아웃했을 때
+# 화면 대부분이 어두운 우주가 되어 카메라가 밝기를 끌어올리고 가게가 하얗게 날아간다. 그래서 고정한다.
+STATION_EXPOSURE_EV = 2.0
+
+
+def ensure_fixed_exposure(label_name, ev):
+    """맵 전체(Unbound)에 노출을 고정하는 포스트 프로세스 볼륨을 둔다. 바뀐 것이 있으면 True.
+
+    볼륨이 없을 때만 만들고 값을 넣는다. 이미 있으면 사람이 에디터에서 고친 값을 존중해 건드리지 않는다.
+    예외: 환경 변수 HG_STATION_EXPOSURE가 있으면 그 값으로 덮어쓴다 (값을 맞춰 볼 때 쓰는 도구).
+    """
+    override = os.environ.get("HG_STATION_EXPOSURE", "")
+    existing = [a for a in actor_sub.get_all_level_actors()
+                if isinstance(a, unreal.PostProcessVolume) and a.get_actor_label() == label_name]
+    if existing and not override:
+        return False
+    ppv = existing[0] if existing else spawn(unreal.PostProcessVolume, label_name, "Lighting", (0, 0, 0))
+    value = float(override) if override else ev
+    ppv.set_editor_property("unbound", True)
+    settings = ppv.get_editor_property("settings")
+    settings.set_editor_property("override_auto_exposure_min_brightness", True)
+    settings.set_editor_property("auto_exposure_min_brightness", value)
+    settings.set_editor_property("override_auto_exposure_max_brightness", True)
+    settings.set_editor_property("auto_exposure_max_brightness", value)
+    ppv.set_editor_property("settings", settings)
+    unreal.log("[MapGen] %s: 노출 고정 EV %.2f" % (label_name, value))
+    return True
+
+
 def set_travel(pad, dest_map, tag, display_name, color):
     pad.set_editor_property("destination_level", unreal.load_asset(dest_map))
     pad.set_editor_property("arrival_tag", tag)
@@ -172,6 +202,7 @@ HX, HY, WALL_H = 600.0, 500.0, 340.0
 
 def build_station():
     add_lighting()
+    ensure_fixed_exposure("PostProcess_Station", STATION_EXPOSURE_EV)
     w, d = HX * 2 / 100, HY * 2 / 100
 
     # 바닥판과 그 아래 받침대. 받침대는 정거장에서 잘라 낸 한 칸을 디오라마처럼 보여 주는 장치이다.
@@ -357,6 +388,8 @@ def upgrade_station():
     """이미 있는 L_Station을 행성 다이빙 규칙과 경영 게임 모드로 바꾼다. 값만 바꾸고, 바뀐 것이 있을 때만 저장한다."""
     world = unreal.EditorLoadingAndSavingUtils.load_map(STATION_MAP)
     changed = apply_game_mode(STATION_MAP)
+    if ensure_fixed_exposure("PostProcess_Station", STATION_EXPOSURE_EV):
+        changed = True
     for actor in actor_sub.get_all_level_actors():
         if isinstance(actor, unreal.HGTravelPad):
             if actor.get_actor_label() == "TravelPad_Airlock" and not actor.get_editor_property("dive_to_selected_planet"):
