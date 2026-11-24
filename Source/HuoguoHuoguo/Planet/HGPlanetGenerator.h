@@ -119,6 +119,11 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Planet|Mesh", meta = (ClampMin = "8", ClampMax = "255"))
 	int32 MaxGridPerFace = 128;
 
+	// 지형이 들쭉날쭉한 정도. 0이면 큰 언덕만(예전처럼 완만), 1이면 날카로운 능선 + 약 9m 폭 잔 굴곡을 얹는다.
+	// 높을수록 가파른 곳이 늘어 걸어 오르지 못하는 비탈이 생길 수 있다.
+	UPROPERTY(EditAnywhere, Category = "Planet|Mesh", meta = (ClampMin = "0", ClampMax = "3"))
+	float TerrainRuggedness = 1.f;
+
 	// 착륙 지점 주변을 평평하게 다지는 반경(cm).
 	UPROPERTY(EditAnywhere, Category = "Planet|Mesh")
 	float LandingFlatRadius = 1000.f;

@@ -599,13 +599,57 @@ float AHGPlanetGenerator::SurfaceRadiusAt(const FVector& Dir) const
 		Height = Height > 0.f ? Height * 1.4f : Height * 0.7f;
 	}
 
+	// 들쭉날쭉함 (TerrainRuggedness). 위의 큰 언덕만 있으면 작은 행성 한 바퀴에 언덕이 서너 개뿐이라 완만해 보였다.
+	// 그 위에 두 겹을 더 얹는다. 둘 다 같은 Dir이면 언제나 같은 값이라 메시, 배치, 착륙이 모두 그대로 맞는다.
+	float Bumps = 0.f; // cm. 행성 크기와 상관없이 일정한 높이의 잔 굴곡
+	if (TerrainRuggedness > 0.f)
+	{
+		// 생물 군계별 성격: 바위는 능선이 날카롭고, 버섯숲은 둔덕이 울퉁불퉁하고, 얼음은 비교적 얌전하다.
+		float RidgeWeight = 0.5f;
+		float BumpHeight = 70.f;
+		if (Planet.Biome == EHGPlanetBiome::Ice)
+		{
+			RidgeWeight = 0.4f;
+			BumpHeight = 45.f;
+		}
+		else if (Planet.Biome == EHGPlanetBiome::Rock)
+		{
+			RidgeWeight = 0.7f;
+			BumpHeight = 80.f;
+		}
+
+		// 1) 능선(ridged noise): 노이즈 값이 0을 지나는 줄을 따라 1 - |노이즈|가 뾰족하게 솟는다. 제곱해서 봉우리를 더 날카롭게 한다.
+		//    큰 언덕보다 약 2.7배 촘촘하게 깔고 세 겹 겹친다. 평균이 약 0.5라 빼서 행성이 통째로 부풀지 않게 한다.
+		FVector P = Dir * (Planet.TerrainFrequency * 2.7f) + NoiseOffset * 1.37;
+		float Ridge = 0.f;
+		float Amp = 1.f;
+		float Norm = 0.f;
+		for (int32 i = 0; i < 3; ++i)
+		{
+			const float R = 1.f - FMath::Abs(FMath::PerlinNoise3D(P));
+			Ridge += Amp * R * R;
+			Norm += Amp;
+			Amp *= 0.5f;
+			P *= 2.07;
+		}
+		Height += RidgeWeight * TerrainRuggedness * (Ridge / Norm - 0.5f);
+
+		// 2) 잔 굴곡: 약 9m 폭의 둔덕. 지형 격자 한 칸이 크면(중형 행성) 격자가 담을 수 있게 폭을 격자 4칸 이상으로 늘리고,
+		//    폭이 늘어난 만큼 높이도 키워 기울기가 비슷하게 보이게 한다.
+		const int32 Grid = FMath::Clamp(FMath::CeilToInt(Planet.Radius * UE_HALF_PI / TargetEdgeLength), 8, MaxGridPerFace);
+		const float CellLength = Planet.Radius * UE_HALF_PI / Grid;
+		const float Wavelength = FMath::Max(900.f, CellLength * 4.f);
+		Bumps = BumpHeight * TerrainRuggedness * (Wavelength / 900.f)
+			* Fbm(Dir * (Planet.Radius / Wavelength) - NoiseOffset * 0.71, 2) * 2.f;
+	}
+
 	// 착륙 지점(북극, +Z) 주변은 평평하게 다진다. 북극에서 잰 표면 거리가 평탄 반경 안이면 높이를 0으로,
 	// 그 바깥 한 배 거리 동안은 부드럽게 원래 높이로 되돌린다.
 	const float AngleFromPole = FMath::Acos(FMath::Clamp(Dir.Z, -1.0, 1.0));
 	const float ArcDistance = AngleFromPole * Planet.Radius;
 	const float Flatten = FMath::SmoothStep(LandingFlatRadius, LandingFlatRadius * 2.f, ArcDistance);
 
-	return Planet.Radius * (1.f + Planet.TerrainAmplitude * Height * Flatten);
+	return Planet.Radius * (1.f + Planet.TerrainAmplitude * Height * Flatten) + Bumps * Flatten;
 }
 
 void AHGPlanetGenerator::BuildTerrain()
