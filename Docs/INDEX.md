@@ -122,6 +122,8 @@
   - HGPlanetTypes (.h/.cpp)
   - HGPlanetGenerator (.h/.cpp)
   - 행성 그림체 (`hg.PlanetMood`, 기본 1)
+  - 소행성 지대 (`FHGPlanetSeed::bAsteroidField`)
+  - 폐우주선 (`FHGPlanetSeed::bDerelict`, `Planet/HGDerelict.cpp`)
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
 
