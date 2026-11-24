@@ -1,8 +1,18 @@
 ﻿#include "Planet/HGPlanetGenerator.h"
 
 #include "Components/BillboardComponent.h"
+#include "Components/DirectionalLightComponent.h"
+#include "Components/ExponentialHeightFogComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/SkyAtmosphereComponent.h"
+#include "Components/SkyLightComponent.h"
 #include "Debug/HGPlaceholderPaint.h"
+#include "Engine/DirectionalLight.h"
+#include "Engine/ExponentialHeightFog.h"
+#include "Engine/SkyLight.h"
+#include "EngineUtils.h"
+#include "Components/VolumetricCloudComponent.h"
+#include "HAL/IConsoleManager.h"
 #include "Engine/DataTable.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -17,6 +27,11 @@
 
 namespace
 {
+	TAutoConsoleVariable<int32> CVarPlanetMood(
+		TEXT("hg.PlanetMood"), 0,
+		TEXT("행성 그림체 미리보기 (복셀 + 쨍한 색 하늘). 1이면 다음에 만드는 행성에 적용한다. AHGPlanetGenerator::ApplyMoodPreview."),
+		ECVF_Default);
+
 	/**
 	 * 여러 겹 노이즈(fBm). 큰 언덕 위에 작은 굴곡을 겹쳐 자연스러운 지형을 만든다.
 	 * 한 겹 올라갈 때마다 주파수는 약 2배, 세기는 절반이다. 결과는 대략 -1 ~ 1.
@@ -118,9 +133,255 @@ void AHGPlanetGenerator::EnsureGenerated()
 	BuildTerrain();
 	ScatterProps();
 	SpawnReturnPad();
+	if (CVarPlanetMood.GetValueOnGameThread() != 0)
+	{
+		ApplyMoodPreview();
+	}
 
 	UE_LOG(LogHuoguo, Log, TEXT("행성 생성 완료: %s (시드 %d), %.0f ms"),
 		*Planet.Describe(), Planet.Seed, (FPlatformTime::Seconds() - StartTime) * 1000.0);
+}
+
+// ---------------------------------------------------------------------------
+// 그림체 미리보기 (hg.PlanetMood)
+// ---------------------------------------------------------------------------
+
+namespace
+{
+	// 생물 군계별 미리보기 색. 노 맨즈 스카이처럼 땅과 하늘, 풀과 꽃을 서로 대비되는 쨍한 색으로 고른다.
+	struct FMoodPalette
+	{
+		FLinearColor Ground;
+		FLinearColor Rock;
+		FLinearColor Sky;      // 하늘 대기 레일리 산란 색 (하늘 색조)
+		FLinearColor Fog;
+		FLinearColor Grass[2];
+		FLinearColor Flower[2];
+		FLinearColor Shrub;
+	};
+
+	FMoodPalette MoodPalette(EHGPlanetBiome Biome)
+	{
+		switch (Biome)
+		{
+		case EHGPlanetBiome::Ice:     // 청록 땅, 분홍빛 라벤더 하늘, 하늘색 풀과 흰/분홍 꽃, 파란 덤불
+			return { FLinearColor(0.20f, 0.62f, 0.58f), FLinearColor(0.50f, 0.42f, 0.72f), FLinearColor(0.95f, 0.45f, 1.0f), FLinearColor(0.85f, 0.70f, 1.0f),
+				{ FLinearColor(0.45f, 0.90f, 0.90f), FLinearColor(0.25f, 0.75f, 0.85f) }, { FLinearColor(1.0f, 1.0f, 1.0f), FLinearColor(1.0f, 0.45f, 0.75f) }, FLinearColor(0.20f, 0.35f, 0.95f) };
+		case EHGPlanetBiome::Fungal:  // 보라 땅, 청록 하늘, 자주 풀과 노랑/주황 꽃, 주황 덤불
+			return { FLinearColor(0.45f, 0.20f, 0.55f), FLinearColor(0.22f, 0.18f, 0.32f), FLinearColor(0.15f, 1.0f, 0.65f), FLinearColor(0.55f, 0.95f, 0.80f),
+				{ FLinearColor(0.80f, 0.30f, 0.80f), FLinearColor(0.55f, 0.25f, 0.85f) }, { FLinearColor(1.0f, 0.85f, 0.15f), FLinearColor(1.0f, 0.45f, 0.10f) }, FLinearColor(0.95f, 0.55f, 0.15f) };
+		default:                      // 바위: 주황 땅, 하늘색 하늘, 노란 풀과 흰/빨강 꽃, 자줏빛 덤불
+			return { FLinearColor(0.80f, 0.40f, 0.20f), FLinearColor(0.42f, 0.28f, 0.22f), FLinearColor(0.20f, 0.70f, 1.0f), FLinearColor(0.75f, 0.90f, 1.0f),
+				{ FLinearColor(0.95f, 0.75f, 0.20f), FLinearColor(0.85f, 0.55f, 0.15f) }, { FLinearColor(1.0f, 1.0f, 1.0f), FLinearColor(0.95f, 0.15f, 0.20f) }, FLinearColor(0.55f, 0.12f, 0.35f) };
+		}
+	}
+}
+
+FTransform AHGPlanetGenerator::SurfaceFrame(const FVector& Dir, float Spin, float Lift) const
+{
+	FVector T1, T2;
+	TangentBasis(Dir, T1, T2);
+	const FVector Forward = T1 * FMath::Cos(Spin) + T2 * FMath::Sin(Spin);
+	return FTransform(FRotationMatrix::MakeFromZX(Dir, Forward).ToQuat(), Dir * (SurfaceRadiusAt(Dir) + Lift));
+}
+
+void AHGPlanetGenerator::ApplyMoodPreview()
+{
+	const FMoodPalette Pal = MoodPalette(Planet.Biome);
+	UWorld* World = GetWorld();
+	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+
+	// 색마다 복셀 인스턴스 메시 하나. 변환을 모았다가 한꺼번에 넣는다.
+	TMap<uint32, TArray<FTransform>> Batches;
+	TMap<uint32, FLinearColor> BatchColor;
+	TMap<uint32, bool> BatchShadow;
+	auto AddVoxel = [&](const FTransform& Frame, const FVector& Local, float Size, const FLinearColor& Color, bool bShadow)
+	{
+		const uint32 Key = HashCombine(Color.ToFColor(false).DWColor(), GetTypeHash(FMath::RoundToInt(Size)));
+		Batches.FindOrAdd(Key).Add(FTransform(Frame.GetRotation(), Frame.TransformPosition(Local), FVector(Size / 100.f)));
+		BatchColor.Add(Key, Color);
+		BatchShadow.Add(Key, bShadow);
+	};
+	auto Shade = [](const FLinearColor& C, uint32 Hash)
+	{
+		static const float Scale[] = { 0.88f, 1.0f, 1.12f };
+		FLinearColor Out = C * Scale[Hash % 3u];
+		Out.A = 1.f;
+		return Out;
+	};
+
+	// 1. 땅 색.
+	HGPlaceholder::Paint(Terrain, Pal.Ground);
+
+	// 2. 복셀 바위: 매끈한 바위 인스턴스는 숨기고(크기 그대로 두어 충돌은 남긴다) 같은 모양을 15cm 칸으로 채운다.
+	const float RockVoxel = 15.f;
+	int32 RockVoxels = 0;
+	for (UInstancedStaticMeshComponent* Rocks : { RoundRocks.Get(), BlockRocks.Get() })
+	{
+		const bool bRound = Rocks == RoundRocks;
+		for (int32 i = 0; i < Rocks->GetInstanceCount(); ++i)
+		{
+			FTransform T;
+			Rocks->GetInstanceTransform(i, T, false);
+			const FVector Half = T.GetScale3D() * 50.f;
+			const FTransform Frame(T.GetRotation(), T.GetLocation());
+			const FIntVector N(FMath::CeilToInt(Half.X / RockVoxel), FMath::CeilToInt(Half.Y / RockVoxel), FMath::CeilToInt(Half.Z / RockVoxel));
+			for (int32 X = -N.X; X < N.X; ++X)
+			{
+				for (int32 Y = -N.Y; Y < N.Y; ++Y)
+				{
+					for (int32 Z = -N.Z; Z < N.Z; ++Z)
+					{
+						const FVector P((X + 0.5f) * RockVoxel, (Y + 0.5f) * RockVoxel, (Z + 0.5f) * RockVoxel);
+						const bool bInside = bRound
+							? FMath::Square(P.X / Half.X) + FMath::Square(P.Y / Half.Y) + FMath::Square(P.Z / Half.Z) <= 1.f
+							: FMath::Abs(P.X) <= Half.X && FMath::Abs(P.Y) <= Half.Y && FMath::Abs(P.Z) <= Half.Z;
+						// 아래 절반은 땅에 묻히므로 만들지 않는다.
+						if (bInside && Z >= -1)
+						{
+							AddVoxel(Frame, P, RockVoxel, Shade(bRound ? Pal.Rock : Pal.Rock * 0.8f, GetTypeHash(FIntVector(X, Y, Z)) ^ i), true);
+							++RockVoxels;
+						}
+					}
+				}
+			}
+		}
+		Rocks->SetVisibility(false);
+	}
+
+	// 3. 풀과 꽃: 착륙 지점(북극) 둘레 40m는 1m²당 1포기, 나머지는 10m²당 1포기.
+	FRandomStream Rng(static_cast<int32>(HashCombine(GetTypeHash(Planet.Seed), 0xf10a)));
+	const float FloraVoxel = 8.f;
+	const double R = Planet.Radius;
+	const double NearAngle = 4000.0 / R;
+	const double NearArea = 2.0 * UE_PI * R * R * (1.0 - FMath::Cos(NearAngle)) / 10000.0;
+	const double TotalArea = 4.0 * UE_PI * R * R / 10000.0;
+	const int32 NearCount = FMath::Clamp(FMath::RoundToInt(NearArea), 0, 8000);
+	const int32 FarCount = FMath::Clamp(FMath::RoundToInt((TotalArea - NearArea) / 10.0), 0, 12000);
+	auto PlaceTuft = [&](const FVector& Dir)
+	{
+		const FTransform Frame = SurfaceFrame(Dir, Rng.FRandRange(0.f, UE_TWO_PI), -2.f);
+		const float Kind = Rng.FRand();
+		const uint32 H = Rng.GetCurrentSeed();
+		if (Kind < 0.65f)
+		{
+			// 풀잎: 1~3포기, 2~4칸 높이.
+			const int32 Blades = Rng.RandRange(1, 3);
+			for (int32 b = 0; b < Blades; ++b)
+			{
+				const FVector Base(Rng.RandRange(-1, 1) * FloraVoxel, Rng.RandRange(-1, 1) * FloraVoxel, 0.f);
+				const FLinearColor Color = Shade(Pal.Grass[Rng.RandRange(0, 1)], H + b);
+				const int32 Height = Rng.RandRange(2, 4);
+				for (int32 z = 0; z < Height; ++z)
+				{
+					AddVoxel(Frame, Base + FVector(0.f, 0.f, (z + 0.5f) * FloraVoxel), FloraVoxel, Color, false);
+				}
+			}
+		}
+		else if (Kind < 0.9f)
+		{
+			// 꽃: 줄기 2~3칸 + 십자 모양 꽃송이.
+			const int32 Stem = Rng.RandRange(2, 3);
+			for (int32 z = 0; z < Stem; ++z)
+			{
+				AddVoxel(Frame, FVector(0.f, 0.f, (z + 0.5f) * FloraVoxel), FloraVoxel, Pal.Grass[1], false);
+			}
+			const FLinearColor Petal = Pal.Flower[Rng.RandRange(0, 1)];
+			const float Top = (Stem + 0.5f) * FloraVoxel;
+			for (const FVector& Off : { FVector(0, 0, 0), FVector(1, 0, 0), FVector(-1, 0, 0), FVector(0, 1, 0), FVector(0, -1, 0) })
+			{
+				AddVoxel(Frame, FVector(Off.X * FloraVoxel, Off.Y * FloraVoxel, Top), FloraVoxel, Off.IsZero() ? FLinearColor(1.f, 0.9f, 0.3f) : Petal, false);
+			}
+		}
+		else
+		{
+			// 덤불: 3x3x2 덩어리, 위쪽 모서리는 비운다.
+			for (int32 x = -1; x <= 1; ++x)
+			{
+				for (int32 y = -1; y <= 1; ++y)
+				{
+					for (int32 z = 0; z < 2; ++z)
+					{
+						if (z == 1 && FMath::Abs(x) + FMath::Abs(y) == 2)
+						{
+							continue;
+						}
+						AddVoxel(Frame, FVector(x * 2.f * FloraVoxel, y * 2.f * FloraVoxel, (z + 0.5f) * 2.f * FloraVoxel), FloraVoxel * 2.f,
+							Shade(Pal.Shrub, H + x * 7 + y * 13 + z), true);
+					}
+				}
+			}
+		}
+	};
+	for (int32 i = 0; i < NearCount; ++i)
+	{
+		// 북극 둘레 원판 안에서 고르게 (각도 제곱근 분포).
+		const double Theta = NearAngle * FMath::Sqrt(Rng.FRand());
+		const double Phi = Rng.FRandRange(0.f, UE_TWO_PI);
+		const FVector Dir(FMath::Sin(Theta) * FMath::Cos(Phi), FMath::Sin(Theta) * FMath::Sin(Phi), FMath::Cos(Theta));
+		// 착륙 발판과 사장님 바로 밑(3m)은 비운다.
+		if (Theta * R > 300.0)
+		{
+			PlaceTuft(Dir);
+		}
+	}
+	for (int32 i = 0; i < FarCount; ++i)
+	{
+		PlaceTuft(Rng.VRand());
+	}
+
+	int32 Instances = 0;
+	for (const TPair<uint32, TArray<FTransform>>& Batch : Batches)
+	{
+		UInstancedStaticMeshComponent* Ism = NewObject<UInstancedStaticMeshComponent>(this, NAME_None, RF_Transient);
+		Ism->SetupAttachment(Terrain);
+		Ism->SetStaticMesh(Cube);
+		Ism->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Ism->SetCanEverAffectNavigation(false);
+		Ism->SetCastShadow(BatchShadow[Batch.Key]);
+		Ism->RegisterComponent();
+		Ism->AddInstances(Batch.Value, false, false);
+		HGPlaceholder::Paint(Ism, BatchColor[Batch.Key]);
+		Instances += Batch.Value.Num();
+	}
+
+	// 4. 하늘: 하늘 대기(색 = 군계별), 스카이 라이트(하늘색 간접광), 옅은 안개, 구름. 해(방향광)를 대기 해로 지정한다.
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	if (ASkyAtmosphere* Sky = World->SpawnActor<ASkyAtmosphere>(ASkyAtmosphere::StaticClass(), FTransform::Identity, Params))
+	{
+		USkyAtmosphereComponent* Atmos = Sky->GetComponent();
+		Atmos->SetRayleighScattering(Pal.Sky);
+		Atmos->SetMieScatteringScale(0.02f);
+	}
+	if (AExponentialHeightFog* Fog = World->SpawnActor<AExponentialHeightFog>(AExponentialHeightFog::StaticClass(), FTransform(GetActorLocation() + FVector(0.f, 0.f, Planet.Radius)), Params))
+	{
+		Fog->GetComponent()->SetFogDensity(0.015f);
+		Fog->GetComponent()->SetFogInscatteringColor(Pal.Fog);
+		Fog->GetComponent()->SetFogHeightFalloff(0.05f);
+	}
+	World->SpawnActor<AVolumetricCloud>(AVolumetricCloud::StaticClass(), FTransform::Identity, Params);
+	if (ASkyLight* SkyLight = World->SpawnActor<ASkyLight>(ASkyLight::StaticClass(), FTransform(GetActorLocation() + FVector(0.f, 0.f, Planet.Radius + 500.f)), Params))
+	{
+		USkyLightComponent* SkyComp = SkyLight->GetLightComponent();
+		SkyComp->SetMobility(EComponentMobility::Movable);
+		SkyComp->bRealTimeCapture = true;
+		SkyComp->SetIntensity(1.0f);
+		SkyComp->RecaptureSky();
+	}
+	bool bSunSet = false;
+	for (TActorIterator<ADirectionalLight> It(World); It; ++It)
+	{
+		if (UDirectionalLightComponent* Light = Cast<UDirectionalLightComponent>(It->GetLightComponent()))
+		{
+			// 첫 방향광(해)만 대기 해로 쓴다. 보조광은 대기와 상관없다.
+			Light->SetAtmosphereSunLight(!bSunSet);
+			bSunSet = true;
+		}
+	}
+
+	UE_LOG(LogHuoguo, Log, TEXT("[Mood] 그림체 미리보기: 군계 %d, 복셀 바위 칸 %d, 풀과 꽃 %d포기(근처 %d), 복셀 인스턴스 %d, 색 묶음 %d"),
+		static_cast<int32>(Planet.Biome), RockVoxels, NearCount + FarCount, NearCount, Instances, Batches.Num());
 }
 
 void AHGPlanetGenerator::ChoosePlanet()

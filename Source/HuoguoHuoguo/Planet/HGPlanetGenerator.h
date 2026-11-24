@@ -164,6 +164,20 @@ private:
 	bool bHasReturnPad = false;
 	FVector ReturnPadLocation = FVector::ZeroVector;
 
+	/**
+	 * 그림체 미리보기 (콘솔 변수 hg.PlanetMood, 기본 0). "복셀 + NMS 색" 방향이 행성에서 어떻게 보일지 보려는 시험이다.
+	 * 켜면 생성이 끝난 뒤:
+	 *   - 하늘: 생물 군계마다 다른 색의 하늘 대기, 스카이 라이트, 옅은 안개, 구름을 실행 중에 놓는다.
+	 *   - 색: 땅과 바위를 생물 군계별 쨍한 색으로 바꾼다.
+	 *   - 바위: 매끈한 바위는 숨기고(충돌은 그대로) 같은 자리에 15cm 복셀 바위를 그린다.
+	 *   - 풀과 꽃: 복셀 풀잎, 꽃, 덤불을 착륙 지점 둘레에 빽빽하게, 나머지에 드문드문 뿌린다 (그림만, 충돌 없음).
+	 * 하늘 대기는 행성 중심이 아니라 월드 아래쪽을 땅으로 아는 엔진 기본 방식이라, 착륙 지점(북극)에서만 하늘이 맞게 보인다.
+	 */
+	void ApplyMoodPreview();
+
+	// 지표 Dir 위에 놓을 변환 (위 = 지표 바깥, 둘레 방향 Spin). 행성 중심 기준 좌표.
+	FTransform SurfaceFrame(const FVector& Dir, float Spin, float Lift) const;
+
 	// 표식 하나의 인스턴스를 안 보이게 한다 (크기를 0으로). 인스턴스를 지우면 뒤 번호가 당겨지므로 지우지 않는다.
 	// 왜 숨겼는지(캠 / 다른 시간대)는 부르는 쪽이 표식의 플래그로 남긴다.
 	void HideInstance(int32 MarkerId);
