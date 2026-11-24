@@ -839,7 +839,8 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 		Dome->RegisterComponent();
 		UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(SkyMaterial, Dome);
 		Mid->SetVectorParameterValue(TEXT("Center"), FLinearColor(GetActorLocation()));
-		Mid->SetVectorParameterValue(TEXT("Zenith"), Pal.Zenith);
+		// 하늘 꼭대기는 우주색 쪽으로 섞는다 (대기가 얇아 우주가 비쳐 보이고 별이 잘 보인다). 지평선 색은 그대로.
+		Mid->SetVectorParameterValue(TEXT("Zenith"), FMath::Lerp(Pal.Zenith, FLinearColor(0.02f, 0.02f, 0.07f), SpaceTint));
 		Mid->SetVectorParameterValue(TEXT("Horizon"), Pal.Horizon);
 		Mid->SetVectorParameterValue(TEXT("SunDir"), FLinearColor(SunDir));
 		Mid->SetScalarParameterValue(TEXT("Brightness"), SkyBrightness);
@@ -863,9 +864,159 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 		SkyComp->RecaptureSky();
 	}
 
+	// 6. 우주가 보이는 하늘(별, 고리 행성, 위성, 정거장).
+	BuildSkyBodies();
+	UE_LOG(LogHuoguo, Log, TEXT("[Mood] 하늘: 별 %d개, 고리 행성/위성/정거장 %s. 크레이터 %d개"),
+		StarCount, bSkyBodies ? TEXT("있음") : TEXT("없음"), Craters.Num());
+
 	UE_LOG(LogHuoguo, Log, TEXT("[Mood] 행성 그림체: 군계 %d, 바위 칸 %d, 나무 %d그루(칸 %d), 풀과 꽃 %d포기, 바위섬 %d개(삼각형 %d), 구름 %d개(삼각형 %d), 복셀 인스턴스 %d, 색 묶음 %d"),
 		static_cast<int32>(Planet.Biome), RockVoxels, NearTrees + FarTrees, TreeVoxels, InnerCount + RingCount + FarCount,
 		Islands, IslandTriangles.Num() / 3, Clouds, CloudTriangles.Num() / 3, Instances, Batches.Num());
+}
+
+void AHGPlanetGenerator::BuildSkyBodies()
+{
+	const FMoodPalette Pal = MoodPalette(Planet.Biome);
+	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+	UStaticMesh* Sphere = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	// 하늘은 따로 수열에서 뽑는다 (지형/소품의 자리가 바뀌지 않게).
+	FRandomStream Sky(static_cast<int32>(HashCombine(GetTypeHash(Planet.Seed), 0x5c7u)));
+
+	// 하늘 물체 공통: 충돌, 그림자, 거리장 조명 없음. 그림자를 끄지 않으면 거대한 행성이 해를 가려 땅이 통째로 어두워질 수 있다.
+	auto Prepare = [this](UPrimitiveComponent* Comp)
+	{
+		Comp->SetupAttachment(Terrain);
+		Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Comp->SetCanEverAffectNavigation(false);
+		Comp->SetCastShadow(false);
+		Comp->bAffectDistanceFieldLighting = false;
+		Comp->RegisterComponent();
+	};
+	auto MakeIsm = [&](const TCHAR* Name)
+	{
+		UInstancedStaticMeshComponent* Ism = NewObject<UInstancedStaticMeshComponent>(this, Name, RF_Transient);
+		Ism->SetStaticMesh(Cube);
+		Prepare(Ism);
+		return Ism;
+	};
+	auto MakeBall = [&](const TCHAR* Name, const FVector& Location, float Radius, const FLinearColor& Color)
+	{
+		UStaticMeshComponent* Ball = NewObject<UStaticMeshComponent>(this, Name, RF_Transient);
+		Ball->SetStaticMesh(Sphere);
+		Ball->SetRelativeLocation(Location);
+		Ball->SetRelativeScale3D(FVector(Radius / 50.f)); // 엔진 구는 지름 1m
+		Prepare(Ball);
+		HGPlaceholder::Paint(Ball, Color);
+		return Ball;
+	};
+
+	// 1) 별: 하늘 돔 바로 안쪽 구면에 작은 발광 정육면체를 흩는다 (4 ~ 12m, 착륙 지점에서 1 ~ 3픽셀 크기).
+	//    하늘 꼭대기를 우주색 쪽으로 어둡게 한 것(SpaceTint)과 같이 낮에도 별이 보여 "우주 한가운데" 느낌을 준다.
+	if (StarCount > 0)
+	{
+		UInstancedStaticMeshComponent* Stars = MakeIsm(TEXT("SkyStars"));
+		TArray<FTransform> Transforms;
+		Transforms.Reserve(StarCount);
+		const float Dist = SkyDomeRadius * 0.95f;
+		for (int32 i = 0; i < StarCount; ++i)
+		{
+			const FVector Dir = Sky.VRand();
+			const FRotator Spin(Sky.FRandRange(0.f, 360.f), Sky.FRandRange(0.f, 360.f), 0.f);
+			Transforms.Add(FTransform(Spin.Quaternion(), Dir * Dist, FVector(Sky.FRandRange(4.f, 12.f))));
+		}
+		Stars->AddInstances(Transforms, false, false);
+		HGVoxel::PaintGlow(Stars, FLinearColor(1.f, 0.96f, 0.88f), StarGlow);
+	}
+	if (!bSkyBodies)
+	{
+		return;
+	}
+
+	// 착륙 지점(북극)에서 올려다보기 좋은 방향: 천정에서 Tilt도 기울이고 둘레 Azimuth도 돌린 방향.
+	auto SkyDir = [](float TiltDeg, float AzimuthDeg)
+	{
+		const float T = FMath::DegreesToRadians(TiltDeg);
+		const float A = FMath::DegreesToRadians(AzimuthDeg);
+		return FVector(FMath::Sin(T) * FMath::Cos(A), FMath::Sin(T) * FMath::Sin(A), FMath::Cos(T));
+	};
+	const float BaseAzimuth = Sky.FRandRange(0.f, 360.f);
+
+	// 2) 고리 행성: 천정에서 35 ~ 50도, 돔 반지름의 0.75배 거리에 돔 0.2배 반지름 (착륙 지점에서 시야각 약 30도).
+	//    색은 군계 꽃 색을 밝힌 것이라 땅/하늘과 대비된다. 해 쪽 반만 밝게 보여 초승달처럼 명암이 생긴다.
+	//    고리는 기울인 평면에 작은 알갱이 2600개를 두 띠로 흩는다 (가운데가 비어 진짜 고리처럼 보이고, 알갱이가 작아 먼지 띠처럼 읽힌다).
+	const FVector GiantDir = SkyDir(Sky.FRandRange(35.f, 50.f), BaseAzimuth);
+	const FVector GiantPos = GiantDir * (SkyDomeRadius * 0.75f);
+	const float GiantR = SkyDomeRadius * 0.2f;
+	const FLinearColor GiantColor = FMath::Lerp(Pal.Flower[1], FLinearColor::White, 0.3f);
+	MakeBall(TEXT("SkyGiant"), GiantPos, GiantR, GiantColor);
+	{
+		const FQuat RingRot = FRotator(Sky.FRandRange(15.f, 35.f), Sky.FRandRange(0.f, 360.f), 0.f).Quaternion();
+		UInstancedStaticMeshComponent* Inner = MakeIsm(TEXT("SkyRingInner"));
+		UInstancedStaticMeshComponent* Outer = MakeIsm(TEXT("SkyRingOuter"));
+		TArray<FTransform> InnerT, OuterT;
+		for (int32 i = 0; i < 2600; ++i)
+		{
+			const float T = Sky.FRand();
+			const float RingRad = GiantR * FMath::Lerp(1.45f, 2.1f, T);
+			const float Angle = Sky.FRandRange(0.f, UE_TWO_PI);
+			const FVector Local(FMath::Cos(Angle) * RingRad, FMath::Sin(Angle) * RingRad, Sky.FRandRange(-0.01f, 0.01f) * GiantR);
+			const FRotator Spin(Sky.FRandRange(0.f, 360.f), Sky.FRandRange(0.f, 360.f), 0.f);
+			const FTransform Piece(Spin.Quaternion(), GiantPos + RingRot.RotateVector(Local), FVector(GiantR * Sky.FRandRange(0.008f, 0.02f) / 100.f));
+			(T < 0.45f ? InnerT : OuterT).Add(Piece);
+		}
+		Inner->AddInstances(InnerT, false, false);
+		Outer->AddInstances(OuterT, false, false);
+		HGPlaceholder::Paint(Inner, FMath::Lerp(GiantColor, FLinearColor::White, 0.5f));
+		HGPlaceholder::Paint(Outer, GiantColor * 0.75f);
+	}
+
+	// 3) 위성 둘: 지평선 가까이(55 ~ 75도), 고리 행성과 다른 쪽.
+	for (int32 m = 0; m < 2; ++m)
+	{
+		const FVector Dir = SkyDir(Sky.FRandRange(55.f, 75.f), BaseAzimuth + 140.f + m * 90.f + Sky.FRandRange(-20.f, 20.f));
+		const FLinearColor Color = m == 0 ? FMath::Lerp(Pal.Rock, FLinearColor::White, 0.45f) : FMath::Lerp(Pal.GroundB, FLinearColor::White, 0.25f);
+		MakeBall(m == 0 ? TEXT("SkyMoon0") : TEXT("SkyMoon1"), Dir * (SkyDomeRadius * 0.8f), SkyDomeRadius * Sky.FRandRange(0.03f, 0.06f), Color);
+	}
+
+	// 4) 정거장: 천정 가까이(15 ~ 25도) 고리 행성 반대쪽에 떠 있는 우리 가게. 고리 + 가운데 축 + 바퀴살 넷 + 고리 둘레 불빛.
+	//    "정거장에서 다이빙해 내려왔다"는 이야기를 하늘에서 보여 준다. 고리 면을 행성 쪽으로 35도 기울여 둥근 모양이 보이게 한다.
+	{
+		const FVector StationDir = SkyDir(Sky.FRandRange(15.f, 25.f), BaseAzimuth + 180.f);
+		const FQuat StationRot = FRotationMatrix::MakeFromZ(-StationDir).ToQuat() * FQuat(FVector::XAxisVector, FMath::DegreesToRadians(35.f));
+		const FTransform Station(StationRot, StationDir * (SkyDomeRadius * 0.4f));
+		const float S = SkyDomeRadius * 0.02f; // 고리 반지름
+		TArray<FTransform> Body, LightsA, LightsB;
+		auto Box = [&](TArray<FTransform>& Out, const FVector& Pos, const FVector& Size, float Yaw)
+		{
+			Out.Add(FTransform(FRotator(0.f, Yaw, 0.f).Quaternion(), Pos, Size / 100.f) * Station);
+		};
+		const int32 Segments = 28;
+		for (int32 k = 0; k < Segments; ++k)
+		{
+			const float Angle = UE_TWO_PI * k / Segments;
+			const FVector P(FMath::Cos(Angle) * S, FMath::Sin(Angle) * S, 0.f);
+			Box(Body, P, FVector(0.25f * S, UE_TWO_PI * S / Segments * 1.1f, 0.18f * S), FMath::RadiansToDegrees(Angle));
+			if (k % 4 == 0)
+			{
+				Box((k / 4) % 2 == 0 ? LightsA : LightsB, P * 1.14f, FVector(0.08f * S), 0.f);
+			}
+		}
+		Box(Body, FVector::ZeroVector, FVector(0.35f * S, 0.35f * S, 0.6f * S), 0.f);
+		for (int32 k = 0; k < 4; ++k)
+		{
+			const float Angle = UE_HALF_PI * k;
+			Box(Body, FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * (0.5f * S), FVector(S, 0.06f * S, 0.06f * S), FMath::RadiansToDegrees(Angle));
+		}
+		UInstancedStaticMeshComponent* BodyIsm = MakeIsm(TEXT("SkyStation"));
+		UInstancedStaticMeshComponent* LightAIsm = MakeIsm(TEXT("SkyStationLightA"));
+		UInstancedStaticMeshComponent* LightBIsm = MakeIsm(TEXT("SkyStationLightB"));
+		BodyIsm->AddInstances(Body, false, false);
+		LightAIsm->AddInstances(LightsA, false, false);
+		LightBIsm->AddInstances(LightsB, false, false);
+		HGPlaceholder::Paint(BodyIsm, FLinearColor(0.62f, 0.66f, 0.74f));
+		HGVoxel::PaintGlow(LightAIsm, FLinearColor(1.f, 0.25f, 0.2f), 8.f);   // 마라 빨강 등불
+		HGVoxel::PaintGlow(LightBIsm, FLinearColor(0.2f, 0.95f, 0.9f), 8.f);  // 산소 청록
+	}
 }
 
 void AHGPlanetGenerator::ChoosePlanet()

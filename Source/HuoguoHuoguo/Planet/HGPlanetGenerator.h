@@ -157,6 +157,21 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Planet|Mood")
 	bool bSkyClouds = false;
 
+	// 그림체: 하늘 꼭대기 색을 우주색(거의 검은 남색) 쪽으로 섞는 비율. 대기가 얇아 우주가 비쳐 보이는 느낌. 0 = 팔레트 그대로.
+	UPROPERTY(EditAnywhere, Category = "Planet|Sky", meta = (ClampMin = "0", ClampMax = "1"))
+	float SpaceTint = 0.45f;
+
+	// 그림체: 하늘의 별 개수와 밝기 (발광 머티리얼 Glow). 낮에도 보이도록 밝게 둔다.
+	UPROPERTY(EditAnywhere, Category = "Planet|Sky")
+	int32 StarCount = 1400;
+
+	UPROPERTY(EditAnywhere, Category = "Planet|Sky")
+	float StarGlow = 10.f;
+
+	// 그림체: 하늘에 걸린 고리 행성, 위성, 정거장을 띄울지.
+	UPROPERTY(EditAnywhere, Category = "Planet|Sky")
+	bool bSkyBodies = true;
+
 	// 그림체: 외계 식물의 빛나는 끝(구슬, 관 끝, 덩굴 끝)이 스스로 빛나는 세기 (발광 머티리얼 Glow).
 	UPROPERTY(EditAnywhere, Category = "Planet|Mood")
 	float FloraGlow = 1.5f;
@@ -201,6 +216,9 @@ private:
 		float Depth = 200.f;
 	};
 	TArray<FCrater> Craters;
+
+	// 하늘의 고리 행성, 위성, 정거장, 별 (ApplyMoodPreview에서 부른다).
+	void BuildSkyBodies();
 
 	/**
 	 * 행성 그림체 (콘솔 변수 hg.PlanetMood, 기본 1). 모양은 복셀, 색과 하늘은 노 맨즈 스카이에서 배운 방향이다.
