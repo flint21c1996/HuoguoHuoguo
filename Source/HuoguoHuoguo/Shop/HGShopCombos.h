@@ -11,7 +11,7 @@
  * 원본은 저장소의 `Data/Combos.csv`이고, `Tools/GenerateGreyboxMaps.py`가 `/Game/HG/Data/DT_Combos`로 읽어 들인다.
  * 행 이름(첫 열 Name)이 콤보 ID다. 발견한 콤보 기록(GameInstance)은 이 ID를 남긴다.
  *
- * 판정: 식탁 하나를 기준으로, 식탁 둘레 한 칸(대각선 포함) 안에 걸친 가구를 종류별로 센다.
+ * 판정: 식탁 하나를 기준으로, 식탁 둘레 한 칸(대각선 포함) 안에 걸친 가구를 ID별, 꼬리표별로 센다.
  * Needs에 적힌 가구가 모두 그 수 이상 있으면 콤보가 성립하고, 그 식탁 손님이 BonusPercent만큼 돈을 더 낸다.
  * 한 식탁에 여러 콤보가 함께 성립하면 보너스를 모두 더한다 (콤보 쌓기).
  */
@@ -24,8 +24,8 @@ struct HUOGUOHUOGUO_API FHGComboRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combo")
 	FText DisplayName;
 
-	// 식탁 둘레에 있어야 하는 가구 ID (AHGFurniture::FurnitureId). '+'로 여러 개, '*숫자'로 개수.
-	// 예: "Planter" (화분 1개 이상), "Planter+Lantern" (화분과 등불 모두), "Planter*2" (화분 2개 이상).
+	// 식탁 둘레에 있어야 하는 가구 ID나 꼬리표(Data/Furniture.csv의 Tags). '+'로 여러 개, '*숫자'로 개수.
+	// 예: "Plant" (화분류 1개 이상), "Plant+Light" (화분류와 등불류 모두), "Plant*3" (화분류 3개 이상), "SauceBar" (소스 바).
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Combo")
 	FString Needs;
 

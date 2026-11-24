@@ -19,9 +19,14 @@ TMap<FName, int32> HGCombo::CountAround(const FIntRect& TableRect, const TArray<
 	for (const FHGGridItem& Item : Items)
 	{
 		// Touches는 겹치는 것(식탁 자신)을 빼고 둘레에 걸친 것만 참이다.
+		// ID와 꼬리표를 같은 표에 센다: 콤보 Needs에 "Bamboo"(그 가구)나 "Plant"(화분류 아무거나)를 쓸 수 있다.
 		if (FHGShopGrid::Touches(TableRect, Item.Rect))
 		{
 			Counts.FindOrAdd(Item.Id) += 1;
+			for (const FName& Tag : Item.Tags)
+			{
+				Counts.FindOrAdd(Tag) += 1;
+			}
 		}
 	}
 	return Counts;

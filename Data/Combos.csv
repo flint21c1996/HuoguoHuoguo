@@ -1,5 +1,9 @@
 ﻿Name,DisplayName,Needs,BonusPercent
-GreenNook,"초록 쉼터","Planter",20
-LanternGlow,"등불 아래","Lantern",20
-GardenLantern,"정원 등불석","Planter+Lantern",30
-SauceMaster,"소스 장인석","SauceBar",25
+GreenNook,"초록 쉼터","Plant",20
+LanternGlow,"등불 아래","Light",20
+GardenLantern,"정원 등불석","Plant+Light",30
+SauceMaster,"소스 장인석","Sauce",25
+WaterView,"물멍석","Water",20
+ArtCorner,"풍류석","Art+Light",25
+ForestTable,"숲속 식탁","Plant*3",30
+PlanetScent,"행성 향기","Planet",15
