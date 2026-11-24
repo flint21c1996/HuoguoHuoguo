@@ -121,7 +121,7 @@
 - 파일
   - HGPlanetTypes (.h/.cpp)
   - HGPlanetGenerator (.h/.cpp)
-  - 그림체 미리보기 (`hg.PlanetMood`, 기본 0)
+  - 행성 그림체 (`hg.PlanetMood`, 기본 1)
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
 
@@ -193,6 +193,8 @@
   - MI_GB_* (15개)
 - HG
   - M_HG_Glow
+  - M_HG_PlanetSky
+  - M_HG_VertexColor
 - 알려진 문제와 다음 할 일
 
 ## Tools

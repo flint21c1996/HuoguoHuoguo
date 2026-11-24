@@ -1,6 +1,6 @@
 # Materials - 머티리얼 에셋
 
-> 경로: `Content/HG/Materials/` · 마지막 갱신: 2026-11-23
+> 경로: `Content/HG/Materials/` · 마지막 갱신: 2026-11-24
 
 ## Greybox
 
@@ -17,6 +17,16 @@
 - 파라미터 `Color`(바탕색 → Base Color), `Glow`(스칼라, 기본 0, `Color × Glow` → Emissive). 코드가 동적 인스턴스로 밤에 Glow 6, 낮에 0.
 - 사용 표시 `Used with Instanced Static Meshes`가 켜져 있어야 한다 (복셀은 인스턴스 메시라서, 꺼져 있으면 엔진이 기본 머티리얼로 그려 검게 보였다).
 
+- 행성 구름도 이 머티리얼로 그린다 (Glow 0.6, 아래에서 봐도 검지 않게).
+
+### M_HG_PlanetSky
+- 행성 하늘 돔 머티리얼. `ensure_planet_materials`가 만든다. 빛 없음(Unlit), 양면, 하늘(Is Sky) 표시.
+- Custom 노드(HLSL) 하나: 카메라 위치와 방향, 행성 중심(`Center`)으로 "위"를 구해 지평선 → 꼭대기 색(`Horizon`, `Zenith`)을 섞고, 해 방향(`SunDir`)에 해 원반과 번짐을 더한 뒤 `Brightness`를 곱한다.
+- 하늘(Is Sky) 표시가 있어야 실시간 캡처 스카이 라이트가 이 돔을 하늘로 보고 그늘에 하늘빛을 비춘다. 이미 있는 에셋이면 스크립트가 이 표시만 켠다.
+
+### M_HG_VertexColor
+- 정점 색(Vertex Color) → Base Color, 거칠기 0.9. 각진 행성 지형이 면마다 넣은 색을 그대로 그린다. `ensure_planet_materials`가 만든다.
+
 ## 알려진 문제와 다음 할 일
 
-- 행성 지형 전용 머티리얼(높이/경사 색, 버텍스 컬러) 없음. 지금은 생물 군계별 단색이다.
+- 행성 지형은 버텍스 컬러뿐이라 가까이서 질감이 없다 (복셀 느낌이면 오히려 맞을 수 있다).
