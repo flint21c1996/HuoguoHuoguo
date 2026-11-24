@@ -1,6 +1,7 @@
 ﻿#include "Explore/HGPlanetMinimap.h"
 
 #include "Brushes/SlateRoundedBoxBrush.h"
+#include "Explore/HGExplorerCharacter.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "HuoguoHuoguo.h"
@@ -15,6 +16,11 @@ namespace
 	const FLinearColor GuideColor(0.45f, 0.85f, 0.95f, 0.25f);
 	const FLinearColor PadColor(1.0f, 0.70f, 0.18f, 1.0f);
 	const FLinearColor PlayerColor(1.0f, 1.0f, 1.0f, 1.0f);
+	const FLinearColor RadarRockColor(0.75f, 0.72f, 0.85f, 0.55f);
+	const FLinearColor RadarCurrentRockColor(1.0f, 1.0f, 1.0f, 0.95f);
+	const FLinearColor ShipColor(0.65f, 0.75f, 0.9f, 0.9f);
+	const FLinearColor DoorColor(0.3f, 1.0f, 0.9f, 1.0f);
+	const FLinearColor TerminalColor(1.0f, 0.75f, 0.2f, 1.0f);
 
 	// 정사각형 영역에 그리면 원이 되는 붓 (모서리를 높이의 절반만큼 둥글린다).
 	const FSlateBrush* CircleBrush()
@@ -84,6 +90,37 @@ FVector2D UHGPlanetMinimap::ProjectToMap(const FVector& PlanetCenter, float Plan
 	return FVector2D((Toward | Right) * Distance, (Toward | Forward) * Distance);
 }
 
+bool UHGPlanetMinimap::IsRadar() const
+{
+	return Planet.IsValid() && (Planet->GetPlanet().bAsteroidField || Planet->GetPlanet().bDerelict);
+}
+
+FVector UHGPlanetMinimap::GetRadarUp() const
+{
+	if (const AHGExplorerCharacter* Explorer = Cast<AHGExplorerCharacter>(Viewer.Get()))
+	{
+		return Explorer->GetGravityFrame().GetUpVector();
+	}
+	return FVector::UpVector;
+}
+
+FVector2D UHGPlanetMinimap::ProjectToRadar(const FVector& ViewerLocation, const FVector& Up, const FVector& ViewForward, const FVector& Point, float* OutHeight)
+{
+	// 기준 평면의 앞/오른쪽 (ProjectToMap과 같은 방식으로 카메라 방향을 평면에 눕힌다).
+	FVector Forward = ViewForward - Up * (ViewForward | Up);
+	if (!Forward.Normalize())
+	{
+		Forward = FVector::CrossProduct(Up, FMath::Abs(Up.Z) < 0.9 ? FVector::UpVector : FVector::ForwardVector).GetSafeNormal();
+	}
+	const FVector Right = FVector::CrossProduct(Up, Forward);
+	const FVector Rel = Point - ViewerLocation;
+	if (OutHeight)
+	{
+		*OutHeight = static_cast<float>(Rel | Up);
+	}
+	return FVector2D(Rel | Right, Rel | Forward);
+}
+
 bool UHGPlanetMinimap::GetReturnPadOnMap(FVector2D& OutMapCm) const
 {
 	FVector PadLocation;
@@ -91,7 +128,9 @@ bool UHGPlanetMinimap::GetReturnPadOnMap(FVector2D& OutMapCm) const
 	{
 		return false;
 	}
-	OutMapCm = ProjectToMap(Planet->GetGravityCenter(), Planet->GetPlanet().Radius, Viewer->GetActorLocation(), GetViewForward(), PadLocation);
+	OutMapCm = IsRadar()
+		? ProjectToRadar(Viewer->GetActorLocation(), GetRadarUp(), GetViewForward(), PadLocation)
+		: ProjectToMap(Planet->GetGravityCenter(), Planet->GetPlanet().Radius, Viewer->GetActorLocation(), GetViewForward(), PadLocation);
 	return true;
 }
 
@@ -141,8 +180,12 @@ int32 UHGPlanetMinimap::NativePaint(const FPaintArgs& Args, const FGeometry& All
 	FSlateDrawElement::MakeBox(OutDrawElements, Layer, Box(Origin, FVector2f(D, D)), CircleBrush(), ESlateDrawEffect::None, BackgroundColor);
 	++Layer;
 	FSlateDrawElement::MakeLines(OutDrawElements, Layer, Whole, CirclePoints(Mid, D * 0.5f - 1.f), ESlateDrawEffect::None, RimColor, true, 2.f);
-	// 안내 원: 근거리면 범위의 절반, 행성 전체면 90도 선(행성 반대쪽 반구의 시작).
+	// 안내 원: 근거리면 범위의 절반, 행성 전체면 90도 선(행성 반대쪽 반구의 시작). 레이더면 반경의 절반.
 	FSlateDrawElement::MakeLines(OutDrawElements, Layer, Whole, CirclePoints(Mid, Inner * 0.5f), ESlateDrawEffect::None, GuideColor, true, 1.f);
+	if (IsRadar())
+	{
+		return PaintRadar(AllottedGeometry, OutDrawElements, Layer, Origin, Mid, D, Inner);
+	}
 
 	// 재료 표식 (캔 것은 그리지 않는다)
 	++Layer;
@@ -206,5 +249,159 @@ int32 UHGPlanetMinimap::NativePaint(const FPaintArgs& Args, const FGeometry& All
 		: FString::Printf(TEXT("[M] 근거리 %.0fm"), LocalRangeCm / 100.0);
 	FSlateDrawElement::MakeText(OutDrawElements, Layer, Box(Origin + FVector2f(4.f, D + 21.f), FVector2f(D, 18.f)), RangeText, Font, ESlateDrawEffect::None, RimColor);
 
+	return Layer;
+}
+
+int32 UHGPlanetMinimap::PaintRadar(const FGeometry& AllottedGeometry, FSlateWindowElementList& OutDrawElements, int32 Layer,
+	const FVector2f& Origin, const FVector2f& Mid, float D, float Inner) const
+{
+	const AHGPlanetGenerator* P = Planet.Get();
+	const FVector ViewerLocation = Viewer->GetActorLocation();
+	const FVector Up = GetRadarUp();
+	const FVector Forward = GetViewForward();
+	const double RangeCm = bWholePlanet ? RadarFarCm : RadarNearCm;
+	const double PixelsPerCm = Inner / RangeCm;
+	const FPaintGeometry Whole = AllottedGeometry.ToPaintGeometry();
+	auto Box = [&AllottedGeometry](const FVector2f& TopLeft, const FVector2f& Size)
+	{
+		return AllottedGeometry.ToPaintGeometry(Size, FSlateLayoutTransform(TopLeft));
+	};
+	auto ToWidget = [&Mid, PixelsPerCm](const FVector2D& MapCm)
+	{
+		return Mid + FVector2f(static_cast<float>(MapCm.X * PixelsPerCm), static_cast<float>(-MapCm.Y * PixelsPerCm));
+	};
+	auto Project = [&](const FVector& Point, float* OutHeight = nullptr)
+	{
+		return ProjectToRadar(ViewerLocation, Up, Forward, Point, OutHeight);
+	};
+	// 사장님보다 3m 넘게 위/아래에 있으면 점 옆에 작은 위/아래 삼각형.
+	auto HeightMark = [&](const FVector2f& Pos, float Height, const FLinearColor& Color)
+	{
+		if (FMath::Abs(Height) < 300.f)
+		{
+			return;
+		}
+		const float S = Height > 0.f ? -1.f : 1.f; // 화면 Y는 아래가 +
+		const FVector2f Base = Pos + FVector2f(6.f, 0.f);
+		TArray<FVector2f> Tri = { Base + FVector2f(0.f, S * 5.f), Base + FVector2f(4.f, -S * 2.f), Base + FVector2f(-4.f, -S * 2.f), Base + FVector2f(0.f, S * 5.f) };
+		FSlateDrawElement::MakeLines(OutDrawElements, Layer, Whole, Tri, ESlateDrawEffect::None, Color, true, 1.5f);
+	};
+
+	// 소행성 지대: 소행성을 크기대로 원으로. 지금 서 있거나 끌리는 소행성은 밝게.
+	++Layer;
+	if (P->GetPlanet().bAsteroidField)
+	{
+		const AHGExplorerCharacter* Explorer = Cast<AHGExplorerCharacter>(Viewer.Get());
+		const int32 Current = Explorer ? Explorer->GetCurrentBody() : INDEX_NONE;
+		const TArray<FHGGravityBody>& Bodies = P->GetGravityBodies();
+		for (int32 i = 0; i < Bodies.Num(); ++i)
+		{
+			const FVector2D MapCm = Project(Bodies[i].Center);
+			if (MapCm.Size() - Bodies[i].Radius > RangeCm)
+			{
+				continue;
+			}
+			const float RadiusPx = FMath::Max(3.f, static_cast<float>(Bodies[i].Radius * PixelsPerCm));
+			FSlateDrawElement::MakeLines(OutDrawElements, Layer, Whole, CirclePoints(ToWidget(MapCm), RadiusPx, 24), ESlateDrawEffect::None,
+				i == Current ? RadarCurrentRockColor : RadarRockColor, true, i == Current ? 2.f : 1.f);
+		}
+	}
+
+	// 폐우주선: 윤곽선, 문(청록 점), 쓰지 않은 설계도 단말(금색 점).
+	if (P->GetPlanet().bDerelict)
+	{
+		TArray<FVector2f> Outline;
+		for (const FVector& Corner : P->GetShipOutline())
+		{
+			Outline.Add(ToWidget(Project(Corner)));
+		}
+		if (Outline.Num() > 0)
+		{
+			// 처음 점으로 닫는다. 배열 원소를 같은 배열에 바로 넣으면 늘어나며 주소가 바뀔 수 있어 먼저 복사한다.
+			const FVector2f First = Outline[0];
+			Outline.Add(First);
+			FSlateDrawElement::MakeLines(OutDrawElements, Layer, Whole, Outline, ESlateDrawEffect::None, ShipColor, true, 2.f);
+		}
+		++Layer;
+		for (int32 i = 0; i < P->GetInteractableCount(); ++i)
+		{
+			const FHGInteractable& Point = P->GetInteractable(i);
+			if (Point.Type == EHGInteractType::Blueprint && Point.bUsed)
+			{
+				continue;
+			}
+			float Height = 0.f;
+			const FVector2D MapCm = Project(Point.Location, &Height);
+			if (MapCm.Size() > RangeCm)
+			{
+				continue;
+			}
+			const FLinearColor Color = Point.Type == EHGInteractType::Blueprint ? TerminalColor : DoorColor;
+			const FVector2f Pos = ToWidget(MapCm);
+			constexpr float Size = 8.f;
+			FSlateDrawElement::MakeBox(OutDrawElements, Layer, Box(Pos - FVector2f(Size * 0.5f), FVector2f(Size)), FCoreStyle::Get().GetBrush("WhiteBrush"), ESlateDrawEffect::None, Color);
+			HeightMark(Pos, Height, Color);
+		}
+	}
+
+	// 재료 표식 (캔 것, 다른 시간대 것은 그리지 않는다)
+	++Layer;
+	constexpr float DotSize = 6.f;
+	for (const FHGIngredientMarker& Marker : P->GetIngredientMarkers())
+	{
+		if (!Marker.IsAvailable())
+		{
+			continue;
+		}
+		float Height = 0.f;
+		const FVector2D MapCm = Project(Marker.Location, &Height);
+		if (MapCm.Size() > RangeCm)
+		{
+			continue;
+		}
+		const FVector2f Pos = ToWidget(MapCm);
+		const FLinearColor Color = P->GetIngredientColor(Marker.Kind);
+		FSlateDrawElement::MakeBox(OutDrawElements, Layer, Box(Pos - FVector2f(DotSize * 0.5f), FVector2f(DotSize)), CircleBrush(), ESlateDrawEffect::None, Color);
+		HeightMark(Pos, Height, Color);
+	}
+
+	// 귀환 발판/포드: 범위 안이면 금색 원, 밖이면 테두리 화살표 (행성 지도와 같다).
+	++Layer;
+	FVector2D PadMapCm;
+	FVector PadLocation;
+	const bool bHasPad = GetReturnPadOnMap(PadMapCm) && P->GetReturnPadLocation(PadLocation);
+	if (bHasPad)
+	{
+		if (PadMapCm.Size() <= RangeCm)
+		{
+			const FVector2f Pos = ToWidget(PadMapCm);
+			constexpr float PadSize = 12.f;
+			FSlateDrawElement::MakeBox(OutDrawElements, Layer, Box(Pos - FVector2f(PadSize * 0.5f), FVector2f(PadSize)), CircleBrush(), ESlateDrawEffect::None, PadColor);
+		}
+		else
+		{
+			const FVector2f Dir = FVector2f(static_cast<float>(PadMapCm.X), static_cast<float>(-PadMapCm.Y)).GetSafeNormal();
+			const FVector2f Side(-Dir.Y, Dir.X);
+			const FVector2f Tip = Mid + Dir * (D * 0.5f - 3.f);
+			const FVector2f Base = Tip - Dir * 12.f;
+			TArray<FVector2f> Arrow = { Tip, Base + Side * 7.f, Base - Side * 7.f, Tip };
+			FSlateDrawElement::MakeLines(OutDrawElements, Layer, Whole, Arrow, ESlateDrawEffect::None, PadColor, true, 3.f);
+		}
+	}
+
+	// 사장님 화살표
+	++Layer;
+	TArray<FVector2f> PlayerArrow = { Mid + FVector2f(0.f, -9.f), Mid + FVector2f(6.f, 7.f), Mid + FVector2f(0.f, 3.f), Mid + FVector2f(-6.f, 7.f), Mid + FVector2f(0.f, -9.f) };
+	FSlateDrawElement::MakeLines(OutDrawElements, Layer, Whole, PlayerArrow, ESlateDrawEffect::None, PlayerColor, true, 2.f);
+
+	// 아래 글자: 귀환 거리(직선), 레이더 반경.
+	++Layer;
+	const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Bold", 11);
+	const FString PadText = bHasPad
+		? FString::Printf(TEXT("%s %.0fm"), P->GetPlanet().bDerelict ? TEXT("귀환 포드") : TEXT("귀환 발판"), FVector::Dist(ViewerLocation, PadLocation) / 100.0)
+		: FString(TEXT("귀환 발판 없음"));
+	FSlateDrawElement::MakeText(OutDrawElements, Layer, Box(Origin + FVector2f(4.f, D + 2.f), FVector2f(D, 18.f)), PadText, Font, ESlateDrawEffect::None, PadColor);
+	const FString RangeText = FString::Printf(TEXT("[M] 레이더 %.0fm (삼각형 = 위/아래)"), RangeCm / 100.0);
+	FSlateDrawElement::MakeText(OutDrawElements, Layer, Box(Origin + FVector2f(4.f, D + 21.f), FVector2f(D, 18.f)), RangeText, Font, ESlateDrawEffect::None, RimColor);
 	return Layer;
 }

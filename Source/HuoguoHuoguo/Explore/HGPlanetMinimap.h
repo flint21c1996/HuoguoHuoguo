@@ -52,9 +52,25 @@ public:
 	// 지금 화면 기준(카메라가 보는 방향)으로 귀환 발판의 지도 좌표. 발판이나 행성이 없으면 false.
 	bool GetReturnPadOnMap(FVector2D& OutMapCm) const;
 
+	/**
+	 * 레이더 방식 (소행성 지대, 폐우주선): 걸어 다닐 하나의 구면이 없으므로 위치를 "평면에 눕혀" 그린다.
+	 *   기준 평면 = 사장님의 지금 "위"(중력 기준, 무중력이면 우주선의 위)에 수직인 평면, 지도 위쪽 = 카메라가 보는 방향.
+	 *   점 P: 오른쪽 = (P - 사장님) · 오른쪽, 앞 = (P - 사장님) · 앞. 사장님보다 3m 넘게 위/아래면 작은 위/아래 삼각형을 덧그린다.
+	 *   소행성은 크기대로 원(지금 서 있거나 끌리는 것은 밝게), 우주선은 윤곽선, 문은 청록, 설계도 단말은 금색.
+	 *   M 키 = 반경 RadarNearCm <-> RadarFarCm.
+	 */
+	static FVector2D ProjectToRadar(const FVector& ViewerLocation, const FVector& Up, const FVector& ViewForward, const FVector& Point, float* OutHeight = nullptr);
+
 	// 근거리 범위의 반경(cm).
 	UPROPERTY(EditAnywhere, Category = "Minimap")
 	float LocalRangeCm = 4000.f;
+
+	// 레이더 반경(cm): 가까이 / 멀리 (M 키).
+	UPROPERTY(EditAnywhere, Category = "Minimap")
+	float RadarNearCm = 4000.f;
+
+	UPROPERTY(EditAnywhere, Category = "Minimap")
+	float RadarFarCm = 12000.f;
 
 	// 원의 지름(Slate 단위, 화면 해상도 배율이 곱해진다).
 	UPROPERTY(EditAnywhere, Category = "Minimap")
@@ -78,4 +94,14 @@ private:
 
 	// 지도 위쪽이 될 방향: 플레이어 카메라(컨트롤 회전)가 보는 방향. 없으면 사장님 몸 방향.
 	FVector GetViewForward() const;
+
+	// 레이더 방식인가 (소행성 지대, 폐우주선).
+	bool IsRadar() const;
+
+	// 레이더의 기준 "위": 사장님의 중력 기준 위 (탐험 사장님이 아니면 월드 Z).
+	FVector GetRadarUp() const;
+
+	// 레이더 방식으로 그린다 (NativePaint가 공통 배경 뒤에 부른다).
+	int32 PaintRadar(const FGeometry& AllottedGeometry, FSlateWindowElementList& OutDrawElements, int32 Layer,
+		const FVector2f& Origin, const FVector2f& Mid, float D, float Inner) const;
 };
