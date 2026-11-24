@@ -33,7 +33,9 @@
 - 착륙 메시지에 시간대와 지금 캘 수 있는 재료 수를 쓴다: "착륙 (밤): <행성> | 밤에 나는 재료 19개". 낮에 내려오면 낮 재료, 밤에 내려오면 밤 재료만 보인다 (`Docs/Source/Planet.md`).
 - 미니맵: 행성 맵이면 `CreateMinimap()`으로 `UHGPlanetMinimap`을 화면에 붙인다 (전체 화면 위젯, 지도는 오른쪽 위에 그림). M 키(`IA_Explore_Map`)로 근거리/행성 전체 전환.
 - 개발 명령: `HGWarpToIngredient`(가장 가까운 남은 표식 옆 1m, 위 1.5m로 순간 이동), `HGIngredients`(남은 표식 수 + 가방),
-  `HGMapInfo`(미니맵 기준 귀환 발판 방위와 표면/직선 거리), `HGFacePad`(미니맵이 가리키는 발판 방향으로 시점 회전).
+  `HGMapInfo`(미니맵 기준 귀환 발판 방위와 표면/직선 거리), `HGFacePad`(미니맵이 가리키는 발판 방향으로 시점 회전),
+  `HGLook <좌우> <위아래>`(행성 바깥 축으로 좌우, 카메라 오른쪽 축으로 위아래 회전. + = 올려다봄. 하늘 캡처용),
+  `HGWarpToLandmark <번호>`(지형 볼거리에서 25m 떨어진 땅으로 옮기고 그쪽을 보게 함. 번호 순서는 로그 `[Landmark]`).
 
 ### HGPlanetMinimap (.h/.cpp)
 탐험 파트 오른쪽 위 원형 미니맵. 위젯 에셋 없이 C++ `UUserWidget`의 `NativePaint`에서 Slate로 직접 그린다.
