@@ -136,6 +136,22 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Planet|Ingredients")
 	TObjectPtr<UStaticMesh> MarkerMesh;
 
+	// 그림체(hg.PlanetMood): 하늘 돔 반지름(cm). 가장 큰 행성과 멀리 보이는 것보다 커야 한다.
+	UPROPERTY(EditAnywhere, Category = "Planet|Mood")
+	float SkyDomeRadius = 300000.f;
+
+	// 그림체: 하늘 밝기 (하늘 머티리얼 Brightness). 노출이 EV 2.5로 고정이라 여기서 맞춘다.
+	UPROPERTY(EditAnywhere, Category = "Planet|Mood")
+	float SkyBrightness = 3.f;
+
+	// 그림체: 하늘빛 간접광 세기 (실시간 캡처 스카이 라이트).
+	UPROPERTY(EditAnywhere, Category = "Planet|Mood")
+	float SkyLightIntensity = 1.f;
+
+	// 그림체: 구름이 스스로 빛나는 세기 (발광 머티리얼 Glow).
+	UPROPERTY(EditAnywhere, Category = "Planet|Mood")
+	float CloudGlow = 0.6f;
+
 	// 재료 표식 크기 배율 (1 = 지름 1m).
 	UPROPERTY(EditAnywhere, Category = "Planet|Ingredients")
 	float MarkerScale = 0.4f;
@@ -165,13 +181,15 @@ private:
 	FVector ReturnPadLocation = FVector::ZeroVector;
 
 	/**
-	 * 그림체 미리보기 (콘솔 변수 hg.PlanetMood, 기본 0). "복셀 + NMS 색" 방향이 행성에서 어떻게 보일지 보려는 시험이다.
-	 * 켜면 생성이 끝난 뒤:
-	 *   - 하늘: 생물 군계마다 다른 색의 하늘 대기, 스카이 라이트, 옅은 안개, 구름을 실행 중에 놓는다.
-	 *   - 색: 땅과 바위를 생물 군계별 쨍한 색으로 바꾼다.
-	 *   - 바위: 매끈한 바위는 숨기고(충돌은 그대로) 같은 자리에 15cm 복셀 바위를 그린다.
-	 *   - 풀과 꽃: 복셀 풀잎, 꽃, 덤불을 착륙 지점 둘레에 빽빽하게, 나머지에 드문드문 뿌린다 (그림만, 충돌 없음).
-	 * 하늘 대기는 행성 중심이 아니라 월드 아래쪽을 땅으로 아는 엔진 기본 방식이라, 착륙 지점(북극)에서만 하늘이 맞게 보인다.
+	 * 행성 그림체 (콘솔 변수 hg.PlanetMood, 기본 1). 모양은 복셀, 색과 하늘은 노 맨즈 스카이에서 배운 방향이다.
+	 * 켜져 있으면 생성이 끝난 뒤:
+	 *   - 하늘: 행성을 감싸는 큰 구(하늘 돔)에 하늘 머티리얼을 입힌다. "위"를 행성 중심에서 계산하므로 행성 어디서나 맞다.
+	 *     하늘 머티리얼이 하늘(Is Sky)로 표시되어 있어서, 실시간 캡처 스카이 라이트가 돔 색을 그늘에 비춘다.
+	 *   - 바위: 매끈한 바위는 숨기고(충돌은 그대로) 같은 자리에 15cm 복셀 껍질 바위를 그린다.
+	 *   - 나무: 군계마다 다른 20cm 복셀 나무 (얼음 = 수정 기둥, 버섯숲 = 큰 버섯, 바위 = 자홍색 침엽수).
+	 *   - 풀과 꽃: 착륙 지점 둘레에 빽빽하게, 멀수록 드문드문 (그림만, 충돌 없음).
+	 *   - 하늘: 떠 있는 바위섬과 스스로 살짝 빛나는 구름.
+	 * 지형 자체는 BuildTerrain이 이 변수를 보고 각진 면 + 면마다 색으로 만든다.
 	 */
 	void ApplyMoodPreview();
 
