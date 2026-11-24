@@ -206,6 +206,42 @@ void AHGExplorePlayerController::HGFacePad()
 	UE_LOG(LogHuoguo, Log, TEXT("[Map] 귀환 발판 쪽으로 %.1f도 돌림"), FMath::RadiansToDegrees(Bearing));
 }
 
+void AHGExplorePlayerController::HGLook(float YawDegrees, float PitchDegrees)
+{
+	if (!Explorer || !Planet)
+	{
+		return;
+	}
+	// 좌우: HGFacePad와 같이 행성 바깥 방향 축으로 돌린다. 위아래: 돌린 뒤의 카메라 오른쪽 축으로 돌린다.
+	// 오른쪽 축 기준으로 음의 각도로 돌리면 앞 방향이 위로 들린다 (오른손 법칙).
+	const FVector Up = (Explorer->GetActorLocation() - Planet->GetGravityCenter()).GetSafeNormal();
+	FQuat Rot = FQuat(Up, FMath::DegreesToRadians(YawDegrees)) * GetControlRotation().Quaternion();
+	const FVector Right = Rot.GetRightVector();
+	Rot = FQuat(Right, -FMath::DegreesToRadians(PitchDegrees)) * Rot;
+	SetControlRotation(Rot.Rotator());
+	UE_LOG(LogHuoguo, Log, TEXT("[Look] 시점 좌우 %.0f도, 위아래 %.0f도"), YawDegrees, PitchDegrees);
+}
+
+void AHGExplorePlayerController::HGWarpToLandmark(int32 Index)
+{
+	if (!Explorer || !Planet || !Planet->GetLandmarkLocations().IsValidIndex(Index))
+	{
+		ShowMessage(TEXT("그 번호의 지형 볼거리가 없다"), FColor::Red);
+		return;
+	}
+	// 볼거리에서 옆으로 25m 간 지점의 지표 2m 위에 세우고(중력이 내려 앉힌다), 볼거리 쪽을 지표와 나란하게 바라보게 한다.
+	const FVector Center = Planet->GetGravityCenter();
+	const FVector Target = Planet->GetLandmarkLocations()[Index];
+	const FVector TargetUp = (Target - Center).GetSafeNormal();
+	const FVector Side = FVector::CrossProduct(TargetUp, FMath::Abs(TargetUp.Z) < 0.9 ? FVector::UpVector : FVector::ForwardVector).GetSafeNormal();
+	const FVector Dir = (Target + Side * 2500.f - Center).GetSafeNormal();
+	const FVector Stand = Center + Dir * (Planet->SurfaceRadiusAt(Dir) + 200.f);
+	Explorer->TeleportTo(Stand, Explorer->GetActorRotation(), false, true);
+	const FVector Look = FVector::VectorPlaneProject(Target - Stand, Dir).GetSafeNormal();
+	SetControlRotation(FRotationMatrix::MakeFromXZ(Look, Dir).Rotator());
+	UE_LOG(LogHuoguo, Log, TEXT("[Landmark] %d번 볼거리 옆으로 이동"), Index);
+}
+
 void AHGExplorePlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);

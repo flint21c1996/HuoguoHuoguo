@@ -42,6 +42,15 @@ public:
 	UFUNCTION(Exec)
 	void HGFacePad();
 
+	// HGLook <좌우 도> <위아래 도> : 시험용. 카메라를 "위"(행성 바깥) 축으로 좌우, 카메라 오른쪽 축으로 위아래(+ = 올려다봄) 돌린다.
+	// 하늘(고리 행성, 정거장, 별)을 캡처할 때 쓴다.
+	UFUNCTION(Exec)
+	void HGLook(float YawDegrees, float PitchDegrees);
+
+	// HGWarpToLandmark <번호> : 시험용. 지형 볼거리(탁상 바위/아치) 하나에서 25m 떨어진 땅 위로 옮기고 그쪽을 보게 한다.
+	UFUNCTION(Exec)
+	void HGWarpToLandmark(int32 Index);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
