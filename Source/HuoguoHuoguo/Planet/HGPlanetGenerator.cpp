@@ -31,6 +31,11 @@ namespace
 		TEXT("행성 그림체 (복셀 + 노 맨즈 스카이 색): 각진 색 지형, 하늘 돔, 복셀 바위/나무/풀꽃, 각진 바위섬. 기본 1. 0이면 다음에 만드는 행성을 예전 매끈한 단색 모습으로 만든다 (비교와 성능 확인용)."),
 		ECVF_Default);
 
+	TAutoConsoleVariable<int32> CVarPlanetFaceted(
+		TEXT("hg.PlanetFaceted"), 0,
+		TEXT("행성 그림체 지형 모양: 0 = 매끈한 땅(부드러운 색 얼룩, 지층 줄무늬, 비탈은 바위색), 1 = 각진 로우폴리 땅(면마다 한 색). 다음에 만드는 행성에 적용한다."),
+		ECVF_Default);
+
 	/**
 	 * 여러 겹 노이즈(fBm). 큰 언덕 위에 작은 굴곡을 겹쳐 자연스러운 지형을 만든다.
 	 * 한 겹 올라갈 때마다 주파수는 약 2배, 세기는 절반이다. 결과는 대략 -1 ~ 1.
@@ -526,9 +531,10 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 	}
 
 	// 4. 하늘의 볼거리: 떠 있는 바위섬과 복셀 구름. 둘 다 행성을 둘러 떠 있다.
-	//    바위섬은 복셀이 아니라 땅과 같은 각진(로우폴리) 메시로 만든다: 윗면은 땅 색으로 살짝 울퉁불퉁하고,
+	//    바위섬은 복셀이 아니라 땅과 같은 방식의 메시로 만든다 (땅이 매끈하면 매끈하게, hg.PlanetFaceted 1이면 각지게): 윗면은 땅 색으로 살짝 울퉁불퉁하고,
 	//    아래는 고리 몇 겹이 점점 좁아지며 비뚤게 내려가 뾰족한 바위 끝으로 모인다. 땅 조각이 떨어져 떠 있는 느낌.
 	const int32 Islands = 9;
+	const bool bFacetedIslands = CVarPlanetFaceted.GetValueOnGameThread() != 0;
 	TArray<FVector> IslandVertices;
 	TArray<FVector> IslandNormals;
 	TArray<FVector2D> IslandUVs;
@@ -575,51 +581,106 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 		const FVector Tip(Shape.FRandRange(-0.15f, 0.15f) * Size, Shape.FRandRange(-0.15f, 0.15f) * Size, -Depth);
 		const FVector Middle(0.f, 0.f, -Depth * 0.4f); // 바깥쪽 판단 기준 (모양의 대략 가운데)
 
-		// 삼각형 하나: 면 법선이 바깥을 향하도록 감는 순서를 맞추고, 면마다 색을 정해 세 꼭짓점에 넣는다.
-		// 앞면 법선 = (B - C) x (A - C) (지형과 같은 식). 정점은 삼각형마다 따로 두어 면 단위로 각지게 칠한다.
-		int32 Face = 0;
-		auto AddTri = [&](FVector A, FVector B, FVector C, const FLinearColor& Base)
-		{
-			FVector N = FVector::CrossProduct(B - C, A - C).GetSafeNormal();
-			if ((N | ((A + B + C) / 3.0 - Middle)) < 0.0)
-			{
-				Swap(A, B);
-				N = -N;
-			}
-			const FColor Packed = ShadeOf(Base, static_cast<uint32>(i * 1000 + Face++) * 2654435761u).ToFColor(false);
-			const FVector WorldN = Frame.TransformVectorNoScale(N);
-			for (const FVector& P : { A, B, C })
-			{
-				IslandTriangles.Add(IslandVertices.Num());
-				IslandVertices.Add(Frame.TransformPosition(P));
-				IslandNormals.Add(WorldN);
-				IslandUVs.Add(FVector2D::ZeroVector);
-				IslandColors.Add(Packed);
-			}
-		};
-		auto At = [&](int32 Ring, int32 K) { return Points[Ring * Sides + (K % Sides)]; };
-
-		// 윗면: 가운데 → 고리 0 → 고리 1. 땅 두 색을 면마다 섞는다.
+		// 섬의 꼭짓점 목록: 0 = 윗면 가운데, 1 ~ = 고리 꼭짓점(고리 r의 k번째 = 1 + r * Sides + k), 마지막 = 바위 끝.
+		// 꼭짓점마다 색: 윗면은 땅 두 색을 섞고, 가장자리 바로 밑은 어두운 흙, 그 아래 바위는 끝으로 갈수록 어둡다.
+		TArray<FVector> Local;
+		TArray<FLinearColor> LocalColor;
+		Local.Reserve(RingNum * Sides + 2);
+		LocalColor.Reserve(RingNum * Sides + 2);
 		auto TopColor = [&]() { return Shape.FRand() < 0.65f ? Pal.Ground : Pal.GroundB; };
-		for (int32 k = 0; k < Sides; ++k)
+		Local.Add(TopCenter);
+		LocalColor.Add(TopColor());
+		for (int32 r = 0; r < RingNum; ++r)
 		{
-			AddTri(TopCenter, At(0, k), At(0, k + 1), TopColor());
-			AddTri(At(0, k), At(1, k), At(1, k + 1), TopColor());
-			AddTri(At(0, k), At(1, k + 1), At(0, k + 1), TopColor());
-		}
-		// 옆과 아래: 고리 r → r + 1 띠. 가장자리 바로 밑은 땅보다 어두운 흙 띠, 그 아래는 바위색이 끝으로 갈수록 어두워진다.
-		for (int32 r = 1; r + 1 < RingNum; ++r)
-		{
-			const FLinearColor Band = r == 1 ? Pal.Ground * 0.7f : Pal.Rock * FMath::Lerp(1.f, 0.65f, (r - 2) / 3.f);
 			for (int32 k = 0; k < Sides; ++k)
 			{
-				AddTri(At(r, k), At(r + 1, k), At(r + 1, k + 1), Band);
-				AddTri(At(r, k), At(r + 1, k + 1), At(r, k + 1), Band);
+				Local.Add(Points[r * Sides + k]);
+				LocalColor.Add(r <= 1 ? TopColor() : r == 2 ? Pal.Ground * 0.7f : Pal.Rock * FMath::Lerp(1.f, 0.7f, (r - 3) / 2.f));
+			}
+		}
+		const int32 TipIndex = Local.Num();
+		Local.Add(Tip);
+		LocalColor.Add(Pal.Rock * 0.6f);
+
+		// 삼각형 하나 (꼭짓점 번호 셋): 면 법선이 바깥을 향하도록 감는 순서를 맞춘다. 앞면 법선 = (B - C) x (A - C) (지형과 같은 식).
+		// 매끈한 땅(기본)이면 꼭짓점을 이웃 삼각형과 나눠 쓰고 법선을 면 법선의 합으로 부드럽게 만든다.
+		// 각진 땅(hg.PlanetFaceted 1)이면 꼭짓점을 삼각형마다 따로 두고 면 법선, 면 색(세 꼭짓점 중 가장 높은 것의 색)으로 칠한다.
+		const int32 Base = IslandVertices.Num();
+		TArray<FVector> NormalSum;
+		NormalSum.SetNumZeroed(Local.Num());
+		int32 Face = 0;
+		auto AddTri = [&](int32 IA, int32 IB, int32 IC)
+		{
+			FVector N = FVector::CrossProduct(Local[IB] - Local[IC], Local[IA] - Local[IC]);
+			if ((N | ((Local[IA] + Local[IB] + Local[IC]) / 3.0 - Middle)) < 0.0)
+			{
+				Swap(IA, IB);
+				N = -N;
+			}
+			if (bFacetedIslands)
+			{
+				int32 Top = IA;
+				for (const int32 I : { IB, IC })
+				{
+					if (Local[I].Z > Local[Top].Z)
+					{
+						Top = I;
+					}
+				}
+				const FColor Packed = ShadeOf(LocalColor[Top], static_cast<uint32>(i * 1000 + Face++) * 2654435761u).ToFColor(false);
+				const FVector WorldN = Frame.TransformVectorNoScale(N.GetSafeNormal());
+				for (const int32 I : { IA, IB, IC })
+				{
+					IslandTriangles.Add(IslandVertices.Num());
+					IslandVertices.Add(Frame.TransformPosition(Local[I]));
+					IslandNormals.Add(WorldN);
+					IslandUVs.Add(FVector2D::ZeroVector);
+					IslandColors.Add(Packed);
+				}
+			}
+			else
+			{
+				// 넓은 삼각형일수록 법선에 크게 반영되도록 정규화하지 않은 외적을 더한다.
+				for (const int32 I : { IA, IB, IC })
+				{
+					NormalSum[I] += N;
+					IslandTriangles.Add(Base + I);
+				}
+			}
+		};
+		auto At = [&](int32 Ring, int32 K) { return 1 + Ring * Sides + (K % Sides); };
+
+		// 윗면: 가운데 → 고리 0 → 고리 1.
+		for (int32 k = 0; k < Sides; ++k)
+		{
+			AddTri(0, At(0, k), At(0, k + 1));
+			AddTri(At(0, k), At(1, k), At(1, k + 1));
+			AddTri(At(0, k), At(1, k + 1), At(0, k + 1));
+		}
+		// 옆과 아래: 고리 r → r + 1 띠, 마지막 고리 → 바위 끝.
+		for (int32 r = 1; r + 1 < RingNum; ++r)
+		{
+			for (int32 k = 0; k < Sides; ++k)
+			{
+				AddTri(At(r, k), At(r + 1, k), At(r + 1, k + 1));
+				AddTri(At(r, k), At(r + 1, k + 1), At(r, k + 1));
 			}
 		}
 		for (int32 k = 0; k < Sides; ++k)
 		{
-			AddTri(At(RingNum - 1, k), Tip, At(RingNum - 1, k + 1), Pal.Rock * 0.6f);
+			AddTri(At(RingNum - 1, k), TipIndex, At(RingNum - 1, k + 1));
+		}
+		if (!bFacetedIslands)
+		{
+			for (int32 v = 0; v < Local.Num(); ++v)
+			{
+				IslandVertices.Add(Frame.TransformPosition(Local[v]));
+				IslandNormals.Add(Frame.TransformVectorNoScale(NormalSum[v].GetSafeNormal()));
+				IslandUVs.Add(FVector2D::ZeroVector);
+				FLinearColor Color = LocalColor[v] * (1.f + 0.06f * Shape.FRandRange(-1.f, 1.f));
+				Color.A = 1.f;
+				IslandColors.Add(Color.ToFColor(false));
+			}
 		}
 	}
 	if (IslandVertices.Num() > 0)
@@ -976,7 +1037,45 @@ void AHGPlanetGenerator::BuildTerrain()
 	}
 
 	Terrain->ClearAllMeshSections();
-	if (IsMoodEnabled())
+	if (IsMoodEnabled() && CVarPlanetFaceted.GetValueOnGameThread() == 0)
+	{
+		// 그림체: 매끈한 지형 (기본). 정점을 이웃 삼각형과 나눠 쓰고 부드러운 법선으로 칠해서 각이 보이지 않는다.
+		// 색은 정점마다 정해 삼각형 안에서 부드럽게 섞인다:
+		//   - 땅 주 색과 얼룩 색을 큰 노이즈로 넓고 부드럽게 섞는다.
+		//   - 높이에 따라 줄무늬(지층)처럼 밝기가 오르내린다. 큰 노이즈로 줄을 휘게 해서 외계 지형의 물결무늬처럼 보이게 한다.
+		//   - 가파른 비탈은 바위색으로 바꾼다 (기울기 = 법선이 바로 위에서 얼마나 기울었나).
+		//   - 3m 크기 잔 노이즈로 밝기를 조금 흔들어 밋밋하지 않게 한다.
+		const FMoodPalette Pal = MoodPalette(Planet.Biome);
+		const float Amp = FMath::Max(1.f, Planet.Radius * Planet.TerrainAmplitude);
+		TArray<FColor> Colors;
+		Colors.SetNumUninitialized(Vertices.Num());
+		for (int32 v = 0; v < Vertices.Num(); ++v)
+		{
+			const FVector& P = Vertices[v];
+			const FVector Up = P.GetSafeNormal();
+			const float Patch = FMath::Clamp(0.5f + 1.6f * FMath::PerlinNoise3D(P / 800.0 + NoiseOffset * 0.5), 0.f, 1.f);
+			const float Height = static_cast<float>((P.Size() - Planet.Radius) / Amp);
+			const float Warp = FMath::PerlinNoise3D(P / 2500.0 - NoiseOffset * 0.3);
+			const float Strata = 0.5f + 0.5f * FMath::Sin((Height * 3.f + Warp * 2.5f) * UE_PI);
+			const float Slope = 1.f - static_cast<float>(FMath::Abs(Normals[v] | Up));
+			const float Speckle = FMath::PerlinNoise3D(P / 250.0 + NoiseOffset);
+			// 외계 이끼: 4m 크기 얼룩이 일정 값을 넘는 곳만 식물 색으로 덮는다 (땅에 낀 낯선 색 이끼/균사 무늬).
+			const float Moss = FMath::SmoothStep(0.15f, 0.35f, FMath::PerlinNoise3D(P / 400.0 - NoiseOffset * 0.8));
+
+			FLinearColor Color = FMath::Lerp(Pal.Ground, Pal.GroundB, FMath::SmoothStep(0.25f, 0.75f, Patch));
+			Color *= FMath::Lerp(0.85f, 1.15f, Strata) * (1.f + 0.18f * Speckle) * FMath::Lerp(0.9f, 1.1f, FMath::Clamp(Height * 0.5f + 0.5f, 0.f, 1.f));
+			Color = FMath::Lerp(Color, Pal.Grass[1] * 0.8f, Moss * 0.7f);
+			Color = FMath::Lerp(Color, Pal.Rock, FMath::SmoothStep(0.10f, 0.30f, Slope));
+			Color.A = 1.f;
+			Colors[v] = Color.ToFColor(false);
+		}
+		Terrain->CreateMeshSection(0, Vertices, Triangles, Normals, UVs, Colors, TArray<FProcMeshTangent>(), true);
+		if (UMaterialInterface* VertexColorMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/HG/Materials/M_HG_VertexColor.M_HG_VertexColor")))
+		{
+			Terrain->SetMaterial(0, VertexColorMaterial);
+		}
+	}
+	else if (IsMoodEnabled())
 	{
 		// 그림체: 각진(로우폴리) 지형. 삼각형마다 정점을 따로 두어 면 법선으로 칠하고, 면마다 색을 정해 꼭짓점 색으로 넣는다.
 		// 색 = 땅 주 색과 얼룩 색을 큰 노이즈로 섞고, 높을수록 조금 밝게, 면마다 밝기를 세 단계로 흔든다 (복셀 소품과 어울리는 도트 질감).
