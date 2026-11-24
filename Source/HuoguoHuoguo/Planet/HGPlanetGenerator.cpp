@@ -28,7 +28,7 @@ namespace
 {
 	TAutoConsoleVariable<int32> CVarPlanetMood(
 		TEXT("hg.PlanetMood"), 1,
-		TEXT("행성 그림체 (복셀 + 노 맨즈 스카이 색): 각진 색 지형, 하늘 돔, 복셀 바위/나무/풀꽃/떠 있는 섬/구름. 기본 1. 0이면 다음에 만드는 행성을 예전 매끈한 단색 모습으로 만든다 (비교와 성능 확인용)."),
+		TEXT("행성 그림체 (복셀 + 노 맨즈 스카이 색): 각진 색 지형, 하늘 돔, 복셀 바위/나무/풀꽃, 각진 바위섬. 기본 1. 0이면 다음에 만드는 행성을 예전 매끈한 단색 모습으로 만든다 (비교와 성능 확인용)."),
 		ECVF_Default);
 
 	/**
@@ -453,35 +453,201 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 		PlaceTuft(RandomDirAway());
 	}
 
-	// 4. 하늘의 볼거리: 떠 있는 바위섬(윗면은 땅 색, 아래는 뾰족한 바위)과 복셀 구름. 둘 다 행성을 둘러 떠 있다.
-	int32 SkyVoxels = 0;
+	// 4. 하늘의 볼거리: 떠 있는 바위섬과 복셀 구름. 둘 다 행성을 둘러 떠 있다.
+	//    바위섬은 복셀이 아니라 땅과 같은 각진(로우폴리) 메시로 만든다: 윗면은 땅 색으로 살짝 울퉁불퉁하고,
+	//    아래는 고리 몇 겹이 점점 좁아지며 비뚤게 내려가 뾰족한 바위 끝으로 모인다. 땅 조각이 떨어져 떠 있는 느낌.
 	const int32 Islands = 9;
+	TArray<FVector> IslandVertices;
+	TArray<FVector> IslandNormals;
+	TArray<FVector2D> IslandUVs;
+	TArray<FColor> IslandColors;
+	TArray<int32> IslandTriangles;
 	for (int32 i = 0; i < Islands; ++i)
 	{
 		const FVector Dir = i < 5 ? RandomDirNearPole(FMath::Min(1.2, 9000.0 / R)) : RandomDirAway();
 		const float Size = Rng.FRandRange(250.f, 600.f);
 		const FTransform Frame = SurfaceFrame(Dir, Rng.FRandRange(0.f, UE_TWO_PI), Rng.FRandRange(1800.f, 4000.f));
-		SkyVoxels += FillShell(Frame, FVector(-Size, -Size, -Size * 1.3f), FVector(Size, Size, 60.f), 40.f, true, false,
-			[&](const FVector& P)
+
+		// 섬 모양은 섬마다 따로 뽑는다 (공용 Rng를 쓰면 뒤의 구름 자리까지 바뀌므로 섬 번호로 만든 별도 수열을 쓴다).
+		FRandomStream Shape(static_cast<int32>(HashCombine(GetTypeHash(Planet.Seed), GetTypeHash(i * 7919 + 17))));
+		const int32 Sides = Shape.RandRange(8, 11);
+		const float Depth = Size * Shape.FRandRange(1.1f, 1.6f);
+
+		// 고리: 0 = 윗면 가운데 둘레(반지름 절반), 1 = 윗면 가장자리, 2 = 가장자리 바로 밑(흙 띠), 3~5 = 아래로 좁아지는 바위.
+		// 각 고리는 (높이, 반지름 비율, 꼭짓점 흔들기 정도)로 정하고, 꼭짓점마다 반지름과 높이를 흔들어 각진 바위 느낌을 낸다.
+		struct FRing { float Z; float Radius; float Jitter; };
+		const FRing Rings[] = {
+			{ Size * 0.10f, 0.50f, 0.15f },
+			{ 0.f,          1.00f, 0.12f },
+			{ -Size * 0.18f, 0.95f, 0.10f },
+			{ -Depth * 0.40f, 0.70f, 0.18f },
+			{ -Depth * 0.68f, 0.42f, 0.22f },
+			{ -Depth * 0.88f, 0.18f, 0.30f },
+		};
+		const int32 RingNum = UE_ARRAY_COUNT(Rings);
+		TArray<FVector> Points; // 고리 r의 꼭짓점 k = Points[r * Sides + k]
+		Points.Reserve(RingNum * Sides);
+		for (int32 r = 0; r < RingNum; ++r)
+		{
+			// 고리마다 조금씩 비틀어 아래 바위면이 반듯한 기둥처럼 보이지 않게 한다.
+			const float Twist = r * Shape.FRandRange(0.f, 0.35f);
+			for (int32 k = 0; k < Sides; ++k)
 			{
-				// 위는 거의 평평한 원판, 아래로 갈수록 좁아지는 뒤집힌 원뿔.
-				const float Rxy = FMath::Sqrt(P.X * P.X + P.Y * P.Y);
-				if (P.Z > 40.f) { return false; }
-				if (P.Z >= 0.f) { return Rxy <= Size; }
-				return Rxy <= Size * (1.f + P.Z / (Size * 1.3f));
-			},
-			[&](const FVector& P, uint32 H) { return P.Z >= 0.f ? ShadeOf(Pal.Ground, H) : ShadeOf(Pal.Rock, H); });
+				const float A = (k + Shape.FRandRange(-0.2f, 0.2f)) / Sides * UE_TWO_PI + Twist;
+				const float Rad = Size * Rings[r].Radius * (1.f + Shape.FRandRange(-Rings[r].Jitter, Rings[r].Jitter));
+				const float Z = Rings[r].Z + Size * Shape.FRandRange(-0.06f, 0.06f) * (r <= 1 ? 0.5f : 1.f);
+				Points.Add(FVector(FMath::Cos(A) * Rad, FMath::Sin(A) * Rad, Z));
+			}
+		}
+		const FVector TopCenter(0.f, 0.f, Size * 0.14f);
+		const FVector Tip(Shape.FRandRange(-0.15f, 0.15f) * Size, Shape.FRandRange(-0.15f, 0.15f) * Size, -Depth);
+		const FVector Middle(0.f, 0.f, -Depth * 0.4f); // 바깥쪽 판단 기준 (모양의 대략 가운데)
+
+		// 삼각형 하나: 면 법선이 바깥을 향하도록 감는 순서를 맞추고, 면마다 색을 정해 세 꼭짓점에 넣는다.
+		// 앞면 법선 = (B - C) x (A - C) (지형과 같은 식). 정점은 삼각형마다 따로 두어 면 단위로 각지게 칠한다.
+		int32 Face = 0;
+		auto AddTri = [&](FVector A, FVector B, FVector C, const FLinearColor& Base)
+		{
+			FVector N = FVector::CrossProduct(B - C, A - C).GetSafeNormal();
+			if ((N | ((A + B + C) / 3.0 - Middle)) < 0.0)
+			{
+				Swap(A, B);
+				N = -N;
+			}
+			const FColor Packed = ShadeOf(Base, static_cast<uint32>(i * 1000 + Face++) * 2654435761u).ToFColor(false);
+			const FVector WorldN = Frame.TransformVectorNoScale(N);
+			for (const FVector& P : { A, B, C })
+			{
+				IslandTriangles.Add(IslandVertices.Num());
+				IslandVertices.Add(Frame.TransformPosition(P));
+				IslandNormals.Add(WorldN);
+				IslandUVs.Add(FVector2D::ZeroVector);
+				IslandColors.Add(Packed);
+			}
+		};
+		auto At = [&](int32 Ring, int32 K) { return Points[Ring * Sides + (K % Sides)]; };
+
+		// 윗면: 가운데 → 고리 0 → 고리 1. 땅 두 색을 면마다 섞는다.
+		auto TopColor = [&]() { return Shape.FRand() < 0.65f ? Pal.Ground : Pal.GroundB; };
+		for (int32 k = 0; k < Sides; ++k)
+		{
+			AddTri(TopCenter, At(0, k), At(0, k + 1), TopColor());
+			AddTri(At(0, k), At(1, k), At(1, k + 1), TopColor());
+			AddTri(At(0, k), At(1, k + 1), At(0, k + 1), TopColor());
+		}
+		// 옆과 아래: 고리 r → r + 1 띠. 가장자리 바로 밑은 땅보다 어두운 흙 띠, 그 아래는 바위색이 끝으로 갈수록 어두워진다.
+		for (int32 r = 1; r + 1 < RingNum; ++r)
+		{
+			const FLinearColor Band = r == 1 ? Pal.Ground * 0.7f : Pal.Rock * FMath::Lerp(1.f, 0.65f, (r - 2) / 3.f);
+			for (int32 k = 0; k < Sides; ++k)
+			{
+				AddTri(At(r, k), At(r + 1, k), At(r + 1, k + 1), Band);
+				AddTri(At(r, k), At(r + 1, k + 1), At(r, k + 1), Band);
+			}
+		}
+		for (int32 k = 0; k < Sides; ++k)
+		{
+			AddTri(At(RingNum - 1, k), Tip, At(RingNum - 1, k + 1), Pal.Rock * 0.6f);
+		}
 	}
-	const int32 Clouds = FMath::Clamp(FMath::RoundToInt(AreaM2 / 2500.0), 12, 60);
+	if (IslandVertices.Num() > 0)
+	{
+		UProceduralMeshComponent* IslandMesh = NewObject<UProceduralMeshComponent>(this, TEXT("SkyIslands"), RF_Transient);
+		IslandMesh->SetupAttachment(Terrain);
+		IslandMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		IslandMesh->SetCanEverAffectNavigation(false);
+		IslandMesh->RegisterComponent();
+		IslandMesh->CreateMeshSection(0, IslandVertices, IslandTriangles, IslandNormals, IslandUVs, IslandColors, TArray<FProcMeshTangent>(), false);
+		IslandMesh->SetMaterial(0, Terrain->GetMaterial(0));
+	}
+	// 구름도 바위섬처럼 각진(로우폴리) 메시로 만든다. 구름 하나 = 낮은 해상도 구 덩어리 3~5개를 길게 겹친 것,
+	// 밑면은 납작하게 눌러 평평한 구름 바닥을 만든다. 겹친 덩어리의 안쪽 면은 가려지므로 따로 지우지 않는다.
+	// 기본은 구름 없음 (bSkyClouds): 우주에 떠 있는 작은 행성에 구름이 있으니 어색하다는 사용자 의견.
+	const int32 Clouds = bSkyClouds ? FMath::Clamp(FMath::RoundToInt(AreaM2 / 2500.0), 12, 60) : 0;
+	TArray<FVector> CloudVertices;
+	TArray<FVector> CloudNormals;
+	TArray<FVector2D> CloudUVs;
+	TArray<int32> CloudTriangles;
 	for (int32 i = 0; i < Clouds; ++i)
 	{
 		const FVector Dir = i < 8 ? RandomDirNearPole(FMath::Min(1.4, 12000.0 / R)) : RandomDirAway();
 		const FTransform Frame = SurfaceFrame(Dir, Rng.FRandRange(0.f, UE_TWO_PI), Rng.FRandRange(4500.f, 7000.f));
 		const FVector Ext(Rng.FRandRange(600.f, 1400.f), Rng.FRandRange(400.f, 800.f), Rng.FRandRange(150.f, 300.f));
+
+		// 덩어리 배치는 구름 번호로 만든 따로 수열에서 뽑는다 (섬과 같은 이유).
+		FRandomStream Shape(static_cast<int32>(HashCombine(GetTypeHash(Planet.Seed), GetTypeHash(i * 104729 + 31))));
+		const int32 Lumps = Shape.RandRange(3, 5);
+		const float Floor = -Ext.Z * 0.45f; // 이보다 아래 꼭짓점은 이 높이로 눌러 납작한 바닥을 만든다
+		for (int32 l = 0; l < Lumps; ++l)
+		{
+			// 덩어리는 구름의 긴 축(X)을 따라 늘어서고, 가운데 것이 가장 크고 높다.
+			const float T = Lumps == 1 ? 0.f : static_cast<float>(l) / (Lumps - 1) * 2.f - 1.f; // -1 ~ 1
+			const float Big = 1.f - 0.45f * FMath::Abs(T);
+			const FVector Center(T * Ext.X * 0.6f, Shape.FRandRange(-0.25f, 0.25f) * Ext.Y, Ext.Z * 0.15f * Big);
+			const FVector Radius(Ext.X * 0.45f * Big, Ext.Y * Shape.FRandRange(0.6f, 0.9f) * Big, Ext.Z * Shape.FRandRange(0.8f, 1.1f) * Big);
+
+			// 낮은 해상도 구: 둘레 8칸, 위아래 5칸. 꼭짓점을 조금씩 흔들어 반듯한 구가 아니게 한다.
+			const int32 Seg = 8;
+			const int32 Stack = 5;
+			TArray<FVector> Grid;
+			Grid.Reserve((Stack + 1) * Seg);
+			for (int32 s = 0; s <= Stack; ++s)
+			{
+				const float Phi = UE_PI * s / Stack; // 0 = 꼭대기, PI = 바닥
+				for (int32 k = 0; k < Seg; ++k)
+				{
+					const float Theta = UE_TWO_PI * (k + (s % 2) * 0.5f) / Seg;
+					const float J = (s == 0 || s == Stack) ? 1.f : Shape.FRandRange(0.85f, 1.12f);
+					FVector P = Center + FVector(FMath::Sin(Phi) * FMath::Cos(Theta) * Radius.X, FMath::Sin(Phi) * FMath::Sin(Theta) * Radius.Y, FMath::Cos(Phi) * Radius.Z) * J;
+					P.Z = FMath::Max(P.Z, Floor);
+					Grid.Add(P);
+				}
+			}
+			auto G = [&](int32 S, int32 K) { return Grid[S * Seg + ((K % Seg) + Seg) % Seg]; };
+			auto AddCloudTri = [&](FVector A, FVector B, FVector C)
+			{
+				FVector N = FVector::CrossProduct(B - C, A - C).GetSafeNormal();
+				if (N.IsNearlyZero())
+				{
+					return; // 꼭대기/바닥에 모인 점끼리 생긴 납작한 삼각형
+				}
+				if ((N | ((A + B + C) / 3.0 - Center)) < 0.0)
+				{
+					Swap(A, B);
+					N = -N;
+				}
+				const FVector WorldN = Frame.TransformVectorNoScale(N);
+				for (const FVector& P : { A, B, C })
+				{
+					CloudTriangles.Add(CloudVertices.Num());
+					CloudVertices.Add(Frame.TransformPosition(P));
+					CloudNormals.Add(WorldN);
+					CloudUVs.Add(FVector2D::ZeroVector);
+				}
+			};
+			for (int32 s = 0; s < Stack; ++s)
+			{
+				// 홀수 줄은 반 칸 어긋나 있어서 위아래 줄을 지그재그 삼각형으로 잇는다.
+				const int32 Shift = s % 2;
+				for (int32 k = 0; k < Seg; ++k)
+				{
+					AddCloudTri(G(s, k), G(s + 1, k - 1 + Shift), G(s + 1, k + Shift));
+					AddCloudTri(G(s, k), G(s + 1, k + Shift), G(s, k + 1));
+				}
+			}
+		}
+	}
+	if (CloudVertices.Num() > 0)
+	{
+		UProceduralMeshComponent* CloudMesh = NewObject<UProceduralMeshComponent>(this, TEXT("SkyClouds"), RF_Transient);
+		CloudMesh->SetupAttachment(Terrain);
+		CloudMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		CloudMesh->SetCanEverAffectNavigation(false);
+		CloudMesh->SetCastShadow(false);
+		CloudMesh->RegisterComponent();
+		CloudMesh->CreateMeshSection(0, CloudVertices, CloudTriangles, CloudNormals, CloudUVs, TArray<FColor>(), TArray<FProcMeshTangent>(), false);
 		// 구름은 살짝 스스로 빛나게 칠해서(발광 머티리얼) 아래에서 올려다봐도 검게 보이지 않게 한다.
-		SkyVoxels += FillShell(Frame, -Ext, Ext, 60.f, false, true,
-			[&](const FVector& P) { return FMath::Square(P.X / Ext.X) + FMath::Square(P.Y / Ext.Y) + FMath::Square(P.Z / Ext.Z) <= 1.f; },
-			[&](const FVector& P, uint32) { return P.Z > 0.f ? FLinearColor(1.f, 1.f, 1.f) : FLinearColor(0.88f, 0.90f, 0.96f); });
+		HGVoxel::PaintGlow(CloudMesh, FLinearColor(0.95f, 0.96f, 1.f), CloudGlow);
 	}
 
 	int32 Instances = 0;
@@ -564,8 +730,9 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 		SkyComp->RecaptureSky();
 	}
 
-	UE_LOG(LogHuoguo, Log, TEXT("[Mood] 행성 그림체: 군계 %d, 바위 칸 %d, 나무 %d그루(칸 %d), 풀과 꽃 %d포기, 하늘 섬/구름 칸 %d, 복셀 인스턴스 %d, 색 묶음 %d"),
-		static_cast<int32>(Planet.Biome), RockVoxels, NearTrees + FarTrees, TreeVoxels, InnerCount + RingCount + FarCount, SkyVoxels, Instances, Batches.Num());
+	UE_LOG(LogHuoguo, Log, TEXT("[Mood] 행성 그림체: 군계 %d, 바위 칸 %d, 나무 %d그루(칸 %d), 풀과 꽃 %d포기, 바위섬 %d개(삼각형 %d), 구름 %d개(삼각형 %d), 복셀 인스턴스 %d, 색 묶음 %d"),
+		static_cast<int32>(Planet.Biome), RockVoxels, NearTrees + FarTrees, TreeVoxels, InnerCount + RingCount + FarCount,
+		Islands, IslandTriangles.Num() / 3, Clouds, CloudTriangles.Num() / 3, Instances, Batches.Num());
 }
 
 void AHGPlanetGenerator::ChoosePlanet()

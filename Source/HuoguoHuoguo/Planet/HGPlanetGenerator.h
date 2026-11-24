@@ -153,6 +153,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Planet|Mood")
 	float SkyLightIntensity = 1.f;
 
+	// 그림체: 하늘에 각진 구름을 띄울지. 기본은 끔 (우주의 작은 행성에 구름이 있으면 어색하다).
+	UPROPERTY(EditAnywhere, Category = "Planet|Mood")
+	bool bSkyClouds = false;
+
 	// 그림체: 구름이 스스로 빛나는 세기 (발광 머티리얼 Glow).
 	UPROPERTY(EditAnywhere, Category = "Planet|Mood")
 	float CloudGlow = 0.6f;
@@ -193,7 +197,7 @@ private:
 	 *   - 바위: 매끈한 바위는 숨기고(충돌은 그대로) 같은 자리에 15cm 복셀 껍질 바위를 그린다.
 	 *   - 나무: 군계마다 다른 20cm 복셀 나무 (얼음 = 수정 기둥, 버섯숲 = 큰 버섯, 바위 = 자홍색 침엽수).
 	 *   - 풀과 꽃: 착륙 지점 둘레에 빽빽하게, 멀수록 드문드문 (그림만, 충돌 없음).
-	 *   - 하늘: 떠 있는 바위섬과 스스로 살짝 빛나는 구름.
+	 *   - 하늘: 땅처럼 각진 떠 있는 바위섬. 각진 구름은 bSkyClouds를 켰을 때만 (기본 끔).
 	 * 지형 자체는 BuildTerrain이 이 변수를 보고 각진 면 + 면마다 색으로 만든다.
 	 */
 	void ApplyMoodPreview();
