@@ -17,7 +17,7 @@ powershell -ExecutionPolicy Bypass -File .\Tools\Invoke-HGBuild.ps1
 - HuoguoHuoguo 에디터가 열려 있으면 거부한다. `-Force`면 기존 맵을 지우고 다시 만든다 (에디터에서 고친 배치가 사라짐).
 
 ### GenerateGreyboxMaps.py - 맵/머티리얼/데이터 표 생성 내용
-- `ensure_data_tables()`: `DATA_TABLES` 목록의 CSV(`Data/*.csv`)를 DataTable(`/Game/HG/Data/DT_*`)로 읽어 들인다 (지금 `DT_Ingredients`, `DT_Combos`). 에셋이 없으면 만들고, 있으면 CSV로 다시 채운 뒤 내용이 바뀌었을 때만 저장한다 (`Docs/Content/Data.md`).
+- `ensure_data_tables()`: `DATA_TABLES` 목록의 CSV(`Data/*.csv`)를 DataTable(`/Game/HG/Data/DT_*`)로 읽어 들인다 (지금 `DT_Ingredients`, `DT_Combos`, `DT_Furniture`). 에셋이 없으면 만들고, 있으면 CSV로 다시 채운 뒤 내용이 바뀌었을 때만 저장한다 (`Docs/Content/Data.md`).
 - `MI_GB_*` 머티리얼, `L_Station`, `L_Asteroid_Krak7`, `L_PlanetSurface`를 만든다. 이미 있으면 건너뛴다.
 - `MAP_GAME_MODES`: 맵마다 World Settings GameMode를 정한다 (L_Station = 경영, 나머지 = 탐험). 새 맵을 만들 때와 이미 있는 맵 모두에 적용한다.
 - `upgrade_station()` / `upgrade_existing_map()`: 이미 있는 맵에서 값만 새 규칙으로 바꾼다 (게임 모드 지정, 정거장 에어록 발판을 다이빙 발판으로, `FromAsteroid` 시작점을 `FromPlanet`으로). 바뀐 것이 없으면 저장하지 않는다.

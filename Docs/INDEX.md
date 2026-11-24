@@ -32,6 +32,7 @@
 - 경영 파트
   - 시점과 조작 [구현됨]
   - 가구 배치 [구현됨]
+  - 가구 종류를 많이 [구현됨 기본, 사용자 요청]
   - 경영의 중심 = 칸 배치와 콤보 [결정, 사용자 결정 / 첫 시제품 구현됨]
   - 훠궈다운 영업 [결정]
   - 고른 경영 시스템 [결정]
@@ -135,6 +136,7 @@
   - HGShopGameMode (.h/.cpp)
   - HGShopBossCharacter (.h/.cpp)
   - HGShopPlayerController (.h/.cpp)
+  - HGFurnitureData.h
   - HGFurniture (.h/.cpp)
   - HGShopGrid (.h/.cpp)
   - HGShopCombos (.h/.cpp)
@@ -161,7 +163,9 @@
 - 역할
 - 파일
   - Data/Ingredients.csv - 재료
+  - Data/Furniture.csv - 가구 목록 (엑셀로 열어 고친다)
   - Data/Combos.csv - 배치 콤보
+  - Content/HG/Data/DT_Furniture - 가구 DataTable
   - Content/HG/Data/DT_Combos - 콤보 DataTable
   - Content/HG/Data/DT_Ingredients - 재료 DataTable
 - 흐름 / 규칙

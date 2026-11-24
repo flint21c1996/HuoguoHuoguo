@@ -42,8 +42,8 @@
   - `PassTime()`: 낮 → 밤 → 문 닫을 시간 → `AdvanceOrbitCycle()`(다음 날 낮). 다음 날로 넘어갔으면 true.
   - `FinishDive()`: 정거장에 돌아왔을 때 다이빙 중이었으면 `PassTime()` 한 번. 행성에 있는 동안은 내려간 시간대 그대로라서, 표면 맵은 `GetDayPhase()`로 내려간 시간대를 읽는다.
   - `CanDive()`: 문 닫을 시간이 아니면 true.
-- 정거장 가구 배치 기록: `FHGPlacedFurniture`(클래스, 위치, Yaw) 배열. `HasShopLayout`, `GetShopLayout`, `SetShopLayout`.
-  - 클래스는 `TSubclassOf<AActor>`로 들고 있다. 공통 폴더가 경영 파트(`Shop/HGFurniture.h`)를 include하지 않기 위해서이다.
+- 정거장 가구 배치 기록: `FHGPlacedFurniture`(가구 ID, 위치, Yaw) 배열. `HasShopLayout`, `GetShopLayout`, `SetShopLayout`.
+  - 가구는 ID(`Data/Furniture.csv` 행 이름)로 남긴다. 다시 놓을 때 경영 파트가 그 행으로 가구를 만든다. 공통 폴더는 경영 파트의 가구 클래스를 모른다.
 - `GetDevSequence()`: `HGSeq`가 아직 실행하지 않은 명령들.
 - 재료
   - `IngredientTable`(소프트 참조, 기본 `/Game/HG/Data/DT_Ingredients`): `GetIngredientTable()`이 처음 쓸 때 불러온다. 없으면 에러 로그 한 번.
