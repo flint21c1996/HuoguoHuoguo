@@ -170,6 +170,24 @@ public:
 	void MarkHarvested(int32 PlanetSeed, int32 MarkerId);
 	int32 GetHarvestedCount(int32 PlanetSeed) const;
 
+	// ---- 도감 ----
+	// 재료: 스캔으로 보거나 캐면 "발견". 새로 발견했으면 true.
+	bool DiscoverIngredient(FName IngredientId);
+	bool IsIngredientDiscovered(FName IngredientId) const { return DiscoveredIngredients.Contains(IngredientId); }
+
+	// 재료를 캔 횟수(게임 전체). 캐면 발견도 함께 한다.
+	void AddHarvestTotal(FName IngredientId);
+	int32 GetHarvestTotal(FName IngredientId) const { return HarvestTotals.FindRef(IngredientId); }
+
+	// 다녀온 장소: 군계(0 ~ 2) x 종류(0 행성, 1 소행성 지대, 2 폐우주선). 새로 왔으면 true.
+	static int32 PlaceKey(int32 Biome, int32 Kind) { return Biome * 3 + Kind; }
+	bool DiscoverPlace(int32 Key);
+	bool IsPlaceDiscovered(int32 Key) const { return DiscoveredPlaces.Contains(Key); }
+
+	// 폐우주선 설계도 단말에서 연 가구 수.
+	void AddBlueprintFound() { ++BlueprintsFound; }
+	int32 GetBlueprintsFound() const { return BlueprintsFound; }
+
 protected:
 	// 재료 DataTable 경로. 기본값은 /Game/HG/Data/DT_Ingredients (Tools/GenerateGreyboxMaps.py가 Data/Ingredients.csv로 만든다).
 	UPROPERTY(EditDefaultsOnly, Category = "Data")
@@ -195,6 +213,12 @@ private:
 
 	TSet<FName> DiscoveredCombos;
 	TSet<FName> UnlockedFurniture;
+
+	// 도감 기록 (게임이 켜져 있는 동안만, 저장 파일은 아직 없다)
+	TSet<FName> DiscoveredIngredients;
+	TMap<FName, int32> HarvestTotals;
+	TSet<int32> DiscoveredPlaces;
+	int32 BlueprintsFound = 0;
 	int32 ServedCustomers = 0;
 
 	UPROPERTY()

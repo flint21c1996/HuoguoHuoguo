@@ -227,6 +227,26 @@ bool UHGGameInstance::DiscoverCombo(FName ComboId)
 	return !bAlready;
 }
 
+bool UHGGameInstance::DiscoverIngredient(FName IngredientId)
+{
+	bool bAlready = false;
+	DiscoveredIngredients.Add(IngredientId, &bAlready);
+	return !bAlready;
+}
+
+void UHGGameInstance::AddHarvestTotal(FName IngredientId)
+{
+	DiscoverIngredient(IngredientId);
+	++HarvestTotals.FindOrAdd(IngredientId);
+}
+
+bool UHGGameInstance::DiscoverPlace(int32 Key)
+{
+	bool bAlready = false;
+	DiscoveredPlaces.Add(Key, &bAlready);
+	return !bAlready;
+}
+
 bool UHGGameInstance::IsMarkerHarvested(int32 PlanetSeed, int32 MarkerId) const
 {
 	const TSet<int32>* Set = HarvestedByPlanet.Find(PlanetSeed);
