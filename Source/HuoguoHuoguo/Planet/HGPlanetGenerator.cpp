@@ -17,6 +17,7 @@
 #include "Engine/World.h"
 #include "Game/HGGameInstance.h"
 #include "Game/HGIngredientTypes.h"
+#include "Game/HGLookSettings.h"
 #include "HuoguoHuoguo.h"
 #include "HAL/PlatformTime.h"
 #include "Math/RandomStream.h"
@@ -249,10 +250,13 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 	TMap<uint32, FLinearColor> BatchColor;
 	TMap<uint32, bool> BatchShadow;
 	TMap<uint32, bool> BatchGlow;
-	auto AddVoxel = [&](const FTransform& Frame, const FVector& Local, float Size, const FLinearColor& Color, bool bShadow, bool bGlow = false)
+	// 그림체 비교(hg.Look)의 윤곽선에서 빼는 묶음 (외계 식물). 커스텀 스텐실로 표시해 두면 화면 효과가 그 점에는 선을 긋지 않는다.
+	TMap<uint32, bool> BatchNoOutline;
+	auto AddVoxel = [&](const FTransform& Frame, const FVector& Local, float Size, const FLinearColor& Color, bool bShadow, bool bGlow = false, bool bNoOutline = false)
 	{
-		const uint32 Key = HashCombine(HashCombine(HashCombine(Color.ToFColor(false).DWColor(), GetTypeHash(FMath::RoundToInt(Size))), GetTypeHash(bShadow)), GetTypeHash(bGlow));
+		const uint32 Key = HashCombine(HashCombine(HashCombine(HashCombine(Color.ToFColor(false).DWColor(), GetTypeHash(FMath::RoundToInt(Size))), GetTypeHash(bShadow)), GetTypeHash(bGlow)), GetTypeHash(bNoOutline));
 		BatchGlow.Add(Key, bGlow);
+		BatchNoOutline.Add(Key, bNoOutline);
 		Batches.FindOrAdd(Key).Add(FTransform(Frame.GetRotation(), Frame.TransformPosition(Local), FVector(Size / 100.f)));
 		BatchColor.Add(Key, Color);
 		BatchShadow.Add(Key, bShadow);
@@ -420,7 +424,8 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 		// 칸 좌표(X, Y, Z)에 칸 하나. Z = 0이 땅에 닿는 칸.
 		auto Put = [&](int32 X, int32 Y, int32 Z, const FLinearColor& Color, bool bGlow = false)
 		{
-			AddVoxel(Frame, FVector(X * V, Y * V, (Z + 0.5f) * V), V, Color, false, bGlow);
+			// 외계 식물은 칸이 잘고 촘촘해서 윤곽선을 그으면 지저분하다 (사용자 요청: 꽃은 외곽선을 뺀다).
+			AddVoxel(Frame, FVector(X * V, Y * V, (Z + 0.5f) * V), V, Color, false, bGlow, true);
 		};
 
 		if (Kind < 0.3f)
@@ -816,6 +821,15 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 		Ism->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Ism->SetCanEverAffectNavigation(false);
 		Ism->SetCastShadow(BatchShadow[Batch.Key]);
+		if (BatchNoOutline[Batch.Key])
+		{
+			// 스텐실 1을 찍어 둔다. 그림체 비교 머티리얼(M_HG_LookToon/Pixel)이 스텐실 1인 점은 윤곽선을 건너뛴다.
+			// 커스텀 깊이 패스에는 셀/픽셀 그림체가 켜져 있을 때만 그린다 (식물 수천 포기를 한 번 더 그리는 비용).
+			// 그림체를 바꾸면 컨트롤러(AHGPlayerControllerBase::ApplyLook)가 켜고 끈다.
+			// 스텐실을 쓰려면 프로젝트 설정 r.CustomDepth=3(스텐실 포함)이 필요하다 (Config/DefaultEngine.ini).
+			Ism->SetCustomDepthStencilValue(HGLook::NoOutlineStencil);
+			Ism->SetRenderCustomDepth(HGLook::NeedsStencil());
+		}
 		Ism->RegisterComponent();
 		Ism->AddInstances(Batch.Value, false, false);
 		if (BatchGlow[Batch.Key])
