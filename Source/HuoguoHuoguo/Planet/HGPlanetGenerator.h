@@ -121,6 +121,10 @@ public:
 	// 우주선의 "위" (월드). 안쪽 인공 중력은 이 반대 방향으로 끌고, 밖에서 떠다닐 때도 이 방향을 위로 삼아 시점을 맞춘다.
 	FVector GetShipUp() const { return ShipFrame.GetRotation().GetUpVector(); }
 
+	// 우주선 기준 좌표(방 배치에 쓴 좌표: X = 방이 이어지는 쪽, Y = 옆, Z = 위)를 월드로 바꾸는 변환.
+	// 우주선 부품은 지형(루트 컴포넌트) 아래 ShipFrame만큼 놓였으므로 ShipFrame 다음에 이 액터의 변환을 적용한다.
+	FTransform GetShipTransform() const { return ShipFrame * GetActorTransform(); }
+
 	// From에서 MaxDistance 안의 가장 가까운 상호작용 지점 (쓴 설계도는 뺀다). 없으면 INDEX_NONE.
 	int32 FindNearestInteractable(const FVector& From, float MaxDistance) const;
 	const FHGInteractable& GetInteractable(int32 Index) const { return Interactables[Index]; }

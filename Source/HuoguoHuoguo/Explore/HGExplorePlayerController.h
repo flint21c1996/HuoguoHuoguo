@@ -67,6 +67,16 @@ public:
 	void HGWarpToInteract(int32 Index);
 
 	/**
+	 * HGGoTo <번호> : 시험용 자동 조종. 폐우주선의 상호작용 지점(번호는 HGWarpToInteract와 같다)까지 순간이동 없이 실제로 간다.
+	 *   떠 있으면: 매 프레임 목표 쪽을 보고 앞으로 분사(W와 같은 입력)하다가, 멈출 거리 안에 들어오면 브레이크(Shift와 같은 처리)를 건다.
+	 *   우주선 안이면: 방은 X축으로 이어지고 문은 모두 가운데(Y = 0)에 있으므로, 가운데 줄 -> 목표의 X -> 목표 순으로 걷는다.
+	 * 진행 중에는 HGSeq가 다음 명령을 기다리므로 "HGGoTo 2|HGSimKey E 0.1"처럼 도착한 뒤에 E를 누르게 이어 쓸 수 있다.
+	 * 로그 [GoTo]: 출발, 1초마다 남은 거리/속도, 도착(걸린 시간, 그 자리의 E 안내) 또는 실패(시간 초과).
+	 */
+	UFUNCTION(Exec)
+	void HGGoTo(int32 Index);
+
+	/**
 	 * HGTune [이름] [값] : 손맛 맞추기용. 게임 중에 설정값(소수 UPROPERTY)을 이름으로 보거나 바꾼다.
 	 *   HGTune                        -> 바꿀 수 있는 값 목록과 지금 값
 	 *   HGTune CameraUpFollowSpeed    -> 그 값 보기
@@ -101,6 +111,9 @@ protected:
 	virtual void UpdateRotation(float DeltaTime) override;
 
 	virtual FString DescribeForSimKey() const override;
+
+	// 자동 조종(HGGoTo) 중이면 HGSeq가 기다린다.
+	virtual bool IsDevSequenceBusy() const override { return GoToIndex != INDEX_NONE; }
 
 private:
 	UPROPERTY() TObjectPtr<UInputMappingContext> ExploreContext;
@@ -144,6 +157,18 @@ private:
 
 	// 시험용 자동 달리기 남은 시간 (HGAutoRun).
 	float AutoRunSeconds = 0.f;
+
+	// 시험용 자동 조종 (HGGoTo): 목표 상호작용 지점 번호(없으면 INDEX_NONE), 남은 경유점(월드), 걸린 시간, 다음 진행 로그까지 남은 시간.
+	int32 GoToIndex = INDEX_NONE;
+	TArray<FVector> GoToPath;
+	float GoToElapsed = 0.f;
+	float GoToLogTimer = 0.f;
+
+	// 자동 조종 한 프레임: 다음 경유점 쪽을 보고 분사하거나 걷는다. 경유점에 닿으면 다음으로, 다 닿으면 끝낸다.
+	void UpdateGoTo(float DeltaTime);
+
+	// 자동 조종을 끝낸다 (브레이크를 풀고 결과를 로그로 남긴다).
+	void FinishGoTo(bool bArrived);
 
 	void CreateMinimap();
 	void OnToggleMap(const FInputActionValue& Value);

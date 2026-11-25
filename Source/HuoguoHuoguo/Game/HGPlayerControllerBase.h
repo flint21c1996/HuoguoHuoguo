@@ -101,6 +101,10 @@ protected:
 	// HGSimKey 결과 로그에 덧붙일 파트별 정보 (카메라 방향, 행성 중심 거리 등).
 	virtual FString DescribeForSimKey() const { return FString(); }
 
+	// 시험용 동작(예: 자동 조종 HGGoTo)이 아직 끝나지 않았는가. 참이면 HGSeq가 다음 명령을 꺼내지 않고 기다린다.
+	// 걸리는 시간이 매번 다른 동작 뒤에 이어지는 명령(문 앞에 도착한 뒤 E 누르기 등)을 고정 간격 대신 "끝난 뒤"에 내기 위해서다.
+	virtual bool IsDevSequenceBusy() const { return false; }
+
 	// 입력 도우미
 	UInputAction* MakeAction(const TCHAR* Name, EInputActionValueType Type);
 

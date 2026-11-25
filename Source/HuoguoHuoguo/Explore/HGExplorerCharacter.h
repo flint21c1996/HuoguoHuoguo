@@ -73,6 +73,9 @@ public:
 	void SetDownHeld(bool bHeld) { bDownHeld = bHeld; }
 	void SetBrakeHeld(bool bHeld) { bBrakeHeld = bHeld; }
 
+	// 브레이크 세기(1/초). 브레이크는 속도를 매초 exp(-세기)배로 줄이므로, 속도 v에서 멈출 때까지 가는 거리는 약 v / 세기다.
+	float GetBrakeStrength() const { return BrakeStrength; }
+
 	bool HasPlanetGravity() const { return bPlanetGravity; }
 
 	// 뛰어 건너기 모드인가 (중력 천체가 둘 이상).

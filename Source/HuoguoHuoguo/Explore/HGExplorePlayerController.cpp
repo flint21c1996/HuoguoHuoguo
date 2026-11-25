@@ -365,6 +365,7 @@ void AHGExplorePlayerController::PlayerTick(float DeltaTime)
 		AutoRunSeconds -= DeltaTime;
 		Explorer->Move(FVector2D(0.f, 1.f));
 	}
+	UpdateGoTo(DeltaTime);
 }
 
 void AHGExplorePlayerController::HGTune(const FString& Name, const FString& Value)
@@ -457,6 +458,143 @@ void AHGExplorePlayerController::HGWarpToInteract(int32 Index)
 		Explorer->SetFixedGravity(Planet->GetShipUp(), Planet->GetPlanet().GravityScale);
 	}
 	UE_LOG(LogHuoguo, Log, TEXT("[Derelict] 상호작용 지점 %d 앞으로 이동 (종류 %d)"), Index, static_cast<int32>(Point.Type));
+}
+
+void AHGExplorePlayerController::HGGoTo(int32 Index)
+{
+	if (!Explorer || !Planet || Index < 0 || Index >= Planet->GetInteractableCount())
+	{
+		ShowMessage(TEXT("그 번호의 상호작용 지점이 없다 (폐우주선에서만 있다)"), FColor::Red);
+		return;
+	}
+	const FHGInteractable& Point = Planet->GetInteractable(Index);
+	GoToPath.Reset();
+	if (Explorer->IsFloating())
+	{
+		// 우주 공간: 목표까지 곧게 날아간다.
+		GoToPath.Add(Point.Location);
+	}
+	else
+	{
+		// 우주선 안: 우주선 기준 좌표로 바꿔서 가운데 줄(Y = 0)로 나간 뒤, 목표의 X까지 가운데 줄을 따라가고, 마지막에 목표로 간다.
+		// 높이(Z)는 걷는 동안 바닥이 정하므로 지금 높이를 그대로 쓴다 (거리는 바닥과 나란한 성분만 잰다).
+		const FTransform Ship = Planet->GetShipTransform();
+		const FVector Here = Ship.InverseTransformPosition(Explorer->GetActorLocation());
+		const FVector Goal = Ship.InverseTransformPosition(Point.Location);
+		GoToPath.Add(Ship.TransformPosition(FVector(Here.X, 0.f, Here.Z)));
+		GoToPath.Add(Ship.TransformPosition(FVector(Goal.X, 0.f, Here.Z)));
+		GoToPath.Add(Point.Location);
+	}
+	GoToIndex = Index;
+	GoToElapsed = 0.f;
+	GoToLogTimer = 0.f;
+	UE_LOG(LogHuoguo, Log, TEXT("[GoTo] %d번 지점(종류 %d)으로 출발: %s, 직선 거리 %.1fm, 경유점 %d개"), Index, static_cast<int32>(Point.Type),
+		Explorer->IsFloating() ? TEXT("무중력 비행") : TEXT("걷기"), FVector::Dist(Explorer->GetActorLocation(), Point.Location) / 100.f, GoToPath.Num());
+}
+
+void AHGExplorePlayerController::UpdateGoTo(float DeltaTime)
+{
+	if (GoToIndex == INDEX_NONE)
+	{
+		return;
+	}
+	if (!Explorer || !Planet || bTraveling || GoToPath.IsEmpty())
+	{
+		FinishGoTo(false);
+		return;
+	}
+	GoToElapsed += DeltaTime;
+	if (GoToElapsed > 40.f)
+	{
+		FinishGoTo(false);
+		return;
+	}
+
+	const FVector Up = Planet->GetShipUp();
+	const bool bFloat = Explorer->IsFloating();
+	FVector ToTarget = GoToPath[0] - Explorer->GetActorLocation();
+	if (!bFloat)
+	{
+		// 걸을 때는 바닥과 나란한 성분만 본다 (경유점 높이와 몸 높이가 달라도 위아래 차이는 무시).
+		ToTarget = FVector::VectorPlaneProject(ToTarget, Up);
+	}
+	const float Dist = ToTarget.Size();
+	const float Speed = Explorer->GetVelocity().Size();
+
+	GoToLogTimer -= DeltaTime;
+	if (GoToLogTimer <= 0.f)
+	{
+		GoToLogTimer = 1.f;
+		// 위치는 우주선 기준 좌표로 남긴다 (방 배치 좌표와 바로 비교할 수 있게).
+		const FTransform Ship = Planet->GetShipTransform();
+		UE_LOG(LogHuoguo, Log, TEXT("[GoTo] %.1f초: 경유점 %d개 남음, 다음까지 %.1fm, 속도 %.0fcm/s, 산소 %.0f, 이동 모드 %d, 위치 %s -> 경유점 %s"),
+			GoToElapsed, GoToPath.Num(), Dist / 100.f, Speed, Explorer->GetOxygen(), static_cast<int32>(Explorer->GetCharacterMovement()->MovementMode.GetValue()),
+			*Ship.InverseTransformPosition(Explorer->GetActorLocation()).ToCompactString(), *Ship.InverseTransformPosition(GoToPath[0]).ToCompactString());
+	}
+
+	// 다음 경유점 쪽을 본다. 이동 입력은 보는 쪽(카메라) 기준이라, 앞으로(W) 넣으면 목표 쪽으로 간다.
+	if (Dist > 1.f)
+	{
+		SetControlRotation(FRotationMatrix::MakeFromXZ(ToTarget, Up).Rotator());
+	}
+
+	if (bFloat)
+	{
+		// 브레이크는 속도를 매초 exp(-세기)배로 줄이므로 멈추는 데 약 속도 / 세기 만큼 간다. 그보다 멀면 분사, 가까우면 브레이크.
+		const float StopDistance = Speed / FMath::Max(Explorer->GetBrakeStrength(), 0.1f);
+		if (Dist < 100.f && Speed < 60.f)
+		{
+			Explorer->SetBrakeHeld(false);
+			GoToPath.RemoveAt(0);
+		}
+		else if (Dist > StopDistance + 80.f)
+		{
+			Explorer->SetBrakeHeld(false);
+			Explorer->FloatMove(FVector2D(0.f, 1.f));
+		}
+		else
+		{
+			Explorer->SetBrakeHeld(true);
+		}
+	}
+	else
+	{
+		if (Dist < 50.f)
+		{
+			GoToPath.RemoveAt(0);
+		}
+		else
+		{
+			Explorer->Move(FVector2D(0.f, 1.f));
+		}
+	}
+
+	if (GoToPath.IsEmpty())
+	{
+		FinishGoTo(true);
+	}
+}
+
+void AHGExplorePlayerController::FinishGoTo(bool bArrived)
+{
+	const int32 Index = GoToIndex;
+	GoToIndex = INDEX_NONE;
+	GoToPath.Reset();
+	if (Explorer)
+	{
+		Explorer->SetBrakeHeld(false);
+	}
+	if (!bArrived || !Explorer || !Planet)
+	{
+		UE_LOG(LogHuoguo, Warning, TEXT("[GoTo] %d번 지점에 닿지 못하고 멈춤 (%.1f초)"), Index, GoToElapsed);
+		return;
+	}
+	// 도착한 자리에서 E가 무엇을 쓰는지 다시 찾아 함께 남긴다 (문/단말 안내가 떠야 정상).
+	UpdateHarvestTarget();
+	const FString Prompt = NearestInteract != INDEX_NONE ? Planet->DescribeInteractable(NearestInteract) : TEXT("(E 안내 없음)");
+	const FVector Local = Planet->GetShipTransform().InverseTransformPosition(Explorer->GetActorLocation());
+	UE_LOG(LogHuoguo, Log, TEXT("[GoTo] %d번 지점 도착 (%.1f초, 우주선 기준 위치 %s, 산소 %.0f). E 안내: %s"),
+		Index, GoToElapsed, *Local.ToCompactString(), Explorer->GetOxygen(), *Prompt);
 }
 
 void AHGExplorePlayerController::HGAutoRun(float Seconds)

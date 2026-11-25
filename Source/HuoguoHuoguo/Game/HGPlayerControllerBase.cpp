@@ -82,7 +82,8 @@ void AHGPlayerControllerBase::RunNextDevCommand()
 	}
 
 	// 맵 이동 중에는 기다린다. 명령은 새 맵의 컨트롤러가 이어서 꺼낸다.
-	if (bTraveling)
+	// 시험용 동작(자동 조종 등)이 진행 중이어도 기다린다. 끝난 뒤 다음 간격에 이어서 꺼낸다.
+	if (bTraveling || IsDevSequenceBusy())
 	{
 		return;
 	}
