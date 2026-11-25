@@ -29,7 +29,7 @@
 - 개발용 콘솔 명령: `HGTravel <맵 경로 일부>`, `HGSimKey <키> <초>`, `HGSeq <명령|명령|...>`, `HGBag`(가방 내용)
   - `HGSimKey`는 `InputKey(FInputKeyEventArgs::CreateSimulated)`로 엔진 입력에 키를 넣는다 (OS 입력 주입 아님). 뗄 때 Move 이벤트 수, 이동 거리, 이동 방향 Yaw, 위치, 파트별 정보(`DescribeForSimKey`)를 로그로 남긴다. 마우스 버튼(`LeftMouseButton`)도 된다.
   - 도감 기록: `DiscoverIngredient`/`IsIngredientDiscovered`(스캔으로 보거나 캐면), `AddHarvestTotal`/`GetHarvestTotal`(캔 횟수), `DiscoverPlace`/`IsPlaceDiscovered`(`PlaceKey(군계, 종류)`, 종류 0 행성 1 소행성 지대 2 폐우주선), `AddBlueprintFound`/`GetBlueprintsFound`. 게임이 켜져 있는 동안만.
-  - `HGSeq`: `|`로 나눈 명령을 `DevSequenceInterval`(1.5초, 콘솔 변수 `hg.SeqInterval`이 0보다 크면 그 값. 맵을 옮긴 뒤에도 적용) 간격으로 하나씩 `ConsoleCommand`로 실행한다. `wait`는 한 칸 쉰다. 남은 명령은 GameInstance에 있어서 맵을 옮겨도 새 맵의 컨트롤러가 `BeginPlay`에서 이어 실행한다. 마지막 인자가 문자열이면 언리얼이 줄 끝까지 통째로 넘기므로 공백 있는 명령도 된다.
+  - `HGSeq`: `|`로 나눈 명령을 `DevSequenceInterval`(1.5초, 콘솔 변수 `hg.SeqInterval`이 0보다 크면 그 값. 맵을 옮긴 뒤에도 적용) 간격으로 하나씩 `ConsoleCommand`로 실행한다. `wait`는 한 칸 쉰다. 하위 클래스의 `IsDevSequenceBusy()`가 참이면(예: 탐험 자동 조종 `HGGoTo` 진행 중) 다음 명령을 꺼내지 않고 기다린다. 걸리는 시간이 매번 다른 동작 뒤의 명령을 "끝난 뒤"에 내기 위해서다. 남은 명령은 GameInstance에 있어서 맵을 옮겨도 새 맵의 컨트롤러가 `BeginPlay`에서 이어 실행한다. 마지막 인자가 문자열이면 언리얼이 줄 끝까지 통째로 넘기므로 공백 있는 명령도 된다.
 - `RequestTravel`은 "이동 시작" 로그에 발판 이름, 사장님 위치, 맵 시작 후 시간을 남긴다.
 
 ### HGGameInstance (.h/.cpp)
