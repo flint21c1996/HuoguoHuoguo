@@ -123,6 +123,7 @@
   - HGPlanetGenerator (.h/.cpp)
   - 행성 그림체 (`hg.PlanetMood`, 기본 1)
   - 소행성 지대 (`FHGPlanetSeed::bAsteroidField`)
+  - 숨은 재료와 스캔 (`HiddenIngredientRatio`, `ScanMarker`)
   - 폐우주선 (`FHGPlanetSeed::bDerelict`, `Planet/HGDerelict.cpp`)
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
@@ -197,6 +198,7 @@
   - M_HG_Glow
   - M_HG_PlanetSky
   - M_HG_VertexColor
+  - M_HG_ScanPulse
 - 알려진 문제와 다음 할 일
 
 ## Tools

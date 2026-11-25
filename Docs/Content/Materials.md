@@ -27,6 +27,9 @@
 ### M_HG_VertexColor
 - 정점 색(Vertex Color) → Base Color, 거칠기 0.9. 각진 행성 지형이 면마다 넣은 색을 그대로 그린다. `ensure_planet_materials`가 만든다.
 
+### M_HG_ScanPulse
+- 스캐너 파동 화면 효과 (포스트 프로세스, 톤 매핑 뒤). `ensure_scan_material`이 만든다. Custom 노드(HLSL `SCAN_HLSL`) 하나: 화면 색(`PostProcessInput0`) + 월드 위치로 고리 띠(`Origin`, `Radius`, `Width`)와 1m 격자 선(`Grid`), 천체 안쪽만(`Center`, `Limit`), 세기 `Fade`, 색 `ScanColor`. `AHGScanWave`가 동적 인스턴스로 매 프레임 바꾼다.
+
 ## 알려진 문제와 다음 할 일
 
 - 행성 지형은 버텍스 컬러뿐이라 가까이서 질감이 없다 (복셀 느낌이면 오히려 맞을 수 있다).
