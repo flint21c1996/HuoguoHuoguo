@@ -215,6 +215,78 @@ def ensure_planet_materials():
         unreal.log("[MapGen] 꼭짓점 색 머티리얼 생성: " + VERTEX_COLOR_MATERIAL)
 
 
+SCAN_MATERIAL = "/Game/HG/Materials/M_HG_ScanPulse"
+
+# 스캐너 파동 (화면 효과, 포스트 프로세스). 화면의 각 점을 월드 위치로 되돌려 계산한다:
+#   - 고리: 스캔 시작점에서 거리 Radius 근처(폭 Width)에 빛나는 띠. 데칼처럼 땅, 바위, 식물 어디에나 얹힌다.
+#   - 분석 격자: 띠 위와 띠가 지나간 바로 뒤의 표면에 Grid(cm) 간격 격자 선 (와이어프레임처럼 "분석 중" 느낌).
+#   - 지금 서 있는 천체 안쪽(중심 Center에서 Limit 안)만 받는다. 하늘(무한히 먼 점), 하늘의 섬, 다른 소행성은 빛나지 않는다.
+#   - Fade로 전체 세기를 줄여 끝에 사라지게 한다.
+SCAN_HLSL = """
+float3 P = WorldPos;
+float onBody = 1.0 - step(Limit, distance(P, Center));
+float d = distance(P, Origin);
+float band = saturate(1.0 - abs(d - Radius) / Width);
+band = band * band;
+float behind = saturate(1.0 - (Radius - d) / (Width * 8.0)) * step(d, Radius);
+float3 g = abs(frac(P / Grid) - 0.5);
+float gridLine = smoothstep(0.44, 0.49, max(max(g.x, g.y), g.z));
+float glow = (band * 0.9 + gridLine * (band * 1.4 + behind * 0.35)) * onBody * Fade;
+return Scene.rgb + ScanColor * glow;
+"""
+
+
+def ensure_scan_material():
+    """스캐너 파동 포스트 프로세스 머티리얼. 없을 때만 만든다 (있으면 에디터에서 고친 것을 존중).
+
+    파라미터: Origin, Center, ScanColor(벡터), Radius, Width, Limit, Grid, Fade(스칼라). AHGScanWave가 동적 인스턴스로 매 프레임 바꾼다.
+    """
+    if asset_lib.does_asset_exist(SCAN_MATERIAL):
+        return
+    mel = unreal.MaterialEditingLibrary
+    folder, name = SCAN_MATERIAL.rsplit("/", 1)
+    mat = asset_tools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
+    mat.set_editor_property("material_domain", unreal.MaterialDomain.MD_POST_PROCESS)
+    # 톤 매핑 뒤에 얹는다 (화면 밝기 보정과 상관없이 같은 색으로 빛난다). 엔진 판마다 이름이 달라 둘 다 시도한다.
+    for location in ("BL_SCENE_COLOR_AFTER_TONEMAPPING", "BL_AFTER_TONEMAPPING"):
+        if hasattr(unreal.BlendableLocation, location):
+            mat.set_editor_property("blendable_location", getattr(unreal.BlendableLocation, location))
+            break
+    custom = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, -300, 0)
+    custom.set_editor_property("code", SCAN_HLSL)
+    custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    names = ["Scene", "WorldPos", "Origin", "Center", "ScanColor", "Radius", "Width", "Limit", "Grid", "Fade"]
+    inputs = []
+    for n in names:
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", n)
+        inputs.append(ci)
+    custom.set_editor_property("inputs", inputs)
+    scene = mel.create_material_expression(mat, unreal.MaterialExpressionSceneTexture, -900, -300)
+    scene.set_editor_property("scene_texture_id", unreal.SceneTextureId.PPI_POST_PROCESS_INPUT0)
+    mel.connect_material_expressions(scene, "Color", custom, "Scene")
+    world_pos = mel.create_material_expression(mat, unreal.MaterialExpressionWorldPosition, -900, -180)
+    mel.connect_material_expressions(world_pos, "", custom, "WorldPos")
+    y = -60
+    for n, value in (("Origin", unreal.LinearColor(0, 0, 0, 0)), ("Center", unreal.LinearColor(0, 0, 0, 0)),
+                     ("ScanColor", unreal.LinearColor(0.3, 1.0, 0.9, 1))):
+        p = mel.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -900, y)
+        p.set_editor_property("parameter_name", n)
+        p.set_editor_property("default_value", value)
+        mel.connect_material_expressions(p, "RGB", custom, n)
+        y += 120
+    for n, value in (("Radius", 0.0), ("Width", 250.0), ("Limit", 100000.0), ("Grid", 100.0), ("Fade", 0.0)):
+        p = mel.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -900, y)
+        p.set_editor_property("parameter_name", n)
+        p.set_editor_property("default_value", value)
+        mel.connect_material_expressions(p, "", custom, n)
+        y += 100
+    mel.connect_material_property(custom, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    mel.recompile_material(mat)
+    asset_lib.save_loaded_asset(mat)
+    unreal.log("[MapGen] 스캐너 파동 머티리얼 생성: " + SCAN_MATERIAL)
+
+
 # ---------------------------------------------------------------------------
 # 맵 생성과 배치 도우미
 # ---------------------------------------------------------------------------
@@ -599,6 +671,7 @@ ensure_data_tables()
 MATS = ensure_materials()
 ensure_glow_material()
 ensure_planet_materials()
+ensure_scan_material()
 
 # 맵끼리 서로 참조(이동 발판의 목적지)하므로 빈 맵을 먼저 모두 만들고 나서 채운다.
 targets = []
