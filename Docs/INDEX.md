@@ -218,10 +218,10 @@
 
 ## Art
 
-### [Protagonist - 주인공 2D 레퍼런스 (Tripo 3D 생성용)](Art/Protagonist.md)
+### [Protagonist - 주인공 생김새 (Tripo 3D 생성용)](Art/Protagonist.md)
 
 - 역할
-- 파일
-- 그림의 약속 (자동 리깅이 잘 되게)
+- 그림 파일
+- Tripo 입력 그림의 조건 (자동 리깅이 잘 되게)
 - 생김새
 - 알려진 문제와 다음 할 일
