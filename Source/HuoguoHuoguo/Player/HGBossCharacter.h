@@ -66,6 +66,10 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<class UInstancedStaticMeshComponent>> HelmetVoxels;
 
+	// 가게 차림의 앞치마 (헬멧과 반대로 켜고 끈다).
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<class UInstancedStaticMeshComponent>> ApronVoxels;
+
 	bool bVoxelBody = false;
 	bool bSuitVisible = false;
 
