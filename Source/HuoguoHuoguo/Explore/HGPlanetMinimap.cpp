@@ -29,8 +29,23 @@ namespace
 		return &Brush;
 	}
 
+	// 스캐너 파동이 지나간 재료: 4초 동안 점 둘레로 퍼지며 옅어지는 고리 (Age = 지나간 뒤 경과 초).
+	TArray<FVector2f> CirclePoints(const FVector2f& Center, float Radius, int32 Segments = 64);
+	void DrawPing(FSlateWindowElementList& Out, int32 Layer, const FPaintGeometry& Whole, const FVector2f& Pos, float Age, const FLinearColor& Color)
+	{
+		if (Age < 0.f || Age > 4.f)
+		{
+			return;
+		}
+		// 1초마다 한 번씩 퍼지는 고리를 되풀이한다 (깜빡임).
+		const float Phase = FMath::Fmod(Age, 1.f);
+		FLinearColor C = Color;
+		C.A = (1.f - Phase) * (1.f - Age / 4.f);
+		FSlateDrawElement::MakeLines(Out, Layer, Whole, CirclePoints(Pos, 5.f + Phase * 9.f, 20), ESlateDrawEffect::None, C, true, 1.5f);
+	}
+
 	// 중심 Center, 반지름 Radius인 원 둘레 점들 (MakeLines용, 처음 점으로 닫는다).
-	TArray<FVector2f> CirclePoints(const FVector2f& Center, float Radius, int32 Segments = 64)
+	TArray<FVector2f> CirclePoints(const FVector2f& Center, float Radius, int32 Segments)
 	{
 		TArray<FVector2f> Points;
 		Points.Reserve(Segments + 1);
@@ -204,6 +219,7 @@ int32 UHGPlanetMinimap::NativePaint(const FPaintArgs& Args, const FGeometry& All
 		const FVector2f Pos = ToWidget(MapCm);
 		FSlateDrawElement::MakeBox(OutDrawElements, Layer, Box(Pos - FVector2f(DotSize * 0.5f), FVector2f(DotSize)),
 			CircleBrush(), ESlateDrawEffect::None, P->GetIngredientColor(Marker.Kind));
+		DrawPing(OutDrawElements, Layer, Whole, Pos, static_cast<float>(P->GetWorld()->GetTimeSeconds()) - Marker.PingTime, P->GetIngredientColor(Marker.Kind));
 	}
 
 	// 귀환 발판: 범위 안이면 금색 원, 밖이면 테두리에 바깥을 가리키는 금색 삼각형.
@@ -363,6 +379,7 @@ int32 UHGPlanetMinimap::PaintRadar(const FGeometry& AllottedGeometry, FSlateWind
 		const FLinearColor Color = P->GetIngredientColor(Marker.Kind);
 		FSlateDrawElement::MakeBox(OutDrawElements, Layer, Box(Pos - FVector2f(DotSize * 0.5f), FVector2f(DotSize)), CircleBrush(), ESlateDrawEffect::None, Color);
 		HeightMark(Pos, Height, Color);
+		DrawPing(OutDrawElements, Layer, Whole, Pos, static_cast<float>(P->GetWorld()->GetTimeSeconds()) - Marker.PingTime, Color);
 	}
 
 	// 귀환 발판/포드: 범위 안이면 금색 원, 밖이면 테두리 화살표 (행성 지도와 같다).

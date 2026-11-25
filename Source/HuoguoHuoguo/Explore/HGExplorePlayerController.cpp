@@ -8,6 +8,8 @@
 #include "EnhancedInputComponent.h"
 #include "Explore/HGExplorerCharacter.h"
 #include "Explore/HGPlanetMinimap.h"
+#include "Explore/HGCodexWidget.h"
+#include "Explore/HGScanWave.h"
 #include "Game/HGGameInstance.h"
 #include "HuoguoHuoguo.h"
 #include "InputAction.h"
@@ -89,21 +91,30 @@ void AHGExplorePlayerController::InitializeFromLevel()
 
 	if (bDerelict)
 	{
-		SetControlsHint(TEXT("[폐우주선] WASD = 보는 쪽으로 분사 | Space/Ctrl = 위/아래 분사 | Shift = 브레이크 | 마우스 시점 | E 채집/문/단말 | 금색 포드 = 귀환"));
+		SetControlsHint(TEXT("[폐우주선] WASD = 보는 쪽으로 분사 | Space/Ctrl = 위/아래 분사 | Shift = 브레이크 | 마우스 시점 | E 채집/문/단말 | J 도감 | 금색 포드 = 귀환"));
 	}
 	else if (bField)
 	{
 
-		SetControlsHint(TEXT("[소행성 지대] WASD 이동 | 마우스 시점 | Space 점프(길게 = 높이, 달리며 이어 뛰면 2단/3단) | 공중에서 Space = 제트팩 | E 채집 | 금색 발판 = 귀환"));
+		SetControlsHint(TEXT("[소행성 지대] WASD 이동 | 마우스 시점 | Space 점프(길게 = 높이, 달리며 이어 뛰면 2단/3단) | 공중에서 Space = 제트팩 | E 채집 | F 스캔 | J 도감 | 금색 발판 = 귀환"));
 	}
 	else
 	{
-		SetControlsHint(TEXT("[탐험] WASD 이동 | 마우스 시점 | Space 점프 | E 재료 채집 | M 지도 범위 | 금색 발판 = 정거장으로 귀환"));
+		SetControlsHint(TEXT("[탐험] WASD 이동 | 마우스 시점 | Space 점프 | E 재료 채집 | F 스캔 | J 도감 | M 지도 범위 | 금색 발판 = 정거장으로 귀환"));
 	}
 	// 행성은 표면을 펼친 지도, 소행성 지대와 폐우주선은 레이더 (UHGPlanetMinimap이 행성 종류를 보고 고른다).
 	if (Planet)
 	{
 		CreateMinimap();
+		// 도감: 다녀온 장소 (군계 x 종류)
+		if (UHGGameInstance* PlaceGI = GetGameInstance<UHGGameInstance>())
+		{
+			const int32 Kind = bDerelict ? 2 : bField ? 1 : 0;
+			if (PlaceGI->DiscoverPlace(UHGGameInstance::PlaceKey(static_cast<int32>(Planet->GetPlanet().Biome), Kind)))
+			{
+				ShowMessage(TEXT("도감: 새 장소 기록 (J로 보기)"), FColor(150, 230, 255));
+			}
+		}
 	}
 	if (!ArrivalTag.IsNone())
 	{
@@ -203,6 +214,8 @@ void AHGExplorePlayerController::SetupInputComponent()
 	Input->BindAction(InteractAction, ETriggerEvent::Started, this, &AHGExplorePlayerController::OnInteract);
 	Input->BindAction(MapAction, ETriggerEvent::Started, this, &AHGExplorePlayerController::OnToggleMap);
 	Input->BindAction(ZoomAction, ETriggerEvent::Triggered, this, &AHGExplorePlayerController::OnZoom);
+	Input->BindAction(ScanAction, ETriggerEvent::Started, this, &AHGExplorePlayerController::OnScan);
+	Input->BindAction(CodexAction, ETriggerEvent::Started, this, &AHGExplorePlayerController::OnCodex);
 	Input->BindAction(DownAction, ETriggerEvent::Started, this, &AHGExplorePlayerController::OnDown);
 	Input->BindAction(DownAction, ETriggerEvent::Completed, this, &AHGExplorePlayerController::OnDown);
 	Input->BindAction(BrakeAction, ETriggerEvent::Started, this, &AHGExplorePlayerController::OnBrake);
@@ -527,6 +540,7 @@ void AHGExplorePlayerController::OnInteract(const FInputActionValue& Value)
 	if (GI)
 	{
 		GI->AddToBag(Id, 1);
+		GI->AddHarvestTotal(Id); // 도감: 캔 횟수 (처음이면 발견도)
 	}
 	ShowMessage(FString::Printf(TEXT("채집: %s +1 (가방에 %d개, 이 행성 남은 재료 %d)"),
 		GI ? *GI->GetIngredientName(Id) : *Id.ToString(), GI ? GI->GetBagCount(Id) : 1, Planet->GetRemainingIngredientCount()));
@@ -584,6 +598,8 @@ void AHGExplorePlayerController::BuildInputObjects()
 	MapAction = MakeAction(TEXT("IA_Explore_Map"), EInputActionValueType::Boolean);
 	ZoomAction = MakeAction(TEXT("IA_Explore_Zoom"), EInputActionValueType::Axis1D);
 	DownAction = MakeAction(TEXT("IA_Explore_Down"), EInputActionValueType::Boolean);
+	ScanAction = MakeAction(TEXT("IA_Explore_Scan"), EInputActionValueType::Boolean);
+	CodexAction = MakeAction(TEXT("IA_Explore_Codex"), EInputActionValueType::Boolean);
 	BrakeAction = MakeAction(TEXT("IA_Explore_Brake"), EInputActionValueType::Boolean);
 
 	ExploreContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Explore"));
@@ -591,6 +607,8 @@ void AHGExplorePlayerController::BuildInputObjects()
 	ExploreContext->MapKey(ZoomAction, EKeys::MouseWheelAxis);
 	// 무중력 비행: Ctrl = 아래로 분사, Shift = 브레이크 (행성/소행성에서는 쓰지 않는다).
 	ExploreContext->MapKey(DownAction, EKeys::LeftControl);
+	ExploreContext->MapKey(ScanAction, EKeys::F);
+	ExploreContext->MapKey(CodexAction, EKeys::J);
 	ExploreContext->MapKey(BrakeAction, EKeys::LeftShift);
 	MapWASD(ExploreContext, MoveAction);
 	ExploreContext->MapKey(LookAction, EKeys::Mouse2D);
@@ -662,6 +680,71 @@ void AHGExplorePlayerController::UseInteractable(int32 Index)
 		break;
 	}
 	UE_LOG(LogHuoguo, Log, TEXT("[Derelict] 상호작용 %d (종류 %d)"), Index, static_cast<int32>(Point.Type));
+}
+
+void AHGExplorePlayerController::OnScan(const FInputActionValue& Value)
+{
+	if (!Planet || !Explorer || bTraveling)
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now - LastScanTime < ScanCooldown)
+	{
+		ShowMessage(FString::Printf(TEXT("스캐너 충전 중 (%.0f초)"), ScanCooldown - (Now - LastScanTime)), FColor(150, 150, 150));
+		return;
+	}
+	// 지금 서 있는 땅이 있어야 한다 (폐우주선은 떠 있거나 우주선 안이라 훑을 지면이 없다).
+	if (Planet->GetPlanet().bDerelict)
+	{
+		ShowMessage(TEXT("스캐너는 디디고 선 행성 지면을 훑는다. 여기에는 훑을 지면이 없다"), FColor(150, 150, 150));
+		return;
+	}
+	// 지금 서 있는 천체: 소행성 지대면 밟고 있는(또는 끌리는) 소행성, 아니면 행성.
+	FVector Center = Planet->GetGravityCenter();
+	float Radius = Planet->GetPlanet().Radius;
+	if (Explorer->IsHopMode() && Planet->GetGravityBodies().IsValidIndex(Explorer->GetCurrentBody()))
+	{
+		const FHGGravityBody& Body = Planet->GetGravityBodies()[Explorer->GetCurrentBody()];
+		Center = Body.Center;
+		Radius = Body.Radius;
+	}
+	LastScanTime = Now;
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	if (AHGScanWave* Wave = GetWorld()->SpawnActor<AHGScanWave>(AHGScanWave::StaticClass(), FTransform::Identity, Params))
+	{
+		TWeakObjectPtr<AHGExplorePlayerController> WeakThis(this);
+		Wave->Duration = ScanDuration;
+		Wave->Begin(Planet, Center, Radius, Explorer->GetActorLocation(), ScanRange, [WeakThis](const FString& Result)
+		{
+			if (WeakThis.IsValid())
+			{
+				WeakThis->ShowMessage(Result, FColor(120, 255, 220));
+			}
+		});
+	}
+}
+
+void AHGExplorePlayerController::OnCodex(const FInputActionValue& Value)
+{
+	if (!Codex)
+	{
+		Codex = CreateWidget<UHGCodexWidget>(this, UHGCodexWidget::StaticClass());
+	}
+	if (!Codex)
+	{
+		return;
+	}
+	if (Codex->IsInViewport())
+	{
+		Codex->RemoveFromParent();
+	}
+	else
+	{
+		Codex->AddToViewport(20);
+	}
+	UE_LOG(LogHuoguo, Log, TEXT("[Codex] 도감 %s"), Codex->IsInViewport() ? TEXT("열림") : TEXT("닫힘"));
 }
 
 void AHGExplorePlayerController::OnDown(const FInputActionValue& Value)

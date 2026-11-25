@@ -111,6 +111,28 @@ private:
 	UPROPERTY() TObjectPtr<UInputAction> MapAction;
 	UPROPERTY() TObjectPtr<UInputAction> ZoomAction;
 	UPROPERTY() TObjectPtr<UInputAction> DownAction;
+	UPROPERTY() TObjectPtr<UInputAction> ScanAction;
+	UPROPERTY() TObjectPtr<UInputAction> CodexAction;
+
+	// 도감 화면 (J로 켜고 끈다, 처음 켤 때 만든다).
+	UPROPERTY() TObjectPtr<class UHGCodexWidget> Codex;
+
+	// 마지막 스캔 시각 (월드 시간).
+	float LastScanTime = -100.f;
+
+protected:
+	// 스캐너: 다시 쓸 수 있을 때까지 시간(초), 퍼지는 표면 거리(cm, 작은 행성이면 표면의 약 35%), 퍼지는 데 걸리는 시간(초).
+	// HGTune으로 게임 중에 바꿀 수 있다.
+	UPROPERTY(EditAnywhere, Category = "Scan")
+	float ScanCooldown = 6.f;
+
+	UPROPERTY(EditAnywhere, Category = "Scan")
+	float ScanRange = 8000.f;
+
+	UPROPERTY(EditAnywhere, Category = "Scan")
+	float ScanDuration = 2.2f;
+
+private:
 	UPROPERTY() TObjectPtr<UInputAction> BrakeAction;
 
 	// 폐우주선 문/단말 (가까운 것 번호)과 상호작용 거리(cm).
@@ -128,6 +150,12 @@ private:
 
 	// 마우스 휠: 카메라 거리.
 	void OnZoom(const FInputActionValue& Value);
+
+	// F: 스캐너. 지금 서 있는 천체(행성 또는 밟은 소행성)의 지표를 따라 파동을 퍼뜨린다 (AHGScanWave).
+	void OnScan(const FInputActionValue& Value);
+
+	// J: 도감 켜기/끄기.
+	void OnCodex(const FInputActionValue& Value);
 
 	// 무중력 비행: Ctrl(아래 분사), Shift(브레이크) 누름/뗌.
 	void OnDown(const FInputActionValue& Value);
