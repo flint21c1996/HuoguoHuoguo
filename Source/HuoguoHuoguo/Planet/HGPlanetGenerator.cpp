@@ -1486,6 +1486,7 @@ void AHGPlanetGenerator::BuildAsteroidField()
 					Marker.bOtherTime = true;
 					HideInstance(Index);
 				}
+				MaybeHideForScan(Index);
 				++FieldMarkers;
 			}
 		}
@@ -1944,10 +1945,49 @@ void AHGPlanetGenerator::ScatterProps()
 			HideInstance(i);
 			++OtherTimeCount;
 		}
+		MaybeHideForScan(i);
 	}
 
 	UE_LOG(LogHuoguo, Log, TEXT("행성 배치 (%s): 바위 %d, 재료 %d (종류 %d, 다른 시간대 재료 %d개 숨김, 이미 캔 것 %d개 숨김, 지금 캘 수 있는 것 %d)"),
 		HGDay::PhaseName(Phase), RockCount, IngredientCount, IngredientIds.Num(), OtherTimeCount, HiddenCount, GetRemainingIngredientCount());
+}
+
+void AHGPlanetGenerator::MaybeHideForScan(int32 MarkerId)
+{
+	FHGIngredientMarker& Marker = Markers[MarkerId];
+	if (Marker.bHarvested || Marker.bOtherTime)
+	{
+		return;
+	}
+	// 표식 번호와 행성 시드로 정하므로 같은 행성이면 언제나 같은 표식이 숨는다 (캔 기록 번호와 맞물린다).
+	const uint32 Hash = HashCombine(GetTypeHash(Planet.Seed), GetTypeHash(MarkerId * 2654435761u));
+	if ((Hash % 1000u) < static_cast<uint32>(HiddenIngredientRatio * 1000.f))
+	{
+		Marker.bHidden = true;
+		HideInstance(MarkerId);
+	}
+}
+
+bool AHGPlanetGenerator::ScanMarker(int32 MarkerId, float WorldTime)
+{
+	if (!Markers.IsValidIndex(MarkerId))
+	{
+		return false;
+	}
+	FHGIngredientMarker& Marker = Markers[MarkerId];
+	Marker.PingTime = WorldTime;
+	if (!Marker.bHidden)
+	{
+		return false;
+	}
+	// 숨은 재료를 드러낸다: 숨길 때 0으로 줄인 크기를 표식 크기로 되돌린다.
+	Marker.bHidden = false;
+	UInstancedStaticMeshComponent* Ism = IngredientMarkers[Marker.Kind];
+	FTransform Shown;
+	Ism->GetInstanceTransform(Marker.Instance, Shown, false);
+	Shown.SetScale3D(FVector(MarkerScale));
+	Ism->UpdateInstanceTransform(Marker.Instance, Shown, false, true);
+	return true;
 }
 
 void AHGPlanetGenerator::HideInstance(int32 MarkerId)

@@ -36,9 +36,11 @@ struct FHGIngredientMarker
 	FVector Location = FVector::ZeroVector; // 월드 위치
 	bool bHarvested = false;
 	bool bOtherTime = false;      // 지금 시간대(낮/밤)에 나지 않는 재료라서 숨겼다
+	bool bHidden = false;         // 숨은 재료: 스캐너 파동이 지나가야 드러난다
+	float PingTime = -100.f;      // 스캐너 파동이 지나간 시각 (월드 시간, 미니맵이 잠깐 깜빡인다)
 
-	// 지금 보이고 캘 수 있는지 (캐지 않았고 지금 시간대 재료).
-	bool IsAvailable() const { return !bHarvested && !bOtherTime; }
+	// 지금 보이고 캘 수 있는지 (캐지 않았고, 지금 시간대 재료이고, 숨어 있지 않다).
+	bool IsAvailable() const { return !bHarvested && !bOtherTime && !bHidden; }
 };
 
 /**
@@ -96,6 +98,15 @@ public:
 
 	// 지금 캘 수 있는 재료 표식 수 (캐지 않았고 지금 시간대 재료).
 	int32 GetRemainingIngredientCount() const;
+
+	// ---- 스캐너 ----
+
+	// 스캐너 파동이 표식에 닿았다: 깜빡임 시각을 남기고, 숨은 재료면 드러낸다. 숨은 재료를 드러냈으면 true.
+	bool ScanMarker(int32 MarkerId, float WorldTime);
+
+	// 스캔으로 드러나는 숨은 재료 비율 (0 ~ 1). 캔 것, 다른 시간대 것이 아닌 표식 중에서 시드로 고른다.
+	UPROPERTY(EditAnywhere, Category = "Planet|Ingredients", meta = (ClampMin = "0", ClampMax = "1"))
+	float HiddenIngredientRatio = 0.2f;
 
 	// ---- 미니맵 등 표시용 ----
 
@@ -306,6 +317,9 @@ private:
 
 	// 지표 Dir 위에 놓을 변환 (위 = 지표 바깥, 둘레 방향 Spin). 행성 중심 기준 좌표.
 	FTransform SurfaceFrame(const FVector& Dir, float Spin, float Lift) const;
+
+	// 새로 만든 표식(번호 MarkerId)을 숨은 재료로 둘지 시드로 정하고, 그렇다면 숨긴다. 이미 캤거나 다른 시간대면 건드리지 않는다.
+	void MaybeHideForScan(int32 MarkerId);
 
 	// 표식 하나의 인스턴스를 안 보이게 한다 (크기를 0으로). 인스턴스를 지우면 뒤 번호가 당겨지므로 지우지 않는다.
 	// 왜 숨겼는지(캠 / 다른 시간대)는 부르는 쪽이 표식의 플래그로 남긴다.

@@ -1,4 +1,4 @@
-// 폐우주선 (AHGPlanetGenerator의 일부). 행성 대신 우주에 버려진 우주선 한 척을 만든다.
+﻿// 폐우주선 (AHGPlanetGenerator의 일부). 행성 대신 우주에 버려진 우주선 한 척을 만든다.
 // 땅 지형, 소행성 같은 행성 쪽 코드와 섞이지 않게 파일을 나눴다.
 
 #include "Planet/HGPlanetGenerator.h"
@@ -500,6 +500,7 @@ FString AHGPlanetGenerator::UseBlueprint(int32 Index)
 	if (GI)
 	{
 		GI->UnlockFurniture(Terminal.Furniture);
+		GI->AddBlueprintFound();
 	}
 	UE_LOG(LogHuoguo, Log, TEXT("[Derelict] 설계도 단말 %d: %s 해금"), Index, *Terminal.Furniture.ToString());
 	return FString::Printf(TEXT("설계도 발견! 가게 가구 해금: %s"), *Name);
