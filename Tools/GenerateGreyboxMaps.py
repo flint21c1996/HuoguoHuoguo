@@ -317,6 +317,166 @@ def ensure_scan_material():
     unreal.log("[MapGen] 스캐너 파동 머티리얼 생성: " + SCAN_MATERIAL)
 
 
+LOOK_TOON_MATERIAL = "/Game/HG/Materials/M_HG_LookToon"
+# 그림체 비교 머티리얼 판 번호. 계산식이나 연결을 바꾸면 올린다 (옛 판을 지우고 다시 만든다).
+LOOK_VERSION = 8.0
+
+# 셀 셰이딩 (톤 매핑 전, HDR 화면 색). 화면의 각 점에서
+#   빛 = 화면 색 / 바탕색(GBuffer BaseColor). 빛의 밝기(휘도)를 로그 눈금으로 Stops(단) 간격 계단으로 끊고,
+#   화면 색 전체에 "계단 밝기 / 원래 밝기"를 곱한다. 빛의 색(등불의 주황, 달빛의 파랑)은 그대로 남고 밝기만 계단이 된다.
+#   로그 눈금이라 노출(밝기 보정)과 상관없이 어느 장면에서나 비슷한 계단이 생긴다. Soft는 계단 경계의 부드러움.
+# 윤곽선: 깊이의 역수(1/깊이)를 가로, 세로로 이계 미분한다. 평평한 면은 1/깊이가 화면에서 직선으로 변해서 0이 되고,
+#   물체 테두리(뒤의 먼 것과 겹친 곳)에서만 커진다. 복셀 계단 하나하나에는 선이 생기지 않게 깊이만 쓴다.
+#   Line(선 세기)이 0이면 선을 그리지 않는다.
+# 하늘(아주 먼 곳)과 바탕색이 거의 검은 곳(빛을 받지 않는 하늘 돔, 우주)은 계단을 넣지 않는다.
+TOON_HLSL = """
+float3 c = Scene.rgb;
+float3 b = Base.rgb;
+// 가운데 깊이도 이웃과 같은 함수로 읽는다 (같은 좌표 변환을 거치게).
+float d0 = max(SceneTextureFetch(PPI_SceneDepth, float2(0, 0)).r, 1.0) + Depth.r * 0.0;
+float3 outc = c;
+// Stops가 0이면 계단을 끄고 외곽선만 남긴다 (hg.LookBands 0).
+// Soft는 계단 경계의 부드러움 (작을수록 딱 끊긴다). 값은 프로젝트 설정(HG 그림체)이 덮어쓴다.
+if (Stops > 0.001 && max(max(b.r, b.g), b.b) > 0.02 && d0 < SkyDepth)
+{
+    float3 lightRgb = c / max(b, 0.02);
+    float L = max(dot(lightRgb, float3(0.2126, 0.7152, 0.0722)), 1.0e-4);
+    float x = log2(L) / Stops;
+    float q = floor(x) + smoothstep(0.5 - Soft, 0.5 + Soft, frac(x));
+    outc = c * (exp2(q * Stops) / L);
+    // 카툰처럼 색을 조금 더 쨍하게 (밝기는 두고 채도만 Saturation배)
+    float y = dot(outc, float3(0.2126, 0.7152, 0.0722));
+    outc = max(lerp(y.xxx, outc, Saturation), 0.0);
+}
+// 깊이 텍스처는 보간 없이 픽셀 단위로 읽힌다. 반 픽셀 옆을 읽으면 한쪽은 자기 자신, 다른 쪽은 이웃이 읽혀서
+// 비스듬한 땅이 "한쪽만 멀어지는 테두리"로 보여 땅 전체가 칠해졌다 (LineWidth 0.5일 때).
+// 그래서 이웃은 늘 정수 픽셀(최소 1) 떨어진 곳을 읽고, 1보다 얇은 굵기는 1px 선의 진하기로 낸다.
+float w = max(1.0, floor(LineWidth + 0.5));
+float thin = saturate(LineWidth);
+float iz0 = 1.0 / d0;
+float izL = 1.0 / max(SceneTextureFetch(PPI_SceneDepth, float2(-w, 0)).r, 1.0);
+float izR = 1.0 / max(SceneTextureFetch(PPI_SceneDepth, float2(w, 0)).r, 1.0);
+float izU = 1.0 / max(SceneTextureFetch(PPI_SceneDepth, float2(0, -w)).r, 1.0);
+float izD = 1.0 / max(SceneTextureFetch(PPI_SceneDepth, float2(0, w)).r, 1.0);
+// 부호를 본다: 앞쪽 물체의 테두리 점은 옆이 먼 배경이라 값이 음수, 배경 쪽 점은 양수다.
+// 음수 쪽(앞쪽 물체)에만 선을 그어서 테두리 안팎 두 겹이 아니라 한 겹만 생긴다 (선이 절반 굵기).
+// 땅의 꺾임 빼기: 진짜 테두리는 한쪽 이웃만 갑자기 멀어지고 다른 쪽은 거의 그대로다.
+//   둥근 행성 땅이나 삼각형 사이 꺾임은 양쪽 이웃이 비슷하게 변한다 (비스듬히 멀리 보면 이계 미분이 커서 줄무늬로 잡혔다).
+//   그래서 이계 미분이 "작은 쪽 변화"의 Ratio배를 넘을 때만 선으로 본다.
+float lx = -(izL + izR - 2.0 * iz0);
+float ly = -(izU + izD - 2.0 * iz0);
+float ex = smoothstep(LineDepth, LineDepth * 2.0, lx / iz0) * step(Ratio * min(abs(izL - iz0), abs(izR - iz0)), lx);
+float ey = smoothstep(LineDepth, LineDepth * 2.0, ly / iz0) * step(Ratio * min(abs(izU - iz0), abs(izD - iz0)), ly);
+// 옅은 선 (높낮이): 언덕 능선이 뒤쪽 땅을 가리는 곳처럼 깊이 차이가 작은 테두리에 FaintLine 세기로 긋는다.
+//   능선 앞쪽은 비스듬한 비탈이라 이웃 변화가 커서 Ratio(4)로는 걸러지므로, 더 느슨한 FaintRatio를 쓴다.
+//   둥근 땅이나 완만한 꺾임은 이계 미분이 이웃 변화보다 훨씬 작아서 여전히 걸러진다.
+float fx = smoothstep(FaintLineDepth, FaintLineDepth * 2.0, lx / iz0) * step(FaintRatio * min(abs(izL - iz0), abs(izR - iz0)), lx);
+float fy = smoothstep(FaintLineDepth, FaintLineDepth * 2.0, ly / iz0) * step(FaintRatio * min(abs(izU - iz0), abs(izD - iz0)), ly);
+float edge = max(max(ex, ey), max(fx, fy) * FaintLine) * Line * thin;
+// 커스텀 스텐실이 NoLineStencil(1)인 점(외계 식물)은 선을 긋지 않는다.
+// 커스텀 깊이는 화면 깊이와 따로 그려져서, 언덕 뒤에 가려진 식물도 스텐실이 찍혀 있다.
+// 식물이 실제로 보이는 점(커스텀 깊이가 화면 깊이와 거의 같음)에서만 뺀다.
+float onFlora = step(abs(Stencil.r - NoLineStencil), 0.5) * step(CDepth.r, d0 * 1.002 + 2.0);
+edge *= 1.0 - onFlora;
+return lerp(outc, outc * LineColor, edge);
+"""
+
+
+def _custom_with_inputs(mel, mat, code, names):
+    custom = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, -300, 0)
+    custom.set_editor_property("code", code)
+    custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    inputs = []
+    for n in names:
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", n)
+        inputs.append(ci)
+    custom.set_editor_property("inputs", inputs)
+    return custom
+
+
+def _scene_texture(mel, mat, custom, texture_id, pin, y):
+    """화면 텍스처 노드를 만들어 Custom 노드 입력에 잇는다. 이 노드가 있어야 엔진이 그 텍스처(깊이, GBuffer)를 셰이더에 묶는다."""
+    node = mel.create_material_expression(mat, unreal.MaterialExpressionSceneTexture, -900, y)
+    node.set_editor_property("scene_texture_id", texture_id)
+    mel.connect_material_expressions(node, "Color", custom, pin)
+
+
+def _params(mel, mat, custom, scalars, vectors, y):
+    for n, value in vectors:
+        p = mel.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -900, y)
+        p.set_editor_property("parameter_name", n)
+        p.set_editor_property("default_value", value)
+        mel.connect_material_expressions(p, "RGB", custom, n)
+        y += 120
+    for n, value in scalars:
+        p = mel.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -900, y)
+        p.set_editor_property("parameter_name", n)
+        p.set_editor_property("default_value", value)
+        if custom is not None and n != "LookVersion":
+            mel.connect_material_expressions(p, "", custom, n)
+        y += 100
+
+
+def _set_location(mat, names):
+    """블렌더블 위치를 정한다. 엔진 판마다 이름이 달라 앞에서부터 있는 것을 쓴다."""
+    for location in names:
+        if hasattr(unreal.BlendableLocation, location):
+            mat.set_editor_property("blendable_location", getattr(unreal.BlendableLocation, location))
+            return location
+    return None
+
+
+def _look_is_current(path):
+    if not asset_lib.does_asset_exist(path):
+        return False
+    old = unreal.load_asset(path)
+    mel = unreal.MaterialEditingLibrary
+    if "LookVersion" in [str(n) for n in mel.get_scalar_parameter_names(old)] and \
+            mel.get_material_default_scalar_parameter_value(old, "LookVersion") == LOOK_VERSION:
+        return True
+    asset_lib.delete_asset(path)
+    unreal.log("[MapGen] 그림체 비교 머티리얼: 옛 판이라 다시 만든다 " + path)
+    return False
+
+
+def ensure_look_materials():
+    """그림체 비교용 포스트 프로세스 머티리얼 (셀 셰이딩). 코드의 hg.Look 스위치가 화면에 얹는다.
+
+    M_HG_LookToon (톤 매핑 전): 빛 밝기 계단 + 깊이 윤곽선(진한 선, 높낮이용 옅은 선). 파라미터 Stops, Soft, Saturation, SkyDepth,
+      LineWidth, LineDepth, Ratio, FaintLineDepth, FaintRatio, FaintLine, Line, NoLineStencil, LineColor.
+      조절 값은 코드가 프로젝트 설정(UHGLookSettings)으로 덮어쓴다.
+    커스텀 스텐실이 NoLineStencil(1)인 점(외계 식물)에는 윤곽선을 긋지 않는다.
+    (2026-11-26에 픽셀 그림체 M_HG_LookPixel도 만들었다가 사용자가 안 쓰기로 해서 뺐다.)
+    이 도구만 만드는 효과라 판 번호 LookVersion이 LOOK_VERSION과 다르면 지우고 다시 만든다.
+    """
+    mel = unreal.MaterialEditingLibrary
+    ids = unreal.SceneTextureId
+
+    if not _look_is_current(LOOK_TOON_MATERIAL):
+        folder, name = LOOK_TOON_MATERIAL.rsplit("/", 1)
+        mat = asset_tools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
+        mat.set_editor_property("material_domain", unreal.MaterialDomain.MD_POST_PROCESS)
+        # 톤 매핑 전 (HDR 빛 값으로 계단을 끊는다). 5.4부터 이름이 BL_SCENE_COLOR_AFTER_DOF.
+        _set_location(mat, ("BL_SCENE_COLOR_AFTER_DOF", "BL_BEFORE_TONEMAPPING"))
+        names = ["Scene", "Base", "Depth", "Stencil", "CDepth", "Stops", "Soft", "Saturation", "SkyDepth", "LineWidth", "LineDepth", "Ratio", "FaintLineDepth", "FaintRatio", "FaintLine", "Line",
+                 "NoLineStencil", "LineColor"]
+        custom = _custom_with_inputs(mel, mat, TOON_HLSL, names)
+        _scene_texture(mel, mat, custom, ids.PPI_POST_PROCESS_INPUT0, "Scene", -620)
+        _scene_texture(mel, mat, custom, ids.PPI_BASE_COLOR, "Base", -500)
+        _scene_texture(mel, mat, custom, ids.PPI_SCENE_DEPTH, "Depth", -380)
+        _scene_texture(mel, mat, custom, ids.PPI_CUSTOM_STENCIL, "Stencil", -260)
+        _scene_texture(mel, mat, custom, ids.PPI_CUSTOM_DEPTH, "CDepth", -140)
+        _params(mel, mat, custom,
+                (("Stops", 1.0), ("Soft", 0.08), ("Saturation", 1.2), ("SkyDepth", 2000000.0), ("LineWidth", 0.5), ("LineDepth", 0.004),
+                 ("Ratio", 4.0), ("FaintLineDepth", 0.002), ("FaintRatio", 1.5), ("FaintLine", 0.35), ("Line", 1.0), ("NoLineStencil", 1.0), ("LookVersion", LOOK_VERSION)),
+                (("LineColor", unreal.LinearColor(0.12, 0.09, 0.11, 1)),), -120)
+        mel.connect_material_property(custom, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+        mel.recompile_material(mat)
+        asset_lib.save_loaded_asset(mat)
+        unreal.log("[MapGen] 셀 셰이딩 머티리얼 생성: " + LOOK_TOON_MATERIAL)
+
+
 # ---------------------------------------------------------------------------
 # 맵 생성과 배치 도우미
 # ---------------------------------------------------------------------------
@@ -702,6 +862,7 @@ MATS = ensure_materials()
 ensure_glow_material()
 ensure_planet_materials()
 ensure_scan_material()
+ensure_look_materials()
 
 # 맵끼리 서로 참조(이동 발판의 목적지)하므로 빈 맵을 먼저 모두 만들고 나서 채운다.
 targets = []

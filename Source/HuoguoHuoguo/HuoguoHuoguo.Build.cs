@@ -18,5 +18,8 @@ public class HuoguoHuoguo : ModuleRules
 
 		// 화면 UI(미니맵 등). UMG 위젯을 C++에서 만들고 Slate로 직접 그린다.
 		PrivateDependencyModuleNames.AddRange(new string[] { "UMG", "Slate", "SlateCore" });
+
+		// 프로젝트 설정 화면에 나오는 설정 클래스(UDeveloperSettings, 예: 그림체 조절 값 UHGLookSettings).
+		PublicDependencyModuleNames.Add("DeveloperSettings");
 	}
 }

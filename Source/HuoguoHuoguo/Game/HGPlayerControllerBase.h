@@ -10,6 +10,8 @@ class UInputMappingContext;
 class AHGBossCharacter;
 class AHGExplorerStart;
 class AHGTravelPad;
+class UMaterialInstanceDynamic;
+class UPostProcessComponent;
 
 /**
  * 경영/탐험 파트 플레이어 컨트롤러의 공통 부모.
@@ -54,8 +56,16 @@ public:
 	UFUNCTION(Exec)
 	void HGBag();
 
+	// HGStyle 0|1 : 그림체 비교 (콘솔 변수 hg.Look). 0 = 지금 그대로, 1 = 셀 셰이딩(빛 계단 + 윤곽선).
+	// 게임 중에는 L로 차례대로 바꾼다 (F8은 PIE에서 에디터가 빙의 해제로 먼저 가져가서 쓰지 않는다). 맵을 옮겨도 고른 값이 남는다.
+	UFUNCTION(Exec)
+	void HGStyle(int32 Look);
+
 protected:
 	virtual void BeginPlay() override;
+
+	// 그림체 비교 스위치(hg.Look)가 바뀌었는지 보고 화면 효과를 바꾼다. L로 차례대로 바꾼다.
+	virtual void PlayerTick(float DeltaTime) override;
 
 	// 맵을 떠날 때 상호작용 안내를 지운다. 화면 디버그 메시지는 엔진 전역이라 맵이 바뀌어도 남기 때문이다.
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -129,6 +139,24 @@ private:
 	FTimerHandle SimKeyTimer;
 	FTimerHandle DevSequenceTimer;
 	FString CurrentPrompt;
+
+	// 그림체 비교 화면 효과. 경계 없는 포스트 프로세스라 이 컨트롤러가 있는 동안 화면 전체에 얹힌다.
+	// 컨트롤러는 숨김 액터라 직접 붙이면 그려지지 않아서, 숨기지 않은 빈 액터(LookHolder)에 붙인다.
+	UPROPERTY() TObjectPtr<AActor> LookHolder;
+	UPROPERTY() TObjectPtr<UPostProcessComponent> LookEffect;
+	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> ToonMaterial;
+
+	// 지금 화면에 얹은 그림체 번호. -1이면 아직 한 번도 맞추지 않았다.
+	int32 AppliedLook = -1;
+
+	// 머티리얼 인스턴스에 마지막으로 넣은 설정 번호 (UHGLookSettings::Revision). 다르면 그때만 값을 다시 넣는다.
+	int32 AppliedSettingsRevision = -1;
+
+	// 화면 효과를 붙일 빈 액터와 포스트 프로세스 컴포넌트를 처음 한 번 만든다.
+	void EnsureLookEffect();
+
+	// 그림체 번호에 맞게 화면 효과 머티리얼을 바꿔 끼운다.
+	void ApplyLook(int32 Look);
 
 	// HGSeq 대기열에서 명령 하나를 꺼내 실행한다. 비었으면 타이머를 멈춘다.
 	void RunNextDevCommand();
