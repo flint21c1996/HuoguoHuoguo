@@ -28,7 +28,7 @@
 - 정점 색(Vertex Color) → Base Color, 거칠기 0.9. 각진 행성 지형이 면마다 넣은 색을 그대로 그린다. `ensure_planet_materials`가 만든다.
 
 ### M_HG_ScanPulse
-- 스캐너 파동 화면 효과 (포스트 프로세스, 톤 매핑 뒤). `ensure_scan_material`이 만든다. Custom 노드(HLSL `SCAN_HLSL`) 하나: 화면 색(`PostProcessInput0`) + 월드 위치로 고리 띠(`Origin`, `Radius`, `Width`)와 1m 격자 선(`Grid`), 천체 안쪽만(`Center`, `Limit`), 세기 `Fade`, 색 `ScanColor`. `AHGScanWave`가 동적 인스턴스로 매 프레임 바꾼다.
+- 스캐너 파동 화면 효과 (포스트 프로세스, 톤 매핑 뒤). `ensure_scan_material`이 만든다. Custom 노드(HLSL `SCAN_HLSL`) 하나: 화면 색(`PostProcessInput0`) + 월드 위치로 고리 띠(`Origin`, `Radius`, `Width`)와 1m 격자 선(`Grid`), 천체 안쪽만(`Center`, `Limit`), 세기 `Fade`, 색 `ScanColor`. 이웃 천체 `Neighbor0` ~ 7(xyz 중심, w 반지름)과 `BodyRadius`로 "이 천체에 더 붙은 점"만 받는다. 판 번호 `ScanVersion`(도구의 `SCAN_VERSION`과 다르면 도구가 지우고 다시 만든다, 지금 3). `AHGScanWave`가 동적 인스턴스로 매 프레임 바꾼다. 새로 만든 직후 처음 쓸 때는 셰이더 컴파일 동안 잠깐 기본 머티리얼(돌 무늬)이 보인다.
 
 ## 알려진 문제와 다음 할 일
 
