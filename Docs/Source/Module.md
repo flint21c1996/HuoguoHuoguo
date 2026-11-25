@@ -1,12 +1,12 @@
 # 모듈 루트 - Build.cs와 로그 카테고리
 
-> 경로: `Source/HuoguoHuoguo/` (하위 폴더 제외) · 마지막 갱신: 2026-11-24
+> 경로: `Source/HuoguoHuoguo/` (하위 폴더 제외) · 마지막 갱신: 2026-11-26
 
 ## 파일
 
 ### HuoguoHuoguo.Build.cs
 - `PublicIncludePaths.Add(ModuleDirectory)`: `#include "Game/HGPlayerControllerBase.h"`처럼 모듈 루트 기준 하위 폴더 경로로 include한다.
-- 공개 의존: `Core`, `CoreUObject`, `Engine`, `InputCore`, `EnhancedInput`
+- 공개 의존: `Core`, `CoreUObject`, `Engine`, `InputCore`, `EnhancedInput`, `DeveloperSettings` (프로젝트 설정 클래스 `UHGLookSettings`)
 - 비공개 의존: `ProceduralMeshComponent` (행성 지형), `UMG`, `Slate`, `SlateCore` (미니맵 등 화면 UI)
 
 ### HuoguoHuoguo.h / .cpp

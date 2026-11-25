@@ -1,6 +1,6 @@
 # 프로젝트 설정 - uproject, Config, gitignore
 
-> 대상: `HuoguoHuoguo.uproject`, `Config/`, `.gitignore` · 마지막 갱신: 2026-11-23
+> 대상: `HuoguoHuoguo.uproject`, `Config/`, `.gitignore` · 마지막 갱신: 2026-11-26
 
 ## HuoguoHuoguo.uproject
 
@@ -17,6 +17,9 @@
 - `GameDefaultMap`, `EditorStartupMap` = `/Game/HG/Maps/L_Station`
 - `GlobalDefaultGameMode` = `/Script/HuoguoHuoguo.HGExploreGameMode` (맵에 지정이 없을 때만 쓴다. 실제 파트는 맵 World Settings가 정한다)
 - `GameInstanceClass` = `/Script/HuoguoHuoguo.HGGameInstance`
+
+`[/Script/Engine.RendererSettings]`
+- `r.CustomDepth=3`: 커스텀 깊이 + 스텐실. 그림체 비교 윤곽선에서 행성 외계 식물을 빼는 데 스텐실 1을 쓴다 (`Docs/Content/Materials.md`). 바꾸면 에디터를 다시 켜야 적용된다.
 
 주의: 템플릿이 만든 AndroidFileServer `SecurityToken` 값이 들어 있다. 안드로이드 빌드를 하지 않으면 영향 없다.
 

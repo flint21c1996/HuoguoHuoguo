@@ -103,6 +103,7 @@
 - 파일
   - HGGameModeBase (.h/.cpp)
   - HGPlayerControllerBase (.h/.cpp)
+  - HGLookSettings.h
   - HGGameInstance (.h/.cpp)
   - HGDayTypes.h
   - HGIngredientTypes.h
@@ -200,6 +201,7 @@
   - M_HG_PlanetSky
   - M_HG_VertexColor
   - M_HG_ScanPulse
+  - M_HG_LookToon
 - 알려진 문제와 다음 할 일
 
 ## Tools

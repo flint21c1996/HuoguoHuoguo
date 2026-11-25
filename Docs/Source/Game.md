@@ -1,6 +1,6 @@
 # Game - 두 파트의 공통 부모(게임 모드, 컨트롤러), GameInstance, 재료 데이터 구조
 
-> 경로: `Source/HuoguoHuoguo/Game/` · 마지막 갱신: 2026-11-24
+> 경로: `Source/HuoguoHuoguo/Game/` · 마지막 갱신: 2026-11-26
 
 ## 역할
 
@@ -31,6 +31,23 @@
   - 도감 기록: `DiscoverIngredient`/`IsIngredientDiscovered`(스캔으로 보거나 캐면), `AddHarvestTotal`/`GetHarvestTotal`(캔 횟수), `DiscoverPlace`/`IsPlaceDiscovered`(`PlaceKey(군계, 종류)`, 종류 0 행성 1 소행성 지대 2 폐우주선), `AddBlueprintFound`/`GetBlueprintsFound`. 게임이 켜져 있는 동안만.
   - `HGSeq`: `|`로 나눈 명령을 `DevSequenceInterval`(1.5초, 콘솔 변수 `hg.SeqInterval`이 0보다 크면 그 값. 맵을 옮긴 뒤에도 적용) 간격으로 하나씩 `ConsoleCommand`로 실행한다. `wait`는 한 칸 쉰다. 하위 클래스의 `IsDevSequenceBusy()`가 참이면(예: 탐험 자동 조종 `HGGoTo` 진행 중) 다음 명령을 꺼내지 않고 기다린다. 걸리는 시간이 매번 다른 동작 뒤의 명령을 "끝난 뒤"에 내기 위해서다. 남은 명령은 GameInstance에 있어서 맵을 옮겨도 새 맵의 컨트롤러가 `BeginPlay`에서 이어 실행한다. 마지막 인자가 문자열이면 언리얼이 줄 끝까지 통째로 넘기므로 공백 있는 명령도 된다.
 - `RequestTravel`은 "이동 시작" 로그에 발판 이름, 사장님 위치, 맵 시작 후 시간을 남긴다.
+- 그림체 비교 스위치 (콘솔 변수 `hg.Look`, 기본 0, 명령 `HGStyle 0|1`, 게임 중 **L**로 번갈아): 0 = 지금 그대로, 1 = 셀 셰이딩.
+  - 2026-11-26에 2 = 픽셀(큰 픽셀 + 색 단계)도 있었는데 사용자가 안 쓰기로 해서 뺐다.
+  - 처음에는 F8이었는데 PIE에서 에디터가 F8(빙의 해제)을 먼저 가져가서 게임까지 오지 않았다. L은 두 파트 모두 안 쓰는 키다.
+  - 화면 전체에 얹는 포스트 프로세스 머티리얼(`M_HG_LookToon`, `Docs/Content/Materials.md`)을 동적 인스턴스로 끼운다.
+  - 콘솔 변수라 맵을 옮겨도 남는다. `PlayerTick`이 값이 바뀐 것을 보고 다시 끼운다. 로그 `[Look]`.
+  - 조절 값은 프로젝트 설정 → Game → **HG 그림체**(`UHGLookSettings`, 아래)에 있다. `PlayerTick`은 설정 번호(`Revision`)가 바뀌었거나 머티리얼 인스턴스를 새로 만들었을 때만 값을 넣는다 (평소 프레임은 정수 비교 하나).
+  - 그림체를 바꿀 때 스텐실 1(`HGLook::NoOutlineStencil`) 물체의 커스텀 깊이 그리기를 켜고 끈다 (셀일 때만 켬). 지금 그림체(0)에서는 커스텀 깊이 패스 비용이 0이다.
+
+### HGLookSettings.h
+- `UHGLookSettings`(`UDeveloperSettings`, config=Game, `DefaultGame.ini`): 그림체 비교 화면 효과의 조절 값. 프로젝트 설정 → Game → HG 그림체.
+  - 셀 외곽선: 굵기(0.5, 1 미만은 1px 선의 진하기), 색, 진한 선 기준(0.004)과 거르기(4), 옅은 선(높낮이) 기준(0.002), 거르기(1.5), 진하기(0.35).
+  - 셀 명암: 계단 간격(1 = 밝기 2배마다 한 단, 2 = 4배마다 한 단, 0 = 끔), 경계 부드러움(0.08), 채도(1.2).
+  - 에디터에서 값을 바꾸면 `PostEditChangeProperty`가 `Revision`을 올린다. PIE 중에 바꾸면 다음 프레임에 바로 보인다.
+- `HGLook::NoOutlineStencil`(1), `HGLook::NeedsStencil()`(`hg.Look >= 1`): 행성 생성기와 컨트롤러가 같이 쓴다.
+- 처음에는 콘솔 변수(`hg.LookLineWidth`, `hg.LookBands`, `hg.LookBandSoft`)였는데, 사용자가 언리얼에서 직접 만지고 싶다고 해서 프로젝트 설정으로 옮겼다.
+  - 포스트 프로세스 컴포넌트는 컨트롤러가 아니라 컨트롤러가 만든 빈 액터(`LookHolder`)에 붙인다. 컨트롤러는 늘 숨김 액터라서 직접 붙이면 `ShouldRender`가 거짓이 되어 화면에 안 나왔다.
+  - 이름이 `HGStyle`인 것은 탐험 컨트롤러에 카메라 돌리기 명령 `HGLook`이 이미 있어서다.
 
 ### HGGameInstance (.h/.cpp)
 맵이 바뀌어도 유지되는 상태.
