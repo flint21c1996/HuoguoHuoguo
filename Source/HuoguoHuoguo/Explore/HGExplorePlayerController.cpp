@@ -65,12 +65,8 @@ void AHGExplorePlayerController::InitializeFromLevel()
 	Explorer->SetSuitVisible(bSpaceSuit);
 	const bool bField = Planet && Planet->GetPlanet().bAsteroidField;
 	const bool bDerelict = Planet && Planet->GetPlanet().bDerelict;
-	if (bDerelict)
-	{
-		// 폐우주선: 우주선을 바라보며 떠서 시작한다 (무중력 제트팩 비행). 에어록으로 들어가면 인공 중력.
-		Explorer->SetFloating(Planet->GetShipUp());
-	}
-	else if (bField)
+	// 폐우주선의 무중력 비행은 빙의(Possess) 뒤에 켠다 (아래 참고).
+	if (bField)
 	{
 		// 소행성 지대: 본 소행성 + 둘레 소행성 모두가 중력을 가진다 (뛰어 건너기 모드).
 		Explorer->SetGravityBodies(Planet->GetGravityBodies());
@@ -81,6 +77,14 @@ void AHGExplorePlayerController::InitializeFromLevel()
 	}
 
 	Possess(Explorer);
+	if (bDerelict)
+	{
+		// 폐우주선: 우주선을 바라보며 떠서 시작한다 (무중력 제트팩 비행). 에어록으로 들어가면 인공 중력.
+		// 빙의할 때 캐릭터 이동 컴포넌트가 이동 모드를 기본값(공중이면 낙하 MOVE_Falling)으로 되돌린다.
+		// 빙의 전에 날기(MOVE_Flying)로 바꿔 두면 낙하로 덮여서, 낙하 모드가 이동 입력의 위아래 성분을 버린다
+		// (위/아래를 보고 W, Space/Ctrl 분사를 해도 높이가 그대로였다). 그래서 빙의한 뒤에 켠다.
+		Explorer->SetFloating(Planet->GetShipUp());
+	}
 	SetViewTarget(Explorer);
 	SetControlRotation(FRotator(-12.f, StartTransform.Rotator().Yaw, 0.f));
 
