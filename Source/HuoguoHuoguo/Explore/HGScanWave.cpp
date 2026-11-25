@@ -1,4 +1,4 @@
-#include "Explore/HGScanWave.h"
+﻿#include "Explore/HGScanWave.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PostProcessComponent.h"
@@ -46,6 +46,30 @@ AHGScanWave::AHGScanWave()
 	Effect->Priority = 10.f;
 }
 
+void AHGScanWave::SetOtherBodies(const TArray<FHGGravityBody>& Bodies, int32 SelfIndex)
+{
+	Others.Reset();
+	if (!Bodies.IsValidIndex(SelfIndex))
+	{
+		return;
+	}
+	const FHGGravityBody& Self = Bodies[SelfIndex];
+	for (int32 i = 0; i < Bodies.Num(); ++i)
+	{
+		if (i != SelfIndex)
+		{
+			Others.Add(FVector4(Bodies[i].Center, Bodies[i].Radius));
+		}
+	}
+	// 지표 사이 간격이 가까운 이웃부터 (화면 효과에는 앞의 8개만 넘긴다).
+	Others.Sort([&Self](const FVector4& A, const FVector4& B)
+	{
+		const double GapA = FVector::Dist(FVector(A), Self.Center) - A.W;
+		const double GapB = FVector::Dist(FVector(B), Self.Center) - B.W;
+		return GapA < GapB;
+	});
+}
+
 void AHGScanWave::Begin(AHGPlanetGenerator* InPlanet, const FVector& InCenter, float InRadius, const FVector& Start, float InRange,
 	TFunction<void(const FString&)> InOnFinished)
 {
@@ -78,14 +102,23 @@ void AHGScanWave::Begin(AHGPlanetGenerator* InPlanet, const FVector& InCenter, f
 		EffectMaterial->SetScalarParameterValue(TEXT("Grid"), 100.f);
 		EffectMaterial->SetScalarParameterValue(TEXT("Radius"), 0.f);
 		EffectMaterial->SetScalarParameterValue(TEXT("Fade"), 0.f);
+		EffectMaterial->SetScalarParameterValue(TEXT("BodyRadius"), Radius);
+		// 이웃 천체 8칸: 없으면 반지름 0(머티리얼이 건너뛴다).
+		for (int32 i = 0; i < 8; ++i)
+		{
+			const FLinearColor Neighbor = Others.IsValidIndex(i)
+				? FLinearColor(static_cast<float>(Others[i].X), static_cast<float>(Others[i].Y), static_cast<float>(Others[i].Z), static_cast<float>(Others[i].W))
+				: FLinearColor(0.f, 0.f, 0.f, 0.f);
+			EffectMaterial->SetVectorParameterValue(*FString::Printf(TEXT("Neighbor%d"), i), Neighbor);
+		}
 		Effect->Settings.AddBlendable(EffectMaterial, 1.f);
 	}
 	else
 	{
 		UE_LOG(LogHuoguo, Warning, TEXT("[Scan] 화면 효과 머티리얼 M_HG_ScanPulse가 없어 지표 고리로 대신 그린다 (Tools/Invoke-HGMapGen.ps1)"));
 	}
-	UE_LOG(LogHuoguo, Log, TEXT("[Scan] 스캔 시작: 천체 반지름 %.0fm, 퍼질 거리 %.0fm, 화면 효과 %s"), Radius / 100.f, Range / 100.f,
-		EffectMaterial ? TEXT("있음") : TEXT("없음"));
+	UE_LOG(LogHuoguo, Log, TEXT("[Scan] 스캔 시작: 천체 반지름 %.0fm, 퍼질 거리 %.0fm, 화면 효과 %s, 뺄 이웃 천체 %d"), Radius / 100.f, Range / 100.f,
+		EffectMaterial ? TEXT("있음") : TEXT("없음"), Others.Num());
 }
 
 void AHGScanWave::Tick(float DeltaSeconds)
@@ -166,6 +199,21 @@ void AHGScanWave::TouchMarkers(float Angle)
 			continue;
 		}
 		if ((ToMarker.GetSafeNormal() | Up) < CosAngle)
+		{
+			continue;
+		}
+		// 이 재료가 붙어 있는 천체가 이웃 쪽이면 건너뛴다 (중심까지 거리 / 반지름이 더 작은 이웃이 있으면).
+		const double Self = ToMarker.Size() / Radius;
+		bool bOnNeighbor = false;
+		for (const FVector4& Other : Others)
+		{
+			if (FVector::Dist(Marker.Location, FVector(Other)) / Other.W < Self)
+			{
+				bOnNeighbor = true;
+				break;
+			}
+		}
+		if (bOnNeighbor)
 		{
 			continue;
 		}

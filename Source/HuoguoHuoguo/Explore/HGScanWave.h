@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
@@ -8,6 +8,7 @@ class AHGPlanetGenerator;
 class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class UPostProcessComponent;
+struct FHGGravityBody;
 
 /**
  * 스캐너 파동 하나. 사장님 발밑에서 시작해 지금 서 있는 천체(행성 또는 밟은 소행성)의 지표를 따라 고리처럼 퍼져 나간다.
@@ -44,6 +45,14 @@ public:
 	 */
 	void Begin(AHGPlanetGenerator* InPlanet, const FVector& InCenter, float InRadius, const FVector& Start, float InRange,
 		TFunction<void(const FString&)> InOnFinished);
+
+	/**
+	 * 소행성 지대: 이 천체(SelfIndex)가 아닌 이웃 천체들. Begin 전에 부른다.
+	 * 어떤 점(화면의 점, 재료)이 "어느 소행성에 붙어 있나" = 중심까지 거리 / 반지름이 가장 작은 천체.
+	 * 그 주인이 이 천체가 아니면 빛나지도, 감지되지도 않는다 (바로 옆 소행성이 같이 스캔되던 문제).
+	 * 화면 효과에는 가까운 이웃 8개만 넘기고, 재료 판정에는 전부 쓴다.
+	 */
+	void SetOtherBodies(const TArray<FHGGravityBody>& Bodies, int32 SelfIndex);
 
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -106,6 +115,9 @@ private:
 		float Start;
 	};
 	TArray<FAnalyze> Analyzing;
+
+	// 이웃 천체 (xyz = 중심, w = 반지름). 가까운 것부터.
+	TArray<FVector4> Others;
 
 	// 각도 Angle(라디안) 안에 들어온 표식을 처리한다.
 	void TouchMarkers(float Angle);

@@ -716,6 +716,11 @@ void AHGExplorePlayerController::OnScan(const FInputActionValue& Value)
 	{
 		TWeakObjectPtr<AHGExplorePlayerController> WeakThis(this);
 		Wave->Duration = ScanDuration;
+		// 소행성 지대: 이웃 소행성은 빼고 지금 밟은 소행성만 훑는다.
+		if (Explorer->IsHopMode())
+		{
+			Wave->SetOtherBodies(Planet->GetGravityBodies(), Explorer->GetCurrentBody());
+		}
 		Wave->Begin(Planet, Center, Radius, Explorer->GetActorLocation(), ScanRange, [WeakThis](const FString& Result)
 		{
 			if (WeakThis.IsValid())
