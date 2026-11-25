@@ -216,15 +216,30 @@ def ensure_planet_materials():
 
 
 SCAN_MATERIAL = "/Game/HG/Materials/M_HG_ScanPulse"
+# 스캐너 머티리얼 판 번호. 계산식이나 연결을 바꾸면 올린다 (옛 판을 지우고 다시 만든다).
+SCAN_VERSION = 3.0
 
 # 스캐너 파동 (화면 효과, 포스트 프로세스). 화면의 각 점을 월드 위치로 되돌려 계산한다:
 #   - 고리: 스캔 시작점에서 거리 Radius 근처(폭 Width)에 빛나는 띠. 데칼처럼 땅, 바위, 식물 어디에나 얹힌다.
 #   - 분석 격자: 띠 위와 띠가 지나간 바로 뒤의 표면에 Grid(cm) 간격 격자 선 (와이어프레임처럼 "분석 중" 느낌).
-#   - 지금 서 있는 천체 안쪽(중심 Center에서 Limit 안)만 받는다. 하늘(무한히 먼 점), 하늘의 섬, 다른 소행성은 빛나지 않는다.
+#   - 지금 서 있는 천체 안쪽(중심 Center에서 Limit 안)만 받는다. 하늘(무한히 먼 점), 하늘의 섬은 빛나지 않는다.
+#   - 이웃 천체(Neighbor0 ~ 7: xyz = 중심, w = 반지름, w = 0이면 없음)보다 이 천체에 "더 붙어 있는" 점만 받는다.
+#     붙어 있는 정도 = 중심까지 거리 / 반지름 (작을수록 그 천체 표면 쪽). 소행성 지대에서 바로 옆 소행성이 같이 빛나던 문제.
 #   - Fade로 전체 세기를 줄여 끝에 사라지게 한다.
 SCAN_HLSL = """
 float3 P = WorldPos;
-float onBody = 1.0 - step(Limit, distance(P, Center));
+float dSelf = distance(P, Center);
+float rSelf = dSelf / max(BodyRadius, 1.0);
+float4 N[8] = { Neighbor0, Neighbor1, Neighbor2, Neighbor3, Neighbor4, Neighbor5, Neighbor6, Neighbor7 };
+float closest = 1.0e9;
+for (int i = 0; i < 8; i++)
+{
+    if (N[i].w > 0.0)
+    {
+        closest = min(closest, distance(P, N[i].xyz) / N[i].w);
+    }
+}
+float onBody = (1.0 - step(Limit, dSelf)) * step(rSelf, closest);
 float d = distance(P, Origin);
 float band = saturate(1.0 - abs(d - Radius) / Width);
 band = band * band;
@@ -239,11 +254,18 @@ return Scene.rgb + ScanColor * glow;
 def ensure_scan_material():
     """스캐너 파동 포스트 프로세스 머티리얼. 없을 때만 만든다 (있으면 에디터에서 고친 것을 존중).
 
-    파라미터: Origin, Center, ScanColor(벡터), Radius, Width, Limit, Grid, Fade(스칼라). AHGScanWave가 동적 인스턴스로 매 프레임 바꾼다.
+    파라미터: Origin, Center, ScanColor, Neighbor0 ~ 7(벡터), Radius, Width, Limit, Grid, Fade, BodyRadius(스칼라).
+    AHGScanWave가 동적 인스턴스로 매 프레임 바꾼다.
+    이 머티리얼은 이 도구만 만드는 효과라, 판 번호 파라미터 ScanVersion이 SCAN_VERSION과 다르면(옛 판) 지우고 다시 만든다.
     """
-    if asset_lib.does_asset_exist(SCAN_MATERIAL):
-        return
     mel = unreal.MaterialEditingLibrary
+    if asset_lib.does_asset_exist(SCAN_MATERIAL):
+        old = unreal.load_asset(SCAN_MATERIAL)
+        if "ScanVersion" in [str(n) for n in mel.get_scalar_parameter_names(old)] and \
+                mel.get_material_default_scalar_parameter_value(old, "ScanVersion") == SCAN_VERSION:
+            return
+        asset_lib.delete_asset(SCAN_MATERIAL)
+        unreal.log("[MapGen] 스캐너 파동 머티리얼: 옛 판이라 다시 만든다 (이웃 천체 빼기)")
     folder, name = SCAN_MATERIAL.rsplit("/", 1)
     mat = asset_tools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
     mat.set_editor_property("material_domain", unreal.MaterialDomain.MD_POST_PROCESS)
@@ -255,7 +277,8 @@ def ensure_scan_material():
     custom = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, -300, 0)
     custom.set_editor_property("code", SCAN_HLSL)
     custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
-    names = ["Scene", "WorldPos", "Origin", "Center", "ScanColor", "Radius", "Width", "Limit", "Grid", "Fade"]
+    names = ["Scene", "WorldPos", "Origin", "Center", "ScanColor", "Radius", "Width", "Limit", "Grid", "Fade", "BodyRadius"]
+    names += ["Neighbor%d" % i for i in range(8)]
     inputs = []
     for n in names:
         ci = unreal.CustomInput()
@@ -275,7 +298,14 @@ def ensure_scan_material():
         p.set_editor_property("default_value", value)
         mel.connect_material_expressions(p, "RGB", custom, n)
         y += 120
-    for n, value in (("Radius", 0.0), ("Width", 250.0), ("Limit", 100000.0), ("Grid", 100.0), ("Fade", 0.0)):
+    for i in range(8):
+        p = mel.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -1300, -300 + i * 120)
+        p.set_editor_property("parameter_name", "Neighbor%d" % i)
+        p.set_editor_property("default_value", unreal.LinearColor(0, 0, 0, 0))
+        # 4칸(xyz = 중심, w = 반지름)이 필요하므로 RGBA 출력에 잇는다 (기본 출력은 RGB 3칸이라 컴파일이 실패했다).
+        mel.connect_material_expressions(p, "RGBA", custom, "Neighbor%d" % i)
+    for n, value in (("Radius", 0.0), ("Width", 250.0), ("Limit", 100000.0), ("Grid", 100.0), ("Fade", 0.0), ("BodyRadius", 1000.0),
+                     ("ScanVersion", SCAN_VERSION)):
         p = mel.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -900, y)
         p.set_editor_property("parameter_name", n)
         p.set_editor_property("default_value", value)
