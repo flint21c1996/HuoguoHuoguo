@@ -9,6 +9,15 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
+namespace
+{
+	// 정식 모델 비교 스위치. 다음에 사장님이 나타날 때 적용된다 (맵을 다시 열거나 PIE를 다시 시작).
+	TAutoConsoleVariable<int32> CVarBossModel(
+		TEXT("hg.BossModel"), 1,
+		TEXT("사장님 외형. 1 = 블루프린트 Mesh에 넣은 정식 모델(기본, 모델이 없으면 자리 표시), 0 = 예전 자리 표시(복셀 직장인). 다음에 사장님이 나타날 때 바뀐다."),
+		ECVF_Default);
+}
+
 AHGBossCharacter::AHGBossCharacter()
 {
 	// 캡슐: 언리얼 캐릭터의 실제 충돌 몸체. 반지름 40, 반높이 92면 약 1.84m 키다.
@@ -62,7 +71,13 @@ AHGBossCharacter::AHGBossCharacter()
 		PlaceholderHelmet->SetStaticMesh(SphereMesh.Object);
 	}
 
-	// 기본 스켈레탈 메시 컴포넌트는 아직 쓰지 않는다. 캐릭터 에셋이 생기면 여기에 넣고 자리 표시를 숨긴다.
+	// 정식 모델 자리: 기본 스켈레탈 메시 컴포넌트(Mesh). 어떤 모델을 쓸지와 크기는 블루프린트(BP_HG_Explorer, BP_HG_ShopBoss)의
+	// Mesh 컴포넌트에서 정한다. 여기서는 붙는 자리와 방향 규칙만 정한다.
+	// 캡슐이 아니라 VisualRoot(발 위치) 아래에 붙여서, 공중제비/눌림 같은 외형 연출을 자리 표시 부품과 똑같이 받게 한다.
+	// 모델 원점은 발로 맞춘다. 모델 앞이 +Y인 것(언리얼 마네킹과 같은 규칙)을 Yaw -90으로 캐릭터 앞(+X)에 맞춘다.
+	// 보일지는 BeginPlay에서 정한다 (모델이 들어 있고 hg.BossModel이 1이면). 일단 숨겨 둔다.
+	GetMesh()->SetupAttachment(VisualRoot);
+	GetMesh()->SetRelativeLocationAndRotation(FVector::ZeroVector, FRotator(0.f, -90.f, 0.f));
 	GetMesh()->SetVisibility(false);
 }
 
@@ -74,7 +89,16 @@ void AHGBossCharacter::BeginPlay()
 	HGPlaceholder::Paint(PlaceholderBody, FLinearColor(0.93f, 0.93f, 0.95f));   // 와이셔츠 흰색
 	HGPlaceholder::Paint(PlaceholderHead, FLinearColor(0.95f, 0.72f, 0.55f));   // 피부색
 	HGPlaceholder::Paint(PlaceholderHelmet, FLinearColor(0.55f, 0.85f, 0.95f)); // 헬멧 청록
-	if (HGVoxel::IsEnabled())
+	if (CVarBossModel.GetValueOnGameThread() != 0 && GetMesh()->GetSkeletalMeshAsset())
+	{
+		// 정식 모델이 있으면 그것만 보인다. 복셀 몸은 만들지 않는다 (만들고 숨기는 비용도 아낀다).
+		GetMesh()->SetVisibility(true);
+		PlaceholderBody->SetVisibility(false);
+		PlaceholderHead->SetVisibility(false);
+		PlaceholderHelmet->SetVisibility(false);
+		bModelBody = true;
+	}
+	else if (HGVoxel::IsEnabled())
 	{
 		BuildVoxelBody();
 	}
@@ -167,6 +191,11 @@ void AHGBossCharacter::Move(const FVector2D& Input)
 void AHGBossCharacter::SetSuitVisible(bool bVisible)
 {
 	bSuitVisible = bVisible;
+	if (bModelBody)
+	{
+		// 정식 모델은 아직 우주복 차림 하나뿐이다 (헬멧이 몸에 붙어 있다). 가게 차림(앞치마)은 옷을 따로 만들면 여기서 바꾼다.
+		return;
+	}
 	if (bVoxelBody)
 	{
 		// 우주복 차림이면 헬멧, 가게 차림이면 앞치마.

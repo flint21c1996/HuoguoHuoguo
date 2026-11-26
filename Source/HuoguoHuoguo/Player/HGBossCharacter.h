@@ -71,6 +71,8 @@ private:
 	TArray<TObjectPtr<class UInstancedStaticMeshComponent>> ApronVoxels;
 
 	bool bVoxelBody = false;
+	// 정식 모델(SK_HG_Boss)을 보이고 있는가. 그러면 자리 표시 도형과 복셀 몸은 쓰지 않는다.
+	bool bModelBody = false;
 	bool bSuitVisible = false;
 
 	// 자리 표시 도형을 숨기고 같은 모양을 복셀로 만든다 (Debug/HGVoxelShapes).
