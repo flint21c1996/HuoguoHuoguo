@@ -30,6 +30,9 @@
 ## 핵심 설계 원칙
 
 - 게임 로직, 규칙, 상태는 C++에 둔다. 블루프린트는 C++ 클래스를 상속해 비주얼만 연결한다.
+- 기획/아트가 바꿀 것(어떤 모델/머티리얼, 조절 수치, 어떤 클래스를 쓸지)은 C++에 경로나 상수로 박지 않는다.
+  블루프린트 디테일 패널(`UPROPERTY(EditAnywhere/EditDefaultsOnly)`, `TSubclassOf`), 데이터 테이블, 프로젝트 설정에서 정한다.
+  도구 스크립트는 처음 한 번 만들어 주는 용도이고, 사람이 고친 에셋을 덮어쓰지 않는다. 지금 블루프린트 목록: `Docs/Content/Blueprints.md`.
 - 밸런스 데이터(재료, 콤보, 종족, 업그레이드, 파밍지)는 CSV/JSON 텍스트로 두고 DataTable로 읽는다. 지금은 재료(`Data/Ingredients.csv` → `DT_Ingredients`), 콤보(`Data/Combos.csv` → `DT_Combos`), 가구(`Data/Furniture.csv` → `DT_Furniture`)가 있다. 가구 생김새도 데이터(분류 + Style)로 정하고, 아트가 생기면 행의 블루프린트 클래스로 바꾼다.
 - 손으로 다듬는 장소(정거장)는 맵 에셋(`.umap`) 배치가 기준이다. 런타임에 코드로 지형을 만들지 않는다.
 - 매번 달라지는 장소(행성)는 맵이 아니라 시드(`FHGPlanetSeed`)로 존재하고, 표면 맵에서 생성기가 만든다.

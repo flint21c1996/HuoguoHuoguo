@@ -15,7 +15,7 @@
 
 `[/Script/EngineSettings.GameMapsSettings]`
 - `GameDefaultMap`, `EditorStartupMap` = `/Game/HG/Maps/L_Station`
-- `GlobalDefaultGameMode` = `/Script/HuoguoHuoguo.HGExploreGameMode` (맵에 지정이 없을 때만 쓴다. 실제 파트는 맵 World Settings가 정한다)
+- `GlobalDefaultGameMode` = `/Game/HG/Blueprints/BP_HG_ExploreGameMode.BP_HG_ExploreGameMode_C` (맵에 지정이 없을 때만 쓴다. 실제 파트는 맵 World Settings가 정한다. `Docs/Content/Blueprints.md`)
 - `GameInstanceClass` = `/Script/HuoguoHuoguo.HGGameInstance`
 
 `[/Script/Engine.RendererSettings]`

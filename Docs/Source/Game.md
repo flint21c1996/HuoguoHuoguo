@@ -12,6 +12,7 @@
 ### HGGameModeBase (.h/.cpp)
 - 추상 클래스. `DefaultPawnClass = nullptr`, `RestartPlayer`를 비워서 엔진 기본 Pawn 생성을 막는다. 사장님은 각 파트 컨트롤러가 직접 만든다.
 - 하위: `AHGShopGameMode`(L_Station), `AHGExploreGameMode`(L_PlanetSurface, L_Asteroid_Krak7, 프로젝트 기본값).
+  맵과 프로젝트 기본값에는 이들의 블루프린트(`BP_HG_ShopGameMode`, `BP_HG_ExploreGameMode`)가 들어간다 (`Docs/Content/Blueprints.md`).
 
 ### HGPlayerControllerBase (.h/.cpp)
 추상 클래스. 두 파트 컨트롤러의 공통 기능.

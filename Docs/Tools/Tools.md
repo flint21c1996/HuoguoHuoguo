@@ -25,6 +25,7 @@ powershell -ExecutionPolicy Bypass -File .\Tools\Invoke-HGBuild.ps1
 - `ensure_look_materials()`: 그림체 비교 화면 효과 `M_HG_LookToon`(셀 셰이딩, 톤 매핑 전)을 만든다. HLSL은 `TOON_HLSL`. 판 번호 `LookVersion`이 `LOOK_VERSION`(지금 8)과 다르면 지우고 다시 만든다. Custom 노드에서 깊이와 GBuffer를 읽으려면 그 화면 텍스처 노드(SceneTexture)를 Custom 입력에 이어 둬야 엔진이 텍스처를 묶는다.
 - `ensure_fixed_exposure(label, ev)`: 맵 전체 노출을 고정하는 포스트 프로세스 볼륨. 없을 때만 만들고, 있으면 에디터에서 고친 값을 존중해 건드리지 않는다. 정거장은 `STATION_EXPOSURE_EV`(2.0). 값을 맞춰 볼 때는 환경 변수 `HG_STATION_EXPOSURE`를 주고 실행하면 그 값으로 덮어쓴다.
 - `MAP_GAME_MODES`: 맵마다 World Settings GameMode를 정한다 (L_Station = 경영, 나머지 = 탐험). 새 맵을 만들 때와 이미 있는 맵 모두에 적용한다.
+  값은 (C++ 클래스, 블루프린트 경로). `/Game/HG/Blueprints`의 게임 모드 BP가 있으면 BP를, 없으면 C++ 클래스를 넣는다. BP 자체는 만들거나 고치지 않는다.
 - `upgrade_station()` / `upgrade_existing_map()`: 이미 있는 맵에서 값만 새 규칙으로 바꾼다 (게임 모드 지정, 정거장 에어록 발판을 다이빙 발판으로, `FromAsteroid` 시작점을 `FromPlanet`으로). 바뀐 것이 없으면 저장하지 않는다.
 - 예외로 액터를 지우는 경우 하나: 정거장에 가구 액터(`HGFurniture`)가 하나도 없고 홀 식탁이 예전 도형 묶음(`Table_N_Top/Leg/Pot/Seat`)이면, 그 도형들을 지우고 `place_hall_furniture()`로 식탁 4 + 의자 4 가구 액터를 놓는다. 가구 액터가 하나라도 있으면 건드리지 않는다.
 - 파이썬에서 C++ 속성 이름은 `b` 접두사를 뺀 snake_case다 (`bDiveToSelectedPlanet` → `dive_to_selected_planet`).

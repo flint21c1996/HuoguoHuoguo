@@ -24,6 +24,7 @@
 ### HGExplorePlayerController (.h/.cpp)
 `AHGPlayerControllerBase` 상속.
 - 맵 시작: `AHGPlanetGenerator`가 있으면 `EnsureGenerated()` 후 `GetLandingTransform()`(북극)에 사장님을 만들고 구형 중력을 켠다. 없으면 도착 태그의 `AHGExplorerStart`. 우주복 차림.
+  만드는 클래스 = `ExplorerClass`(블루프린트에서 정함, 지금 `BP_HG_Explorer`). 비어 있으면 `AHGExplorerCharacter`.
 - 조작 (`IMC_Explore`, 커서 숨김, GameOnly): WASD 이동(카메라 기준), 마우스 시점, Space 점프, E 채집, 마우스 휠 = 카메라 거리(`IA_Explore_Zoom`).
   - 카메라 "위": 사장님 몸의 중력 기준을 그대로 쓰지 않고 지수적으로 늦게 따라간다 (`CameraUpFollowSpeed` 3, 약 0.33초에 차이 63% 감소). 가까운 소행성으로 뛰면 "위"가 크게 뒤집히고 착지 때 몸이 남은 각도를 한 번에 맞추는데, 카메라가 그대로 따라 돌아 순간이동처럼 보였다 (사용자 의견). 로그 `[Cam]`: 공중 최대 회전 속도와 착지 때 몸과 카메라의 위 차이. 확인됨: 점프 세 번에 최대 초속 144 ~ 178도, 착지 때 차이 18 ~ 90도를 착지 뒤 부드럽게 맞춤 (예전에는 한 프레임에 맞춤).
   - 카메라 거리: 휠 한 칸에 목표 거리의 12%씩(`ZoomStep`, 가까울 때 잘게, 멀 때 크게), 1.8 ~ 16m(`MinArmLength`/`MaxArmLength`, 기본 4.2m). 실제 거리는 목표로 부드럽게 따라간다(`ZoomSpeed` 10). 맵을 옮기면 기본 거리로 돌아간다. 확인됨: 휠을 뒤로 8칸 굴리면 본 소행성 전체가 보이는 거리까지 멀어짐.

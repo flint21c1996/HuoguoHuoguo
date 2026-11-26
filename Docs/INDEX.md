@@ -169,6 +169,13 @@
 
 ## Content
 
+### [Blueprints - 기획/아트가 직접 고치는 클래스 설정](Content/Blueprints.md)
+
+- 역할
+- 연결 순서
+- 주인공 모델 에셋 (`Content/HG/Characters/Boss/`)
+- 알려진 문제와 다음 할 일
+
 ### [Data - 밸런스 데이터 (CSV 원본과 DataTable 에셋)](Content/Data.md)
 
 - 역할

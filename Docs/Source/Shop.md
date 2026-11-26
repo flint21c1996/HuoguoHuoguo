@@ -26,7 +26,8 @@ B로 가구 배치 모드에 들어가 정해진 칸 위에 식탁, 의자, 장�
 
 ### HGShopPlayerController (.h/.cpp)
 `AHGPlayerControllerBase` 상속.
-- 맵 시작: 도착 태그(`FromPlanet` 등)에 맞는 `AHGExplorerStart`에 경영용 사장님을 만든다. 카메라 처음 방향 = `AHGShopCameraAnchor`의 Yaw(없으면 시작점 Yaw).
+- 맵 시작: 도착 태그(`FromPlanet` 등)에 맞는 `AHGExplorerStart`에 경영용 사장님을 만든다.
+  만드는 클래스 = `ShopBossClass`(블루프린트에서 정함, 지금 `BP_HG_ShopBoss`). 비어 있으면 `AHGShopBossCharacter`. 카메라 처음 방향 = `AHGShopCameraAnchor`의 Yaw(없으면 시작점 Yaw).
 - 조작 (`IMC_Shop`, 커서 보임, GameAndUI)
   - WASD: 사장님 이동. 카메라 Yaw 기준이라 W = 화면 위쪽. (`AHGBossCharacter::Move`)
   - 우클릭 드래그: 카메라 좌우 자유 회전. 우클릭을 누르는 동안만 마우스 X를 `AddYawInput`. 커서는 손님/UI 클릭용으로 남겨 둔다.
