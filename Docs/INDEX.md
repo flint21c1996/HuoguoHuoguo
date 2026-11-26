@@ -174,6 +174,7 @@
 - 역할
 - 연결 순서
 - 주인공 모델 에셋 (`Content/HG/Characters/Boss/`)
+- 주인공 애니메이션 (`Content/HG/Characters/Boss/Anims`, `Rigs`) (2026-11-27)
 - 알려진 문제와 다음 할 일
 
 ### [Data - 밸런스 데이터 (CSV 원본과 DataTable 에셋)](Content/Data.md)

@@ -27,7 +27,10 @@ C++는 기능과 규칙을 맡고, "어떤 모델/값을 쓸지"는 블루프린
 
 ## 주인공 모델 에셋 (`Content/HG/Characters/Boss/`)
 
-- `SK_HG_Boss` (+ `_Skeleton`, `_PhysicsAsset`): Tripo 모델을 블렌더에서 정리해 FBX로 가져왔다. 키 1m, 원점 = 발, 앞 = +Y, 본 64개 (언리얼 마네킹 이름: root, pelvis, spine_01~05, …). 애니메이션 없음.
+- `SK_HG_Boss` (+ `_Skeleton`, `_PhysicsAsset`): Tripo 모델을 블렌더에서 정리해 FBX로 가져왔다. 키 1m(100cm), 원점 = 발, 앞 = +Y, 본 64개 (언리얼 마네킹 이름: root, pelvis, spine_01~05, …).
+  - FBX 내보내기 규칙 (중요): 뼈 길이까지 cm 값이어야 한다. 블렌더에서 아마추어+메시를 100배 하고 배율 적용(Apply Scale),
+    씬 Unit Scale 0.01, Apply Unit 켬, Apply Scalings = All Local로 내보낸다 (작업 .blend는 저장하지 않고 내보내기만 한다).
+    예전 방식(미터 데이터 + 단위 변환)은 100배가 뿌리 뼈 배율로 들어가서, 리타게팅 애니메이션이 그 배율을 1로 덮어써 캐릭터가 1/100로 줄어 안 보였다.
 - `M_HG_Boss`: 베이스 컬러 + ORM(R=AO, G=러프니스, B=메탈릭). "Used with Skeletal Mesh"를 켜 두어야 게임에서 회색 기본 머티리얼로 바뀌지 않는다.
 - `T_HG_Boss_BaseColor` (4096, sRGB), `T_HG_Boss_ORM` (4096, sRGB 끔, Masks 압축).
   - 베이스 컬러는 면(face)마다 한 가지 색인 단색 텍스처다 (2026-11-27). 바이저(헬멧 유리)만 그라데이션을 남겼다. 원본 PNG = `T_HG_Boss_BaseColor_Face.png`.
@@ -37,7 +40,21 @@ C++는 기능과 규칙을 맡고, "어떤 모델/값을 쓸지"는 블루프린
   언리얼 텍스처 에셋의 원본 경로도 이 폴더를 가리킨다. 다시 칠하면 `HG_Boss.blend`에서 저장한 뒤 텍스처 에셋에서 Reimport.
 - 그림체 규칙: 캐릭터는 "면별 단색 + 셀 셰이딩"으로 통일한다 (배경의 단색 복셀과 맞춘다). 새 캐릭터도 같은 방식으로 칠한다.
 
+## 주인공 애니메이션 (`Content/HG/Characters/Boss/Anims`, `Rigs`) (2026-11-27)
+
+- 언리얼 3인칭 템플릿의 마네킹 맨손 동작을 사장님 뼈대로 리타게팅했다. 원본 = 엔진 `Templates/TemplateResources/High/Characters`를 `Content/Characters/Mannequins`로 복사한 것.
+- `Rigs/IK_Mannequin`, `Rigs/IK_HG_Boss`: 뼈 이름이 같아서 체인 29개가 자동으로 맞았다. `Rigs/RTG_Mannequin_To_HGBoss`: 사장님 T자세를 마네킹 A자세에 자동 정렬.
+- `Anims/ABP_HG_Boss` (템플릿 `ABP_Unarmed`를 복사), `BS_Idle_Walk_Run`, 서기/걷기 8방향/뛰기 8방향/점프/떨어지기/착지 21개.
+- `BP_HG_Explorer`, `BP_HG_ShopBoss`의 Mesh > Anim Class = `ABP_HG_Boss`. 다른 애니메이션 블루프린트로 바꾸려면 여기만 바꾼다.
+- 게임에서 필요한 것은 위 애니메이션 + `Content/Characters/Mannequins/Rigs/CR_Mannequin_FootIK`(발 IK 컨트롤 리그, 하드 참조)뿐이다.
+  마네킹 메시/원본 애니메이션은 리타게팅을 다시 할 때만 쓴다 (컨트롤 리그가 마네킹 메시를 가리키는 것은 에디터 미리보기용 소프트 참조).
+- 확인됨: 행성 착륙 지점에서 서기, 달리기, 점프 동작이 나온다 (셀 셰이딩, 엔진 스크린샷).
+
 ## 알려진 문제와 다음 할 일
 
 - 다음 정리 순서: 도구가 머티리얼/맵/데이터를 덮어쓰지 않게 하기, 게임 데이터(재료, 가구 등)를 기획자가 고치는 원본으로 정리.
-- 사장님 애니메이션 없음 (마네킹 애니메이션 리타깃 후보).
+- 애니메이션 블루프린트는 템플릿 그대로라 걷기/뛰기 판단에 월드 기준 수평 속도를 쓴다. 행성 옆면처럼 "위"가 월드 Z가 아닌 곳에서는
+  속도 계산이 틀릴 수 있다 (착륙 지점에서만 확인함). 틀리면 중력 기준 속도를 주는 C++ 애님 인스턴스가 필요하다.
+- 가게(정거장)에서의 동작과, 팔이 배/헬멧을 뚫는지(리타겟 자세 조정)는 화면으로 자세히 보지 않았다.
+- 나중에: 우주복 이미시브(띠, 부츠 밑창 줄이 은은하게 빛나게). 빛날 면만 흰색인 마스크를 `HG_FacePaint.py`로 칠해 만들고
+  (따로 한 장, 또는 ORM의 A 채널), 머티리얼에서 마스크 x 색 x 밝기를 Emissive에 잇는다. 색과 밝기는 머티리얼 인스턴스 파라미터로 뺀다.
