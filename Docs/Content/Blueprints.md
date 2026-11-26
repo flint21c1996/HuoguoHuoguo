@@ -31,7 +31,8 @@ C++는 기능과 규칙을 맡고, "어떤 모델/값을 쓸지"는 블루프린
 - `M_HG_Boss`: 베이스 컬러 + ORM(R=AO, G=러프니스, B=메탈릭). "Used with Skeletal Mesh"를 켜 두어야 게임에서 회색 기본 머티리얼로 바뀌지 않는다.
 - `T_HG_Boss_BaseColor` (4096, sRGB), `T_HG_Boss_ORM` (4096, sRGB 끔, Masks 압축).
   - 베이스 컬러는 면(face)마다 한 가지 색인 단색 텍스처다 (2026-11-27). 바이저(헬멧 유리)만 그라데이션을 남겼다. 원본 PNG = `T_HG_Boss_BaseColor_Face.png`.
-  - 단색이라 에셋 크기가 약 1.5MB로 줄었다 (손으로 칠한 텍스처일 때 약 12.6MB).
+  - 단색이라 에셋 크기가 약 1.5MB로 줄었다 (손으로 칠한 텍스처일 때 약 12.6MB). ORM은 4096 그대로 약 8.5MB.
+  - 두 텍스처 에셋은 저장소에 올린다 (게임이 쓰는 에셋. 원본 PNG/블렌더 파일/FBX는 저장소 밖 리소스 폴더). 노멀맵은 없다.
 - 원본은 저장소 밖 `훠궈훠궈 리소스` 폴더(저장소 폴더 옆)의 `Characters/Boss/`에 둔다: `HG_Boss.blend`(작업 파일, 그림은 같은 폴더 `Textures/`를 상대 경로로 씀), `HG_Boss.fbx`, `Textures/T_HG_Boss_BaseColor.png`, `Textures/T_HG_Boss_ORM.png`.
   언리얼 텍스처 에셋의 원본 경로도 이 폴더를 가리킨다. 다시 칠하면 `HG_Boss.blend`에서 저장한 뒤 텍스처 에셋에서 Reimport.
 - 그림체 규칙: 캐릭터는 "면별 단색 + 셀 셰이딩"으로 통일한다 (배경의 단색 복셀과 맞춘다). 새 캐릭터도 같은 방식으로 칠한다.
