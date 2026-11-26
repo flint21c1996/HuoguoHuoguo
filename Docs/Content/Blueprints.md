@@ -32,7 +32,8 @@ C++는 기능과 규칙을 맡고, "어떤 모델/값을 쓸지"는 블루프린
 - `T_HG_Boss_BaseColor` (4096, sRGB), `T_HG_Boss_ORM` (4096, sRGB 끔, Masks 압축).
   - 베이스 컬러는 면(face)마다 한 가지 색인 단색 텍스처다 (2026-11-27). 바이저(헬멧 유리)만 그라데이션을 남겼다. 원본 PNG = `T_HG_Boss_BaseColor_Face.png`.
   - 단색이라 에셋 크기가 약 1.5MB로 줄었다 (손으로 칠한 텍스처일 때 약 12.6MB).
-- 원본(블렌더 파일, PNG)은 저장소 밖 개인 폴더에 있다. 텍스처를 다시 칠하면 텍스처 에셋에서 Reimport.
+- 원본은 저장소 밖 `훠궈훠궈 리소스` 폴더(저장소 폴더 옆)의 `Characters/Boss/`에 둔다: `HG_Boss.blend`(작업 파일, 그림은 같은 폴더 `Textures/`를 상대 경로로 씀), `HG_Boss.fbx`, `Textures/T_HG_Boss_BaseColor.png`, `Textures/T_HG_Boss_ORM.png`.
+  언리얼 텍스처 에셋의 원본 경로도 이 폴더를 가리킨다. 다시 칠하면 `HG_Boss.blend`에서 저장한 뒤 텍스처 에셋에서 Reimport.
 - 그림체 규칙: 캐릭터는 "면별 단색 + 셀 셰이딩"으로 통일한다 (배경의 단색 복셀과 맞춘다). 새 캐릭터도 같은 방식으로 칠한다.
 
 ## 알려진 문제와 다음 할 일
