@@ -101,6 +101,11 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Harvest")
 	float HarvestRadius = 220.f;
 
+	// 탐험 맵에 나타날 사장님 클래스. 블루프린트(BP_HG_Explorer)를 넣으면 거기서 정한 모델/수치로 나타난다.
+	// 비어 있으면 C++ 기본 클래스(AHGExplorerCharacter)를 쓴다.
+	UPROPERTY(EditDefaultsOnly, Category = "Player")
+	TSubclassOf<AHGExplorerCharacter> ExplorerClass;
+
 	/**
 	 * 시점 회전 처리. 행성 위에서는 중력 기준 좌표계 안에서 처리한다.
 	 *

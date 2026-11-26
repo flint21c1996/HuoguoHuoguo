@@ -746,23 +746,34 @@ def build_planet_surface():
 
 
 # 맵마다 쓰는 파트(게임 모드). 맵의 World Settings > GameMode Override에 넣는다.
+# (C++ 클래스, 블루프린트 경로). 블루프린트가 있으면 블루프린트를 넣는다. 사장님 모델, 컨트롤러 같은 설정은
+# 블루프린트에서 사람이 고치므로, 이 도구는 블루프린트를 만들거나 고치지 않고 가리키기만 한다.
+BLUEPRINT_DIR = "/Game/HG/Blueprints"
 MAP_GAME_MODES = {
-    STATION_MAP: "HGShopGameMode",
-    PLANET_MAP: "HGExploreGameMode",
-    ASTEROID_MAP: "HGExploreGameMode",
+    STATION_MAP: ("HGShopGameMode", BLUEPRINT_DIR + "/BP_HG_ShopGameMode"),
+    PLANET_MAP: ("HGExploreGameMode", BLUEPRINT_DIR + "/BP_HG_ExploreGameMode"),
+    ASTEROID_MAP: ("HGExploreGameMode", BLUEPRINT_DIR + "/BP_HG_ExploreGameMode"),
 }
+
+
+def wanted_game_mode(map_path):
+    """맵에 넣을 게임 모드 클래스. 블루프린트가 있으면 그 클래스, 없으면 C++ 클래스."""
+    native, blueprint = MAP_GAME_MODES[map_path]
+    if unreal.EditorAssetLibrary.does_asset_exist(blueprint):
+        return unreal.EditorAssetLibrary.load_blueprint_class(blueprint)
+    return getattr(unreal, native).static_class()
 
 
 def apply_game_mode(map_path):
     """지금 열린 맵의 게임 모드 지정을 MAP_GAME_MODES 값으로 맞춘다. 바꿨으면 True."""
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
     settings = world.get_world_settings()
-    wanted = getattr(unreal, MAP_GAME_MODES[map_path]).static_class()
+    wanted = wanted_game_mode(map_path)
     current = settings.get_editor_property("default_game_mode")
     if current == wanted:
         return False
     settings.set_editor_property("default_game_mode", wanted)
-    unreal.log("[MapGen] %s 게임 모드 지정: %s" % (map_path, MAP_GAME_MODES[map_path]))
+    unreal.log("[MapGen] %s 게임 모드 지정: %s" % (map_path, wanted.get_name()))
     return True
 
 

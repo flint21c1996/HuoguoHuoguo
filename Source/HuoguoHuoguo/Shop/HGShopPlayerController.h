@@ -149,6 +149,11 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Shop Camera")
 	float RotateStepDegrees = 90.f;
 
+	// 가게에 나타날 사장님 클래스. 블루프린트(BP_HG_ShopBoss)를 넣으면 거기서 정한 모델/수치로 나타난다.
+	// 비어 있으면 C++ 기본 클래스(AHGShopBossCharacter)를 쓴다.
+	UPROPERTY(EditDefaultsOnly, Category = "Player")
+	TSubclassOf<AHGShopBossCharacter> ShopBossClass;
+
 	// 가구 배치 모드. 고를 수 있는 가구 목록, 격자 간격 등은 이 컴포넌트의 속성이다.
 	UPROPERTY(VisibleAnywhere, Category = "Furniture")
 	TObjectPtr<UHGFurniturePlacer> FurniturePlacer;

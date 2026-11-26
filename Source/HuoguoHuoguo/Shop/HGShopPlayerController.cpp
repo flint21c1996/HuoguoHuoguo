@@ -69,7 +69,8 @@ void AHGShopPlayerController::InitializeFromLevel()
 
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-	ShopBoss = World->SpawnActor<AHGShopBossCharacter>(AHGShopBossCharacter::StaticClass(), StartTransform, Params);
+	UClass* BossToSpawn = ShopBossClass ? ShopBossClass.Get() : AHGShopBossCharacter::StaticClass();
+	ShopBoss = World->SpawnActor<AHGShopBossCharacter>(BossToSpawn, StartTransform, Params);
 	Boss = ShopBoss;
 	Possess(ShopBoss);
 	SetViewTarget(ShopBoss);

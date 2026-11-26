@@ -60,7 +60,8 @@ void AHGExplorePlayerController::InitializeFromLevel()
 
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-	Explorer = World->SpawnActor<AHGExplorerCharacter>(AHGExplorerCharacter::StaticClass(), StartTransform, Params);
+	UClass* ExplorerToSpawn = ExplorerClass ? ExplorerClass.Get() : AHGExplorerCharacter::StaticClass();
+	Explorer = World->SpawnActor<AHGExplorerCharacter>(ExplorerToSpawn, StartTransform, Params);
 	Boss = Explorer;
 	Explorer->SetSuitVisible(bSpaceSuit);
 	const bool bField = Planet && Planet->GetPlanet().bAsteroidField;
