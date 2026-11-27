@@ -1,6 +1,6 @@
 # Planet - 행성 시드와 절차적 행성 생성기
 
-> 경로: `Source/HuoguoHuoguo/World/Planet/` · 마지막 갱신: 2026-11-27
+> 경로: `Source/HuoguoHuoguo/World/Planet/` · 마지막 갱신: 2026-11-28
 
 ## 역할
 
@@ -17,6 +17,7 @@
   `MakeApproachingPlanets(..., FlatChance)`: 셋째부터 각 행성이 시드 해시로 `FlatChance` 확률로 평지가 된다 (첫째 소형, 둘째 중형은 늘 구).
   확률은 프로젝트 설정 → HG 환경 맵 → 평지 행성 확률(`UHGSiteSettings::FlatPlanetChance`, 기본 0.35). 0이면 예전 목록과 같다.
 - `FHGPlanetSeed`: `Seed`, `Name`, `Biome`, `SizeClass`, `Radius`(cm), `TerrainAmplitude`(반지름 대비 높낮이 비율), `TerrainFrequency`, `GravityScale`, `Richness`, `HoursLeft`(표시용). `Describe()`는 한 줄 설명.
+  - `PresetName`(2026-11-28): 고정 행성이면 프리셋 파일 이름(확장자 없이). 비어 있으면 생성 행성. `Describe()`는 이름 뒤에 "(고정)"을 붙인다.
 - `HGPlanet::MakePlanet(Seed)`: `FRandomStream`으로 값을 뽑는다. 뽑는 순서를 바꾸면 기존 행성이 바뀌므로 새 값은 맨 뒤에서 뽑는다.
   - 소형: 진폭 4~9%, 중력 0.35~0.7(반지름에 비례). 중형: 진폭 1.2~2.5%, 촘촘한 굴곡, 중력 0.8~1.0.
 - `HGPlanet::MakeApproachingPlanets(UniverseSeed, Cycle, Count)`: 주기별 시드 해시로 행성 목록. 첫째는 소형, 둘째는 중형이 나올 때까지 다시 뽑아 둘 다 고를 수 있게 보장한 뒤 이탈 시간순 정렬.
@@ -68,14 +69,32 @@
 
 ### HGPlanetPreset (.h/.cpp) (2026-11-27)
 Planet Maker에서 만든 행성 하나 = JSON 파일 하나 (`FHGPlanetPreset`).
-- 값: `Version`(지금 1), `Name`, `SiteType`(환경 종류), `Seed`, `Biome`, `Radius`, `TerrainAmplitude`, `TerrainFrequency`, `GravityScale`, `Richness`, `Shape`(지형 모양).
+- 값: `Version`(지금 2), `Name`, `SiteType`(환경 종류), `Seed`, `Biome`, `Radius`, `TerrainAmplitude`, `TerrainFrequency`, `GravityScale`, `Richness`, `Shape`(지형 모양).
 - `Basin`(평지 분지 값, 평지 탭에서만 보임). 반지름/높낮이/언덕 촘촘함/지형 모양은 평지 탭에서 숨긴다 (`EditCondition`).
 - 버전 2 (2026-11-27, `Basin` 추가). 버전 1 파일은 분지 값을 기본값으로 읽는다.
 - `ToPlanetSeed()`: 생성기에 넣을 행성 값으로. 프리셋에 없는 값(남은 시간 등)은 시드로 채운다. 대형 = 평지(`bFlat`), 반지름 = 둑 안쪽 반폭 / 2.
 - `HGPlanet::DefaultPreset(환경 종류)`: 그 종류가 나오는 첫 시드 값 + 기본 모양. 대형은 첫 중형 시드를 평지로 바꾼 값(시드 22) + 기본 분지.
 - `HGPlanet::SavePresetJson` / `LoadPresetJson`: `FJsonObjectConverter`로 구조체 <-> JSON. UTF-8(BOM 없음). 파일 버전이 더 높으면 읽지 않는다.
 - `HGPlanet::PresetDirectory()`: `Content/HG/Planets/`.
-- 게임은 아직 이 파일을 읽지 않는다 (고정 행성으로 내보내는 것은 다음 단계).
+- `FileName`(UPROPERTY 아님, JSON에 안 씀): `LoadPresetJson`이 파일 이름(확장자 없이)을 채운다. `ToPlanetSeed()`가 이것을 `PresetName`으로 넘긴다.
+
+#### 고정 행성 (2026-11-28)
+게임이 `Content/HG/Planets/*.json`을 모두 "고정 행성"으로 읽어 접근 행성 목록에 섞는다 (기획서 "뼈대는 고정, 살은 바뀌게", `Docs/Project/Design.md`).
+- `HGPlanet::LoadPresetsInDirectory(폴더)`: `*.json`을 파일 이름 순으로 읽는다 (어느 컴퓨터에서나 같은 순서). 깨진 파일은 건너뛰고 로그 `[Planet] 고정 행성 프리셋을 건너뜀` 경고.
+- `HGPlanet::MixFixedPlanets(목록, 고정 행성들, 우주 시드, 주기, 확률)`: 목록 자리마다 확률로 그 자리를 고정 행성 하나로 바꾼다.
+  - 자리마다 (우주 시드, 주기, 자리) 해시로 만든 난수: 같은 날이면 늘 같은 목록.
+  - 한 목록에 같은 고정 행성은 한 번만.
+  - 그 종류의 마지막 소형(또는 중형) 자리는 같은 종류의 고정 행성으로만 바꾼다 (매일 둘 다 고를 수 있게).
+  - 바뀐 행성은 그 자리의 남은 시간을 받는다 (목록 순서 그대로).
+  - 확률은 프로젝트 설정 → HG 환경 맵 → 고정 행성 확률(`UHGSiteSettings::FixedPlanetChance`, 기본 0.5). 프리셋이 없으면 아무것도 바뀌지 않는다.
+- `UHGGameInstance::GetFixedPlanets()`: 처음 접근 목록을 만들 때 한 번 읽는다 (로그 `[Planet] 고정 행성 프리셋 N개를 읽음`). 게임을 켤 때, PIE를 시작할 때마다 새로 읽으므로 Planet Maker에서 저장한 뒤 PIE를 다시 켜면 바로 반영된다.
+- 다이빙: 생성기 `ChoosePlanet`이 `PresetName`으로 `UHGGameInstance::FindFixedPlanet`을 찾아 프리셋의 `Shape`를 지형 모양으로 쓴다 (로그 `[Planet] 고정 행성 ...: 프리셋 ....json의 지형 모양을 씀`). 행성 값(시드, 군계, 반지름 등)은 `ToPlanetSeed()`로 이미 프리셋 값이다.
+- 패키지: `DefaultGame.ini`의 `DirectoriesToAlwaysStageAsUFS=(Path="HG/Planets")`로 JSON이 pak에 들어간다 (패키지 빌드로는 아직 확인하지 않음).
+- 한계:
+  - 평지 고정 행성의 `Basin`(분지 값)은 게임에서 쓰지 않는다. 평지 땅은 `L_Planet_Large` 맵의 랜드스케이프 하나라서 평지 고정 행성끼리는 땅이 같다 (맵 지정은 다음 단계).
+  - 재료와 바위 배치도 시드에서 나오므로 고정 행성은 갈 때마다 재료 자리도 같다 (기획의 "재료 자리는 바뀌는 살"은 아직 아님).
+  - 캔 재료 기록은 시드로 구별한다. 프리셋끼리 시드가 같으면 기록이 섞인다 (시드를 다르게 둘 것).
+- 확인 (2026-11-28, 임시 프리셋 `시험별-1`(중형 얼음, 크레이터 20개)으로, 확인 뒤 파일 지움): 정거장 목록 1번에 "시험별-1 (고정)", 다이빙 → `L_Planet_Medium`, 로그에 프리셋 지형 모양(크레이터 20 ~ 20개) 사용, 생성 311ms, 얼음 땅 캡처.
 
 ### HGPlanetTerrainTest.cpp (2026-11-27)
 - `HG.Planet.TerrainShape`: 시드 1~10 + 중형 2개 + 소행성 지대 2개, 행성마다 구 위 4000방향의 `SurfaceRadiusAt`을 mm 정수로 반올림해 섞은 체크섬.
@@ -84,12 +103,13 @@ Planet Maker에서 만든 행성 하나 = JSON 파일 하나 (`FHGPlanetPreset`)
   같은 컴퓨터, 같은 빌드에서 코드 정리 전후를 비교하는 용도다 (지형 계산의 나머지는 아직 실수).
   같은 시험에서 `PreviewShape`가 실제로 쓰이는지도 본다 (기본 모양을 넣으면 같은 지형, 크레이터 0개면 달라짐).
 - `HG.Planet.PresetJson`: 환경 종류별 처음 값이 맞는 종류인지(대형 = 평지 = `PlanetLarge`), JSON 저장 후 다시 읽으면 값(크레이터 수, 겹 감쇠, 높이 곡선 키 포함)이 같은지.
+- `HG.Planet.FixedPlanets`(2026-11-28): 임시 폴더에 프리셋 3개 + 깨진 파일 1개를 써서 읽기(이름 순, 깨진 파일 건너뜀, 지형 모양 값 읽힘)와 섞기 규칙(확률 0이면 그대로, 같은 주기 같은 결과, 중복 없음, 소형/중형 남음, 남은 시간 유지)을 20주기 동안 본다.
 - 돌리기: `UnrealEditor-Cmd.exe <uproject> -ExecCmds="Automation RunTests HG.;Quit" -TestExit="Automation Test Queue Empty" -unattended -nullrhi`
 
 ### HGPlanetGenerator (.h/.cpp)
 환경별 맵(`L_Planet_Small`, `L_Planet_Medium`, `L_AsteroidField`, `L_Derelict`)과 `Legacy/L_PlanetSurface`에 하나씩 배치. 행성 중심 = 액터 위치.
 - `ChoosePlanet()`: GameInstance의 `GetDivePlanet()`이 있으면 그것, 없으면(맵을 바로 열면) `PreviewPlanet`(`bPreviewFromSeedOnly`면 Seed만 쓰고 재생성). 시드로 노이즈 오프셋을 정한다.
-  - 지형 모양 `TerrainShape`: 맵을 바로 열었고 `bUsePreviewShape`가 켜져 있으면 `PreviewShape`, 아니면 `HGPlanet::DefaultShape(행성 값)`. 다이빙해 오면 늘 기본 모양이다.
+  - 지형 모양 `TerrainShape`: 고정 행성에 다이빙해 왔으면 그 프리셋의 `Shape`(2026-11-28), 맵을 바로 열었고 `bUsePreviewShape`가 켜져 있으면 `PreviewShape`, 아니면 `HGPlanet::DefaultShape(행성 값)`.
   - 크레이터 개수/반지름/깊이 범위는 `TerrainShape`에서 읽는다.
 - `SurfaceRadiusAt(Dir)`: 지형의 유일한 높이 함수. 모든 숫자는 `TerrainShape`에서 읽는다 (아래 괄호는 기본값).
   큰 언덕 fBm(5겹, 203%, 50%), 솟은 곳/꺼진 곳 배율, 높이 곡선, 북극 평탄 반경(10m, 단 반지름의 30% 이하) 평탄화 후 2배 거리까지 부드럽게 복귀.

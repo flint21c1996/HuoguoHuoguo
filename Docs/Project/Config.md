@@ -1,6 +1,6 @@
 # 프로젝트 설정 - uproject, Config, gitignore
 
-> 대상: `HuoguoHuoguo.uproject`, `Config/`, `.gitignore` · 마지막 갱신: 2026-11-26
+> 대상: `HuoguoHuoguo.uproject`, `Config/`, `.gitignore` · 마지막 갱신: 2026-11-28
 
 ## HuoguoHuoguo.uproject
 
@@ -20,6 +20,8 @@
 `Config/DefaultGame.ini`
 - `[/Script/HuoguoHuoguo.HGSiteSettings] SiteMaps`: 환경 종류 → 다이빙 맵 (프로젝트 설정 → Game → HG 환경 맵에서 고치면 여기에 저장된다, `Docs/Source/Game.md`).
   2026-11-27: `PlanetLarge` → `L_Planet_Large`(평지 행성) 추가. 같은 설정의 `FlatPlanetChance`(평지 행성 확률, 기본 0.35)는 ini에 쓰지 않아 코드 기본값을 쓴다.
+  2026-11-28: `FixedPlanetChance`(고정 행성 확률, 기본 0.5)도 같다. 시험할 때는 실행 인자 `-ini:Game:[/Script/HuoguoHuoguo.HGSiteSettings]:FixedPlanetChance=1`로 덮어쓴다.
+- `[/Script/UnrealEd.ProjectPackagingSettings] +DirectoriesToAlwaysStageAsUFS=(Path="HG/Planets")` (2026-11-28): 고정 행성 프리셋 JSON(에셋이 아닌 글자 파일)을 패키지에 넣는다 (`Docs/Source/Planet.md`).
 - `[/Script/HuoguoHuoguo.HGLookSettings]`: 그림체 조절 값 (프로젝트 설정 → Game → HG 그림체).
 - `GameInstanceClass` = `/Script/HuoguoHuoguo.HGGameInstance`
 
