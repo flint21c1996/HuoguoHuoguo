@@ -122,6 +122,20 @@ namespace HGPlanet
 		return Result;
 	}
 
+	EHGSiteType SiteTypeOf(const FHGPlanetSeed& Planet)
+	{
+		// 폐우주선과 소행성 지대는 크기 등급과 상관없이 그 환경이다. 둘 다 켜지는 일은 없지만(MakeDerelict가 소행성 지대를 끈다) 폐우주선을 먼저 본다.
+		if (Planet.bDerelict)
+		{
+			return EHGSiteType::Derelict;
+		}
+		if (Planet.bAsteroidField)
+		{
+			return EHGSiteType::AsteroidField;
+		}
+		return Planet.SizeClass == EHGPlanetSize::Small ? EHGSiteType::PlanetSmall : EHGSiteType::PlanetMedium;
+	}
+
 	const TCHAR* BiomeName(EHGPlanetBiome Biome)
 	{
 		switch (Biome)

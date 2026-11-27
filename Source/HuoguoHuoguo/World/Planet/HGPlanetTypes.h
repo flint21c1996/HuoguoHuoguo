@@ -21,6 +21,21 @@ enum class EHGPlanetSize : uint8
 };
 
 /**
+ * 다이빙 목적지의 환경 종류. 환경마다 맵이 따로 있고, 맵마다 고유한 규칙(크기, 중력, 조명, 나오는 것)을 가진다.
+ * 어느 맵으로 갈지는 프로젝트 설정 → Game → HG 환경 맵(UHGSiteSettings)에서 정한다.
+ * 행성 값(FHGPlanetSeed)에서 HGPlanet::SiteTypeOf로 구한다.
+ */
+UENUM(BlueprintType)
+enum class EHGSiteType : uint8
+{
+	PlanetSmall   UMETA(DisplayName = "소형 행성"),
+	PlanetMedium  UMETA(DisplayName = "중형 행성"),
+	PlanetLarge   UMETA(DisplayName = "대형 행성 (아직 없음)"),
+	AsteroidField UMETA(DisplayName = "소행성 지대"),
+	Derelict      UMETA(DisplayName = "폐우주선"),
+};
+
+/**
  * 중력을 가진 천체 하나 (행성 또는 소행성). 소행성 지대에서는 여러 개가 동시에 사장님을 끈다.
  *
  * 끄는 힘: 지표에서 FieldDepth(15m) 높이까지는 SurfaceGravity 그대로이고, 그 바깥에서는 거리 제곱에 반비례해 약해진다.
@@ -118,6 +133,9 @@ namespace HGPlanet
 	// 궤도 주기(게임 내 날짜) Cycle에 정거장으로 접근하는 행성 Count개.
 	// 같은 주기에는 언제나 같은 목록이 나온다. 크기 등급이 한쪽으로 몰리지 않도록 작은 행성과 중간 행성을 섞는다.
 	HUOGUOHUOGUO_API TArray<FHGPlanetSeed> MakeApproachingPlanets(int32 UniverseSeed, int32 Cycle, int32 Count);
+
+	// 행성 값이 어느 환경 종류인지. 폐우주선 > 소행성 지대 > 크기 등급 순으로 본다.
+	HUOGUOHUOGUO_API EHGSiteType SiteTypeOf(const FHGPlanetSeed& Planet);
 
 	HUOGUOHUOGUO_API const TCHAR* BiomeName(EHGPlanetBiome Biome);
 

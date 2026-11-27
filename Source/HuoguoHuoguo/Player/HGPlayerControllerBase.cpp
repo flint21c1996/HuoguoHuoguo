@@ -11,6 +11,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "Game/HGGameInstance.h"
 #include "Game/HGLookSettings.h"
+#include "Game/HGSiteSettings.h"
 #include "HuoguoHuoguo.h"
 #include "InputAction.h"
 #include "InputKeyEventArgs.h"
@@ -275,12 +276,9 @@ void AHGPlayerControllerBase::RequestTravel(AHGTravelPad* Pad)
 	{
 		return;
 	}
-	if (Pad->DestinationLevel.IsNull())
-	{
-		UE_LOG(LogHuoguo, Error, TEXT("%s 발판에 DestinationLevel이 비어 있다"), *GetNameSafe(Pad));
-		return;
-	}
 
+	// 갈 맵: 기본은 발판의 목적지. 다이빙 발판이면 아래에서 고른 행성의 환경 종류에 맞는 맵(HG 환경 맵 설정)으로 바꾼다.
+	TSoftObjectPtr<UWorld> Level = Pad->DestinationLevel;
 	FString DestinationText = Pad->DestinationName.ToString();
 	if (Pad->bDiveToSelectedPlanet)
 	{
@@ -300,6 +298,23 @@ void AHGPlayerControllerBase::RequestTravel(AHGTravelPad* Pad)
 		}
 		GI->CommitDiveToSelectedPlanet();
 		DestinationText = FString::Printf(TEXT("%s (다이빙)"), *Selected->Name);
+
+		// 환경별 맵: 소형/중형 행성, 소행성 지대, 폐우주선은 각자 맵이 있다 (프로젝트 설정 → Game → HG 환경 맵).
+		// 표에 없는 환경은 발판의 기본 목적지로 간다.
+		const EHGSiteType Site = HGPlanet::SiteTypeOf(*Selected);
+		const TSoftObjectPtr<UWorld> SiteMap = UHGSiteSettings::FindMap(Site);
+		if (!SiteMap.IsNull())
+		{
+			Level = SiteMap;
+		}
+		UE_LOG(LogHuoguo, Log, TEXT("[Dive] %s → 환경 %s, 맵 %s%s"), *Selected->Name, *UEnum::GetValueAsString(Site),
+			*Level.ToSoftObjectPath().GetAssetName(), SiteMap.IsNull() ? TEXT(" (환경 맵 설정 없음, 발판 기본 목적지)") : TEXT(""));
+	}
+
+	if (Level.IsNull())
+	{
+		UE_LOG(LogHuoguo, Error, TEXT("%s 발판에 갈 맵이 없다 (DestinationLevel도 환경 맵 설정도 비어 있음)"), *GetNameSafe(Pad));
+		return;
 	}
 
 	bTraveling = true;
@@ -315,7 +330,6 @@ void AHGPlayerControllerBase::RequestTravel(AHGTravelPad* Pad)
 
 	// 완전히 어두워진 뒤에 맵을 연다. 도착 태그는 맵이 바뀌어도 남는 GameInstance에 맡긴다.
 	// 람다에는 값만 복사해 넘긴다. 맵이 바뀌면 발판 액터는 사라지기 때문이다.
-	const TSoftObjectPtr<UWorld> Level = Pad->DestinationLevel;
 	const FName ArrivalTag = Pad->ArrivalTag;
 	GetWorldTimerManager().SetTimer(TravelTimer, FTimerDelegate::CreateWeakLambda(this, [this, Level, ArrivalTag]()
 	{
