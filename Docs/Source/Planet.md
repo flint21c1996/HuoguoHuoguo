@@ -205,8 +205,6 @@ Planet Maker에서 만든 행성 하나 = JSON 파일 하나 (`FHGPlanetPreset`)
 
 ## 알려진 문제와 다음 할 일
 
-- 폐우주선 화면에 엔진 경고 글자("YOUR SCENE CONTAINS A SKYDOME MESH WITH A SKY MATERIAL BUT IT DOES NOT COVER THAT PART OF THE SCREEN")가 바둑판처럼 깔리고, 하늘(남색 우주)이 검고 우주선과 사장님이 어둡다 (2026-11-28 발견).
-  BP/PlayerStart 정리 전 커밋(44a4094)을 따로 빌드해도 똑같아서, 이 정리 때문이 아니라 그 전부터 있던 문제다. 2026-11-25 캡처(`tour5`)에서는 남색 하늘이 보였으니 그 사이의 변경(평지 행성, 크기 절반 등) 중 하나가 원인일 수 있다. 소행성 지대와 행성은 정상이다.
 - 생성기 클래스 (2026-11-28): 맵에는 `BP_HG_PlanetGenerator`를 놓는다. 귀환 발판(폐우주선 귀환 포드 포함)은 `ReturnPadClass`(`BP_HG_TravelPad`)로 만든다.
   지형 생성은 이제 게임 모드가 접속 때(액터들의 BeginPlay 전에) 처음 부른다 (`EnsureGenerated`는 한 번만 만든다).
 - 에디터 미리보기는 `bPreviewInEditor`를 켠 맵(지금 `Development/L_PlanetMaker`)에서만 생긴다. 게임용 환경 맵은 꺼 두었다 (실행할 때만 생성).

@@ -25,7 +25,7 @@ powershell -ExecutionPolicy Bypass -File .\Tools\Invoke-HGBuild.ps1
 - `ensure_planet_materials()`: 행성 그림체용 `M_HG_PlanetSky`(하늘 돔, HLSL은 `SKY_HLSL`)와 `M_HG_VertexColor`(각진 지형)를 만든다. 하늘 머티리얼이 이미 있으면 하늘(Is Sky) 표시만 켠다 (`Docs/Content/Materials.md`).
 - `ensure_landscape_material()` (2026-11-27): 평지 행성 랜드스케이프 머티리얼 `M_HG_LandscapeBasin`을 없을 때만 만든다 (`Docs/Content/Materials.md`).
 - `ensure_scan_material()`: 스캐너 파동 화면 효과 `M_HG_ScanPulse`(포스트 프로세스)를 만든다. 이 도구만 만드는 효과라 판 번호 `ScanVersion`이 `SCAN_VERSION`과 다르면 지우고 다시 만든다 (같으면 건너뛴다). 이웃 파라미터는 4칸이라 RGBA 출력에 잇는다 (RGB에 이었다가 셰이더 컴파일이 실패했다).
-- `ensure_look_materials()`: 그림체 비교 화면 효과 `M_HG_LookToon`(셀 셰이딩, 톤 매핑 전)을 만든다. HLSL은 `TOON_HLSL`. 판 번호 `LookVersion`이 `LOOK_VERSION`(지금 8)과 다르면 지우고 다시 만든다. Custom 노드에서 깊이와 GBuffer를 읽으려면 그 화면 텍스처 노드(SceneTexture)를 Custom 입력에 이어 둬야 엔진이 텍스처를 묶는다.
+- `ensure_look_materials()`: 그림체 비교 화면 효과 `M_HG_LookToon`(셀 셰이딩, 톤 매핑 전)을 만든다. HLSL은 `TOON_HLSL`. 판 번호 `LookVersion`이 `LOOK_VERSION`(지금 10, 직교 투영 윤곽선)과 다르면 지우고 다시 만든다. Custom 노드에서 깊이와 GBuffer를 읽으려면 그 화면 텍스처 노드(SceneTexture)를 Custom 입력에 이어 둬야 엔진이 텍스처를 묶는다.
 - `ensure_fixed_exposure(label, ev)`: 맵 전체 노출을 고정하는 포스트 프로세스 볼륨. 없을 때만 만들고, 있으면 에디터에서 고친 값을 존중해 건드리지 않는다. 정거장은 `STATION_EXPOSURE_EV`(2.0). 값을 맞춰 볼 때는 환경 변수 `HG_STATION_EXPOSURE`를 주고 실행하면 그 값으로 덮어쓴다.
 - 새 맵에 놓는 게임 액터 (2026-11-28): C++ 클래스 대신 BP(`ACTOR_BPS`: 발판, 생성기, 카메라 기준점, 가구)를 놓는다. BP가 없으면 C++ 클래스. 시작점은 엔진 PlayerStart(`player_start`, Player Start Tag). 예전 `HGExplorerStart`는 지웠다.
 - `MAP_GAME_MODES`: 맵마다 World Settings GameMode를 정한다 (L_Station = 경영, 나머지 = 탐험). 새 맵을 만들 때와 이미 있는 맵 모두에 적용한다.
@@ -57,3 +57,6 @@ powershell -ExecutionPolicy Bypass -File .\Tools\Update-HGDocsIndex.ps1
 
 - 스모크 테스트(실행 → 로그 확인 → 게임 창만 캡처) 스크립트는 아직 저장소에 없다. 필요하면 `Tools/`로 옮긴다.
   여러 단계 시험은 `-ExecCmds="HGSeq 명령|명령|..."`으로 한 번에 넣는다 (`Docs/Source/Game.md`).
+- 캡처 주의 (2026-11-28): 엔진 스크린샷(`HighResShot`)은 게임 창을 **최소화하지 않고** 찍는다.
+  창을 최소화한 채 찍으면 화면 크기 버퍼가 어긋나서 셀 셰이딩 화면이 회색이 되고, 돌 무늬 테두리와 하늘 경고 글자("SKYDOME MESH ... DOES NOT COVER")가 나온다.
+  실제 게임 문제가 아니다. 한때 이것을 폐우주선/셀 셰이딩 버그로 잘못 적었다가 창을 띄워 다시 찍고 지웠다.
