@@ -15,7 +15,6 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "World/Planet/HGPlanetGenerator.h"
-#include "World/Travel/HGExplorerStart.h"
 
 void AHGExplorePlayerController::BeginPlay()
 {
@@ -31,39 +30,26 @@ void AHGExplorePlayerController::InitializeFromLevel()
 	UWorld* World = GetWorld();
 	const FName ArrivalTag = ConsumeArrivalTag();
 
-	// 행성 표면 맵: 시작점을 맵에 미리 둘 수 없다(지형이 시드마다 다르다). 생성기가 지형을 먼저 만들고 착륙 지점을 알려 준다.
-	// 액터들의 BeginPlay 순서는 정해져 있지 않으므로 여기서 EnsureGenerated를 직접 불러 지형이 먼저 있게 한다.
+	// 사장님은 게임 모드가 엔진 표준 흐름으로 이미 만들어 빙의시켰다 (AHGExploreGameMode::RestartPlayer).
+	// 행성 맵이면 생성기가 알려 준 착륙 지점, 아니면 PlayerStart에 있다. 어떤 캐릭터 BP인지는 게임 모드 BP의 Default Pawn Class가 정한다.
 	for (TActorIterator<AHGPlanetGenerator> It(World); It; ++It)
 	{
 		Planet = *It;
 		break;
 	}
-
-	FTransform StartTransform(FVector(0.f, 0.f, 120.f));
-	bool bSpaceSuit = true;
-	AHGExplorerStart* Start = nullptr;
+	Explorer = Cast<AHGExplorerCharacter>(GetPawn());
+	if (!Explorer)
+	{
+		UE_LOG(LogHuoguo, Error, TEXT("탐험 캐릭터가 없다 (게임 모드의 Default Pawn Class가 AHGExplorerCharacter 계열인지 확인). 지금 Pawn: %s"), *GetNameSafe(GetPawn()));
+		return;
+	}
+	Boss = Explorer;
 	if (Planet)
 	{
+		// 게임 모드가 이미 만들게 했다. 혹시 다른 게임 모드로 열렸을 때를 위해 한 번 더 부른다 (이미 있으면 바로 끝난다).
 		Planet->EnsureGenerated();
-		StartTransform = Planet->GetLandingTransform();
 	}
-	else if ((Start = FindStart(ArrivalTag)) != nullptr)
-	{
-		StartTransform = Start->GetActorTransform();
-		StartTransform.SetScale3D(FVector::OneVector);
-		bSpaceSuit = Start->bSpaceSuit;
-	}
-	else
-	{
-		UE_LOG(LogHuoguo, Warning, TEXT("맵에 HGPlanetGenerator도 HGExplorerStart도 없다. 원점에 사장님을 만든다"));
-	}
-
-	FActorSpawnParameters Params;
-	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-	UClass* ExplorerToSpawn = ExplorerClass ? ExplorerClass.Get() : AHGExplorerCharacter::StaticClass();
-	Explorer = World->SpawnActor<AHGExplorerCharacter>(ExplorerToSpawn, StartTransform, Params);
-	Boss = Explorer;
-	Explorer->SetSuitVisible(bSpaceSuit);
+	const FTransform StartTransform = Explorer->GetActorTransform();
 	const bool bField = Planet && Planet->GetPlanet().bAsteroidField;
 	const bool bDerelict = Planet && Planet->GetPlanet().bDerelict;
 	// 폐우주선의 무중력 비행은 빙의(Possess) 뒤에 켠다 (아래 참고).
@@ -83,13 +69,12 @@ void AHGExplorePlayerController::InitializeFromLevel()
 		Explorer->SetPlanetGravity(Planet->GetGravityCenter(), Planet->GetPlanet().GravityScale);
 	}
 
-	Possess(Explorer);
 	if (bDerelict)
 	{
 		// 폐우주선: 우주선을 바라보며 떠서 시작한다 (무중력 제트팩 비행). 에어록으로 들어가면 인공 중력.
 		// 빙의할 때 캐릭터 이동 컴포넌트가 이동 모드를 기본값(공중이면 낙하 MOVE_Falling)으로 되돌린다.
 		// 빙의 전에 날기(MOVE_Flying)로 바꿔 두면 낙하로 덮여서, 낙하 모드가 이동 입력의 위아래 성분을 버린다
-		// (위/아래를 보고 W, Space/Ctrl 분사를 해도 높이가 그대로였다). 그래서 빙의한 뒤에 켠다.
+		// (위/아래를 보고 W, Space/Ctrl 분사를 해도 높이가 그대로였다). 게임 모드가 이미 빙의시켰으므로 여기서 켜면 된다.
 		Explorer->SetFloating(Planet->GetShipUp());
 	}
 	SetViewTarget(Explorer);
@@ -140,8 +125,8 @@ void AHGExplorePlayerController::InitializeFromLevel()
 			PhaseName, Planet->GetRemainingIngredientCount()));
 	}
 
-	UE_LOG(LogHuoguo, Log, TEXT("탐험 파트 시작: %s, 시작 %s, 행성 %s"), *World->GetMapName(),
-		Planet ? TEXT("착륙 지점") : *GetNameSafe(Start), Planet ? *Planet->GetPlanet().Name : TEXT("없음"));
+	UE_LOG(LogHuoguo, Log, TEXT("탐험 파트 시작: %s, 캐릭터 %s, 시작 %s, 행성 %s"), *World->GetMapName(), *GetNameSafe(Explorer->GetClass()),
+		Planet ? TEXT("착륙 지점") : *GetNameSafe(StartSpot.Get()), Planet ? *Planet->GetPlanet().Name : TEXT("없음"));
 }
 
 void AHGExplorePlayerController::UpdateRotation(float DeltaTime)
@@ -873,7 +858,7 @@ void AHGExplorePlayerController::OnScan(const FInputActionValue& Value)
 	LastScanTime = Now;
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	if (AHGScanWave* Wave = GetWorld()->SpawnActor<AHGScanWave>(AHGScanWave::StaticClass(), FTransform::Identity, Params))
+	if (AHGScanWave* Wave = GetWorld()->SpawnActor<AHGScanWave>(ScanWaveClass ? ScanWaveClass.Get() : AHGScanWave::StaticClass(), FTransform::Identity, Params))
 	{
 		TWeakObjectPtr<AHGExplorePlayerController> WeakThis(this);
 		Wave->Duration = ScanDuration;

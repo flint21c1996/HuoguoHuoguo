@@ -122,7 +122,8 @@ public:
 	FString ConsumeHopMessage();
 
 protected:
-	virtual void BeginPlay() override;
+	// 스폰할 때 카메라 거리, 걷기 가속, 착지 먼지를 준비한다 (부모와 같은 이유로 BeginPlay가 아니라 여기서).
+	virtual void PostInitializeComponents() override;
 	virtual void Landed(const FHitResult& Hit) override;
 
 	UPROPERTY(VisibleAnywhere, Category = "Camera")

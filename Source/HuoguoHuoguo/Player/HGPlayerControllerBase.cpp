@@ -19,9 +19,9 @@
 #include "InputModifiers.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Misc/PackageName.h"
 #include "Player/HGBossCharacter.h"
 #include "TimerManager.h"
-#include "World/Travel/HGExplorerStart.h"
 #include "World/Travel/HGTravelPad.h"
 
 namespace
@@ -341,7 +341,11 @@ void AHGPlayerControllerBase::RequestTravel(AHGTravelPad* Pad)
 		{
 			UE_LOG(LogHuoguo, Warning, TEXT("GameInstance가 UHGGameInstance가 아니라서 도착 위치를 넘기지 못한다"));
 		}
-		UGameplayStatics::OpenLevelBySoftObjectPtr(this, Level);
+		// 맵 주소 끝의 "#태그"는 엔진의 Portal이다. 도착 맵의 게임 모드가 Player Start Tag가 같은 PlayerStart를 고른다 (엔진 표준).
+		// 행성 맵은 PlayerStart 대신 생성기의 착륙 지점을 쓴다 (AHGExploreGameMode).
+		const FString LevelPackage = FPackageName::ObjectPathToPackageName(Level.ToString());
+		const FString Url = ArrivalTag.IsNone() ? LevelPackage : FString::Printf(TEXT("%s#%s"), *LevelPackage, *ArrivalTag.ToString());
+		UGameplayStatics::OpenLevel(this, FName(*Url));
 	}), TravelFadeTime + 0.05f, false);
 }
 
@@ -349,32 +353,6 @@ FName AHGPlayerControllerBase::ConsumeArrivalTag() const
 {
 	UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
 	return GI ? GI->ConsumePendingArrival() : NAME_None;
-}
-
-AHGExplorerStart* AHGPlayerControllerBase::FindStart(FName WantedTag) const
-{
-	if (WantedTag.IsNone())
-	{
-		WantedTag = TEXT("Default");
-	}
-
-	AHGExplorerStart* Fallback = nullptr;
-	for (TActorIterator<AHGExplorerStart> It(GetWorld()); It; ++It)
-	{
-		if (It->StartTag == WantedTag)
-		{
-			return *It;
-		}
-		if (!Fallback || It->StartTag == TEXT("Default"))
-		{
-			Fallback = *It;
-		}
-	}
-	if (Fallback)
-	{
-		UE_LOG(LogHuoguo, Warning, TEXT("태그 '%s'인 HGExplorerStart가 없어서 %s를 쓴다"), *WantedTag.ToString(), *Fallback->GetName());
-	}
-	return Fallback;
 }
 
 void AHGPlayerControllerBase::FadeInAfterTravel()

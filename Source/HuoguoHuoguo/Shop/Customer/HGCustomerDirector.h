@@ -69,6 +69,14 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Customers")
 	int32 BasicSkewerPrice = 5;
 
+	// 들어올 손님 클래스 (2026-11-28). 손님 BP(BP_HG_Customer)를 넣으면 거기서 정한 값으로 나타난다. 비어 있으면 C++ 기본 클래스.
+	UPROPERTY(EditAnywhere, Category = "Customers|Classes")
+	TSubclassOf<AHGCustomer> CustomerClass;
+
+	// 계산할 때 식탁 위로 떠오르는 "+금액" 글자 클래스. 비어 있으면 C++ 기본 클래스.
+	UPROPERTY(EditAnywhere, Category = "Customers|Classes")
+	TSubclassOf<class AHGMoneyPopup> MoneyPopupClass;
+
 private:
 	enum class EVisitState : uint8
 	{

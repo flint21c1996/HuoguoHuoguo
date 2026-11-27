@@ -12,7 +12,7 @@
 #include "Shop/Furniture/HGFurniture.h"
 #include "Shop/Furniture/HGFurniturePlacer.h"
 #include "Shop/Core/HGShopCombos.h"
-#include "World/Travel/HGExplorerStart.h"
+#include "GameFramework/PlayerStart.h"
 
 namespace
 {
@@ -104,7 +104,7 @@ void UHGCustomerDirector::ComputeStaticBlocked()
 			for (const FOverlapResult& Overlap : Overlaps)
 			{
 				const AActor* Other = Overlap.GetActor();
-				if (!Other || Other->IsA<AHGFurniture>() || Other->IsA<AHGCustomer>() || Other->IsA<APawn>() || Other->IsA<AHGExplorerStart>())
+				if (!Other || Other->IsA<AHGFurniture>() || Other->IsA<AHGCustomer>() || Other->IsA<APawn>() || Other->IsA<APlayerStart>())
 				{
 					continue;
 				}
@@ -264,7 +264,7 @@ bool UHGCustomerDirector::TrySpawnCustomer(FString& OutResult)
 
 		FActorSpawnParameters Params;
 		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		AHGCustomer* Customer = GetWorld()->SpawnActor<AHGCustomer>(AHGCustomer::StaticClass(), Grid.TileCenter(Grid.EntranceTile), FRotator::ZeroRotator, Params);
+		AHGCustomer* Customer = GetWorld()->SpawnActor<AHGCustomer>(CustomerClass ? CustomerClass.Get() : AHGCustomer::StaticClass(), Grid.TileCenter(Grid.EntranceTile), FRotator::ZeroRotator, Params);
 		if (!Customer)
 		{
 			OutResult = TEXT("손님을 만들지 못했다");
@@ -370,7 +370,7 @@ void UHGCustomerDirector::Pay(FVisit& Visit)
 	// 식탁 위로 금액이 떠오른다. 콤보가 있으면 김 색과 같은 금빛, 없으면 흰색.
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	if (AHGMoneyPopup* Popup = GetWorld()->SpawnActor<AHGMoneyPopup>(AHGMoneyPopup::StaticClass(), Table->GetActorLocation() + FVector(0.f, 0.f, 200.f), FRotator::ZeroRotator, Params))
+	if (AHGMoneyPopup* Popup = GetWorld()->SpawnActor<AHGMoneyPopup>(MoneyPopupClass ? MoneyPopupClass.Get() : AHGMoneyPopup::StaticClass(), Table->GetActorLocation() + FVector(0.f, 0.f, 200.f), FRotator::ZeroRotator, Params))
 	{
 		Popup->SetupText(FString::Printf(TEXT("+%d"), Total), Combos.Num() > 0 ? SteamColor(Combos.Num()).ToFColor(true) : FColor::White);
 	}

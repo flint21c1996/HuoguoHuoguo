@@ -8,7 +8,6 @@
 class UInputAction;
 class UInputMappingContext;
 class AHGBossCharacter;
-class AHGExplorerStart;
 class AHGTravelPad;
 class UMaterialInstanceDynamic;
 class UPostProcessComponent;
@@ -19,7 +18,7 @@ class UPostProcessComponent;
  * 공통으로 맡는 것:
  *   - 맵 이동: 이동 발판을 밟으면 화면을 어둡게 하고 도착 태그를 GameInstance에 맡긴 뒤 목적지 맵을 연다.
  *     다이빙 발판이면 고른 행성을 표면 맵으로 넘길 값으로 고정한다.
- *   - 맵 시작: 도착 태그 꺼내기, 시작점 찾기, 이동해 왔으면 화면 다시 밝히기.
+ *   - 맵 시작: 도착 태그 꺼내기, 이동해 왔으면 화면 다시 밝히기. 시작점 고르기와 사장님 스폰은 게임 모드(엔진 표준)가 한다.
  *   - 입력 도우미: Enhanced Input 액션과 매핑 컨텍스트를 에셋 없이 코드에서 만드는 함수.
  *   - 임시 화면 안내(조작 안내, 메시지)와 개발용 콘솔 명령.
  *
@@ -89,9 +88,6 @@ protected:
 
 	// GameInstance에 맡겨 둔 도착 태그를 꺼낸다. 이동해 온 것이 아니면 NAME_None.
 	FName ConsumeArrivalTag() const;
-
-	// 태그가 맞는 시작점 > "Default" > 아무거나 순으로 고른다. 맵에 시작점이 없으면 nullptr.
-	AHGExplorerStart* FindStart(FName WantedTag) const;
 
 	// 이동해 와서 검게 유지된 화면을 다시 밝힌다.
 	void FadeInAfterTravel();

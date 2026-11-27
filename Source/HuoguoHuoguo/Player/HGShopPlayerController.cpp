@@ -14,7 +14,6 @@
 #include "Player/HGShopBossCharacter.h"
 #include "World/Light/HGStationLighting.h"
 #include "HAL/IConsoleManager.h"
-#include "World/Travel/HGExplorerStart.h"
 #include "World/Camera/HGShopCameraAnchor.h"
 #include "World/Travel/HGTravelPad.h"
 
@@ -55,24 +54,15 @@ void AHGShopPlayerController::InitializeFromLevel()
 	const FName ArrivalTag = ConsumeArrivalTag();
 	const bool bArrivedByTravel = !ArrivalTag.IsNone();
 
-	FTransform StartTransform(FVector(0.f, 0.f, 120.f));
-	AHGExplorerStart* Start = FindStart(ArrivalTag);
-	if (Start)
+	// 사장님은 게임 모드가 이미 PlayerStart에 만들어 빙의시켰다 (엔진 표준 흐름).
+	ShopBoss = Cast<AHGShopBossCharacter>(GetPawn());
+	if (!ShopBoss)
 	{
-		StartTransform = Start->GetActorTransform();
-		StartTransform.SetScale3D(FVector::OneVector);
+		UE_LOG(LogHuoguo, Error, TEXT("경영용 사장님이 없다 (게임 모드의 Default Pawn Class가 AHGShopBossCharacter 계열인지 확인). 지금 Pawn: %s"), *GetNameSafe(GetPawn()));
+		return;
 	}
-	else
-	{
-		UE_LOG(LogHuoguo, Warning, TEXT("정거장 맵에 HGExplorerStart가 없다. 원점에 사장님을 만든다"));
-	}
-
-	FActorSpawnParameters Params;
-	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-	UClass* BossToSpawn = ShopBossClass ? ShopBossClass.Get() : AHGShopBossCharacter::StaticClass();
-	ShopBoss = World->SpawnActor<AHGShopBossCharacter>(BossToSpawn, StartTransform, Params);
 	Boss = ShopBoss;
-	Possess(ShopBoss);
+	const FTransform StartTransform = ShopBoss->GetActorTransform();
 	SetViewTarget(ShopBoss);
 
 	// 카메라 처음 방향: 가게 기준점의 화살표 방향. 가게를 디자인한 각도로 시작하게 하려는 것이다.
@@ -124,7 +114,8 @@ void AHGShopPlayerController::InitializeFromLevel()
 		HGBag();
 	}
 
-	UE_LOG(LogHuoguo, Log, TEXT("경영 파트 시작: %s, 시작점 %s, 카메라 Yaw %.1f"), *World->GetMapName(), *GetNameSafe(Start), Yaw);
+	UE_LOG(LogHuoguo, Log, TEXT("경영 파트 시작: %s, 캐릭터 %s, 시작점 %s, 카메라 Yaw %.1f"), *World->GetMapName(), *GetNameSafe(ShopBoss->GetClass()),
+		*GetNameSafe(StartSpot.Get()), Yaw);
 }
 
 void AHGShopPlayerController::UpdateRotation(float DeltaTime)

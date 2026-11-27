@@ -576,6 +576,23 @@ def spawn(cls, name, folder, loc, rotation=None):
     return label(actor, name, folder)
 
 
+# 맵에 놓는 게임 액터는 C++ 클래스가 아니라 그 BP 하위 클래스를 놓는다 (2026-11-28, Under One Umbrella와 같은 방식).
+# BP가 아직 없으면(처음 만드는 프로젝트) C++ 클래스로 대신한다. BP 자체는 이 도구가 만들거나 고치지 않는다.
+ACTOR_BPS = {
+    "TravelPad": "/Game/HG/BluePrint/World/Travel/BP_HG_TravelPad",
+    "PlanetGenerator": "/Game/HG/BluePrint/World/Planet/BP_HG_PlanetGenerator",
+    "ShopCameraAnchor": "/Game/HG/BluePrint/World/Camera/BP_HG_ShopCameraAnchor",
+    "Furniture": "/Game/HG/BluePrint/Shop/Furniture/BP_HG_Furniture",
+}
+
+
+def actor_class(key, fallback):
+    path = ACTOR_BPS[key]
+    if unreal.EditorAssetLibrary.does_asset_exist(path):
+        return unreal.load_asset(path).generated_class()
+    return fallback
+
+
 def add_lighting():
     """해(방향광), 하늘 대기, 실시간 캡처 스카이 라이트. 우주 배경으로 바꾸는 것은 아트 단계에서 한다."""
     sun = spawn(unreal.DirectionalLight, "Sun", "Lighting", (0, 0, 800), rot(pitch=-48, yaw=35))
@@ -630,11 +647,11 @@ def set_travel(pad, dest_map, tag, display_name, color):
     pad.set_editor_property("pad_color", unreal.LinearColor(*PALETTE[color], 1.0))
 
 
-def explorer_start(name, loc, yaw, tag, space_suit):
-    # 캡슐 반높이가 92이므로 중심을 바닥 + 93에 두면 발이 바닥에 닿는다.
-    start = spawn(unreal.HGExplorerStart, name, "Gameplay", (loc[0], loc[1], 93), rot(yaw=yaw))
-    start.set_editor_property("start_tag", tag)
-    start.set_editor_property("space_suit", space_suit)
+def player_start(name, loc, yaw, tag):
+    # 엔진 PlayerStart (2026-11-28, 예전 자체 시작점 HGExplorerStart 대신). 도착 태그는 Player Start Tag.
+    # 캡슐 반높이가 92이므로 중심을 바닥 + 93에 두면 발이 바닥에 닿는다. 우주복 차림은 캐릭터 BP가 정한다.
+    start = spawn(unreal.PlayerStart, name, "Gameplay", (loc[0], loc[1], 93), rot(yaw=yaw))
+    start.set_editor_property("player_start_tag", tag)
     return start
 
 
@@ -690,11 +707,11 @@ def build_station():
 
     # 게임플레이 표식
     # 경영 카메라의 처음 방향(Yaw 45). 카메라는 사장님을 따라가므로 위치는 쓰지 않는다.
-    spawn(unreal.HGShopCameraAnchor, "ShopCameraAnchor", "Gameplay", (0, 0, 0), rot(yaw=45))
-    explorer_start("ExplorerStart_Default", (-100, 220), 90, "Default", False)
-    explorer_start("ExplorerStart_FromPlanet", (-450, 250), -90, FROM_PLANET, False)
+    spawn(actor_class("ShopCameraAnchor", unreal.HGShopCameraAnchor), "ShopCameraAnchor", "Gameplay", (0, 0, 0), rot(yaw=45))
+    player_start("PlayerStart_Default", (-100, 220), 90, "Default")
+    player_start("PlayerStart_FromPlanet", (-450, 250), -90, FROM_PLANET)
 
-    pad = spawn(unreal.HGTravelPad, "TravelPad_Airlock", "Gameplay", (-450, 400, 60))
+    pad = spawn(actor_class("TravelPad", unreal.HGTravelPad), "TravelPad_Airlock", "Gameplay", (-450, 400, 60))
     set_dive(pad)
 
 
@@ -704,13 +721,14 @@ HALL_TABLES = ((-300, -250), (100, -250), (-300, 50), (100, 50))
 def place_hall_furniture():
     """홀의 처음 가구 배치: 식탁 4개와 식탁마다 의자 1개.
 
-    가구 액터(HGTable, HGChair)의 원점은 바닥 위 가구 중심이라 Z = 0에 놓는다.
+    가구 액터(BP_HG_Furniture, 가구 ID "Table"/"Chair")의 원점은 바닥 위 가구 중심이라 Z = 0에 놓는다.
     의자는 앞쪽(+X)이 손님이 보는 방향이다. 식탁 남쪽(-Y)에 두고 Yaw 90으로 돌려 식탁(북쪽)을 보게 한다.
     """
     f = "Shop/Hall"
+    furniture = actor_class("Furniture", unreal.HGFurniture)
     for i, (x, y) in enumerate(HALL_TABLES):
-        spawn(unreal.HGTable, "Table_%d" % i, f, (x, y, 0))
-        spawn(unreal.HGChair, "Chair_%d" % i, f, (x, y - 105, 0), rot(yaw=90))
+        spawn(furniture, "Table_%d" % i, f, (x, y, 0)).set_editor_property("furniture_id", "Table")
+        spawn(furniture, "Chair_%d" % i, f, (x, y - 105, 0), rot(yaw=90)).set_editor_property("furniture_id", "Chair")
 
 
 def set_dive(pad):
@@ -754,8 +772,8 @@ def build_asteroid():
 
     shape("sphere", "GasPlanet", "Backdrop", (90000, 60000, 15000), (600, 600, 600), "GasPlanet", collide=False)
 
-    explorer_start("ExplorerStart_FromStation", (-1300, 0), 0, "FromStation", True)
-    pad = spawn(unreal.HGTravelPad, "TravelPad_Return", "Gameplay", (-1600, 0, 60))
+    player_start("PlayerStart_FromStation", (-1300, 0), 0, "FromStation")
+    pad = spawn(actor_class("TravelPad", unreal.HGTravelPad), "TravelPad_Return", "Gameplay", (-1600, 0, 60))
     set_travel(pad, STATION_MAP, "FromAsteroid", "훠궈훠궈 (허브 정거장)", "Lantern")
 
 
@@ -790,7 +808,7 @@ def build_planet_surface():
     settings.set_editor_property("auto_exposure_max_brightness", 2.5)
     ppv.set_editor_property("settings", settings)
 
-    gen = spawn(unreal.HGPlanetGenerator, "PlanetGenerator", "Gameplay", (0, 0, 0))
+    gen = spawn(actor_class("PlanetGenerator", unreal.HGPlanetGenerator), "PlanetGenerator", "Gameplay", (0, 0, 0))
     gen.set_editor_property("return_level", unreal.load_asset(STATION_MAP))
     gen.set_editor_property("return_arrival_tag", FROM_PLANET)
     gen.set_editor_property("return_name", "훠궈훠궈 (허브 정거장)")
@@ -851,10 +869,10 @@ def upgrade_station():
                 set_dive(actor)
                 changed = True
                 unreal.log("[MapGen] L_Station 에어록 발판을 다이빙 발판으로 바꿈")
-        elif isinstance(actor, unreal.HGExplorerStart):
-            if str(actor.get_editor_property("start_tag")) == "FromAsteroid":
-                actor.set_editor_property("start_tag", FROM_PLANET)
-                actor.set_actor_label("ExplorerStart_FromPlanet")
+        elif isinstance(actor, unreal.PlayerStart):
+            if str(actor.get_editor_property("player_start_tag")) == "FromAsteroid":
+                actor.set_editor_property("player_start_tag", FROM_PLANET)
+                actor.set_actor_label("PlayerStart_FromPlanet")
                 changed = True
                 unreal.log("[MapGen] L_Station 귀환 시작점 태그를 FromPlanet으로 바꿈")
 

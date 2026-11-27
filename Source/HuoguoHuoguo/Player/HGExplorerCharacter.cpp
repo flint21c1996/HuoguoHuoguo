@@ -35,6 +35,8 @@ AHGExplorerCharacter::AHGExplorerCharacter()
 
 	// 플랫폼 게임식 점프: 누르고 있는 동안(최대 0.22초) 점프 속도를 유지해 더 높이 뜬다. 공중 조종을 세게 둔다.
 	JumpMaxHoldTime = 0.22f;
+	// 탐험 캐릭터는 우주복 차림으로 시작한다 (캐릭터 BP에서 끌 수 있다).
+	bWearSpaceSuit = true;
 	GetCharacterMovement()->JumpZVelocity = BaseJumpVelocity;
 	GetCharacterMovement()->AirControl = 0.8f;
 
@@ -54,9 +56,14 @@ AHGExplorerCharacter::AHGExplorerCharacter()
 	}
 }
 
-void AHGExplorerCharacter::BeginPlay()
+void AHGExplorerCharacter::PostInitializeComponents()
 {
-	Super::BeginPlay();
+	Super::PostInitializeComponents();
+	const UWorld* World = GetWorld();
+	if (!World || !World->IsGameWorld())
+	{
+		return;
+	}
 	DesiredArmLength = ArmLength;
 	WalkAcceleration = GetCharacterMovement()->MaxAcceleration;
 	Dust->SetWorldTransform(FTransform::Identity);

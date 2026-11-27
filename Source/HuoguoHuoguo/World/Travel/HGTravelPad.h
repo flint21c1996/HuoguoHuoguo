@@ -25,7 +25,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Travel")
 	TSoftObjectPtr<UWorld> DestinationLevel;
 
-	// 도착 맵에서 이 태그를 가진 AHGExplorerStart 위치에 나타난다.
+	// 도착 맵에서 Player Start Tag가 이 태그인 PlayerStart에 나타난다 (맵 주소의 "#태그" = 엔진 Portal). 행성 맵은 태그와 상관없이 착륙 지점.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Travel")
 	FName ArrivalTag = TEXT("Default");
 

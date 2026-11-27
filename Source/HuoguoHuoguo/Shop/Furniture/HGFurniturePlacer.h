@@ -50,6 +50,11 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Furniture")
 	float RotateStepDegrees = 90.f;
 
+	// 가구 목록(Data/Furniture.csv)의 ActorClass 칸이 비어 있는 가구에 쓰는 클래스 (2026-11-28). 가구 BP(BP_HG_Furniture)를 넣는다.
+	// 비어 있으면 C++ 기본 클래스(AHGFurniture). 가구마다 다른 BP를 쓰려면 CSV의 ActorClass 칸에 그 BP를 적는다.
+	UPROPERTY(EditAnywhere, Category = "Furniture|Classes")
+	TSubclassOf<AHGFurniture> DefaultFurnitureClass;
+
 	// 맵 시작에 한 번 부른다. 위의 "배치 기록" 설명 참고.
 	void RestoreLayout();
 

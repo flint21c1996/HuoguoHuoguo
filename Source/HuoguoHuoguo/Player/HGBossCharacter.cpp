@@ -75,15 +75,22 @@ AHGBossCharacter::AHGBossCharacter()
 	// Mesh 컴포넌트에서 정한다. 여기서는 붙는 자리와 방향 규칙만 정한다.
 	// 캡슐이 아니라 VisualRoot(발 위치) 아래에 붙여서, 공중제비/눌림 같은 외형 연출을 자리 표시 부품과 똑같이 받게 한다.
 	// 모델 원점은 발로 맞춘다. 모델 앞이 +Y인 것(언리얼 마네킹과 같은 규칙)을 Yaw -90으로 캐릭터 앞(+X)에 맞춘다.
-	// 보일지는 BeginPlay에서 정한다 (모델이 들어 있고 hg.BossModel이 1이면). 일단 숨겨 둔다.
+	// 보일지는 PostInitializeComponents에서 정한다 (모델이 들어 있고 hg.BossModel이 1이면). 일단 숨겨 둔다.
 	GetMesh()->SetupAttachment(VisualRoot);
 	GetMesh()->SetRelativeLocationAndRotation(FVector::ZeroVector, FRotator(0.f, -90.f, 0.f));
 	GetMesh()->SetVisibility(false);
 }
 
-void AHGBossCharacter::BeginPlay()
+void AHGBossCharacter::PostInitializeComponents()
 {
-	Super::BeginPlay();
+	Super::PostInitializeComponents();
+
+	// 게임 월드에서만 외형을 준비한다. 블루프린트 편집기 미리보기 같은 에디터 월드에서는 하지 않는다 (복셀 몸을 만들 이유가 없다).
+	const UWorld* World = GetWorld();
+	if (!World || !World->IsGameWorld())
+	{
+		return;
+	}
 
 	// 색은 런타임에 동적 머티리얼로 칠한다. 생성자에서는 머티리얼 인스턴스를 만들 수 없기 때문이다.
 	HGPlaceholder::Paint(PlaceholderBody, FLinearColor(0.93f, 0.93f, 0.95f));   // 와이셔츠 흰색
@@ -102,7 +109,7 @@ void AHGBossCharacter::BeginPlay()
 	{
 		BuildVoxelBody();
 	}
-	SetSuitVisible(false);
+	SetSuitVisible(bWearSpaceSuit);
 }
 
 void AHGBossCharacter::BuildVoxelBody()

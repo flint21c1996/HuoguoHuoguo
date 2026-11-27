@@ -170,26 +170,3 @@ private:
 	// 부품 충돌을 지금 상태(실제 / 유령)에 맞춘다.
 	void ApplyCollision(UStaticMeshComponent* Part, bool bCollide) const;
 };
-
-/**
- * 맵 에셋(L_Station)에 이미 놓여 있는 식탁/의자 액터의 클래스. 새로 쓰지 않는다.
- * 칸 배치 이전에 이 클래스로 맵에 놓았기 때문에 맵을 불러오려면 남아 있어야 한다. 기본 ID만 다르다.
- * 게임을 시작하면 경영 파트가 이 액터들을 ID와 자리만 읽고 AHGFurniture로 다시 만든다.
- */
-UCLASS()
-class HUOGUOHUOGUO_API AHGTable : public AHGFurniture
-{
-	GENERATED_BODY()
-
-public:
-	AHGTable();
-};
-
-UCLASS()
-class HUOGUOHUOGUO_API AHGChair : public AHGFurniture
-{
-	GENERATED_BODY()
-
-public:
-	AHGChair();
-};

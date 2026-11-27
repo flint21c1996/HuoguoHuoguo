@@ -246,7 +246,7 @@ void UHGFurniturePlacer::RestoreLayout()
 
 void UHGFurniturePlacer::ReplaceMapFurniture()
 {
-	// 맵 에셋의 가구(AHGTable, AHGChair 액터)는 칸 배치와 데이터 이전에 놓였다. 맵을 고치지 않고, 실행할 때
+	// 맵 에셋의 가구(BP_HG_Furniture 액터, 가구 ID만 정해 둠)는 처음 배치를 보여 주는 자리 표시다. 맵을 고치지 않고, 실행할 때
 	// ID와 자리만 읽어 지우고 데이터로 다시 만든다. 맵에서 불러온 액터는 생성 스크립트가 다시 돌지 않아 부품이 없을 수 있기 때문이다.
 	struct FMapItem
 	{
@@ -350,11 +350,11 @@ AHGFurniture* UHGFurniturePlacer::SpawnFurniture(FName FurnitureId, const FVecto
 	{
 		return nullptr;
 	}
-	// 행에 블루프린트 클래스가 있으면 그것, 없으면 기본 가구 클래스.
+	// 행에 블루프린트 클래스가 있으면 그것, 없으면 기본 가구 클래스(DefaultFurnitureClass, 그것도 없으면 C++ 클래스).
 	UClass* Class = Row->ActorClass.IsNull() ? nullptr : Row->ActorClass.LoadSynchronous();
 	if (!Class)
 	{
-		Class = AHGFurniture::StaticClass();
+		Class = DefaultFurnitureClass ? DefaultFurnitureClass.Get() : AHGFurniture::StaticClass();
 	}
 
 	// 미뤄서 스폰하고, 스폰을 끝내기(FinishSpawning = 생성 스크립트 실행) 전에 ID를 정한다. 생성 스크립트가 그 ID의 행으로 부품을 만든다.

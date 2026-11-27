@@ -2290,7 +2290,7 @@ void AHGPlanetGenerator::SpawnReturnPad()
 	const FTransform PadTransform(FRotationMatrix::MakeFromZ(Up).ToQuat(), Location);
 
 	// 배치 전에 속성을 넣어야 OnConstruction이 올바른 색으로 칠하므로 지연 생성을 쓴다.
-	AHGTravelPad* Pad = GetWorld()->SpawnActorDeferred<AHGTravelPad>(AHGTravelPad::StaticClass(), PadTransform, this);
+	AHGTravelPad* Pad = GetWorld()->SpawnActorDeferred<AHGTravelPad>(ReturnPadClass ? ReturnPadClass.Get() : AHGTravelPad::StaticClass(), PadTransform, this);
 	Pad->DestinationLevel = ReturnLevel;
 	Pad->ArrivalTag = ReturnArrivalTag;
 	Pad->DestinationName = ReturnName;

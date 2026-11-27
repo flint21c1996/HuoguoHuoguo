@@ -238,6 +238,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Planet|Return")
 	FName ReturnArrivalTag = TEXT("FromPlanet");
 
+	// 귀환 발판(폐우주선은 귀환 포드)으로 만들 클래스 (2026-11-28). 발판 BP(BP_HG_TravelPad)를 넣는다. 비어 있으면 C++ 기본 클래스.
+	UPROPERTY(EditAnywhere, Category = "Planet|Return")
+	TSubclassOf<class AHGTravelPad> ReturnPadClass;
+
 	UPROPERTY(EditAnywhere, Category = "Planet|Return")
 	FText ReturnName;
 

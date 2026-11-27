@@ -38,7 +38,14 @@ public:
 	virtual FQuat GetMoveFrame() const { return FQuat::Identity; }
 
 protected:
-	virtual void BeginPlay() override;
+	// 외형 준비(색 칠하기, 정식 모델/복셀 몸 고르기, 차림)를 스폰할 때 끝낸다 (2026-11-28, 예전에는 BeginPlay).
+	// 엔진 표준 스폰에서는 컨트롤러의 BeginPlay가 캐릭터의 BeginPlay보다 먼저 올 수 있다.
+	// 컨트롤러가 맵 시작 때 캐릭터를 설정(중력, 차림)해도 나중에 덮이지 않게, 캐릭터는 스폰 직후에 이미 준비되어 있어야 한다.
+	virtual void PostInitializeComponents() override;
+
+	// 처음 차림. 켜면 우주복(헬멧), 끄면 가게 차림(앞치마). 캐릭터 BP에서 정한다 (탐험 캐릭터 기본 켬, 가게 사장님 기본 끔).
+	UPROPERTY(EditDefaultsOnly, Category = "Look", meta = (DisplayName = "우주복 차림"))
+	bool bWearSpaceSuit = false;
 
 	// 외형 축 둘. 보이는 부품(자리 표시 도형, 복셀)은 모두 VisualRoot 아래에 붙는다.
 	//   VisualPivot: 캡슐 가운데(몸 가운데). 공중제비처럼 몸 전체를 돌릴 때 이 축의 회전을 바꾼다.

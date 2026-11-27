@@ -411,7 +411,7 @@ void AHGPlanetGenerator::BuildDerelict()
 		const FVector PadLocal(-500.f, -2700.f, 250.f);
 		const FVector PadWorld = GetActorLocation() + ShipToWorld.TransformVectorNoScale(PadLocal);
 		const FTransform PadTransform(ShipFrame.GetRotation(), PadWorld);
-		AHGTravelPad* Pad = GetWorld()->SpawnActorDeferred<AHGTravelPad>(AHGTravelPad::StaticClass(), PadTransform, this);
+		AHGTravelPad* Pad = GetWorld()->SpawnActorDeferred<AHGTravelPad>(ReturnPadClass ? ReturnPadClass.Get() : AHGTravelPad::StaticClass(), PadTransform, this);
 		Pad->DestinationLevel = ReturnLevel;
 		Pad->ArrivalTag = ReturnArrivalTag;
 		Pad->DestinationName = ReturnName;

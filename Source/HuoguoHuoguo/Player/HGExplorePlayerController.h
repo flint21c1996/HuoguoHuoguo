@@ -12,8 +12,8 @@ class UHGPlanetMinimap;
  * 탐험 파트 컨트롤러 (행성 표면 맵 등).
  *
  * 맵 시작:
- *   AHGPlanetGenerator가 있으면 행성 맵이다. 지형을 먼저 만들게 한 뒤 착륙 지점(북극)에 사장님을 만들고 구형 중력을 켠다.
- *   없으면 평면 맵으로 보고 도착 태그에 맞는 AHGExplorerStart에 만든다.
+ *   사장님은 게임 모드가 엔진 표준 흐름으로 만들어 빙의시킨다 (행성 맵은 착륙 지점, 아니면 PlayerStart. AHGExploreGameMode).
+ *   이 컨트롤러는 빙의된 사장님에게 환경 규칙(구형/고정/여러 천체 중력, 무중력 비행, 떨어짐 복귀)을 켜고 입력과 화면을 준비한다.
  *
  * 조작: WASD 이동(카메라 기준), 마우스 시점, Space 점프, E 채집, M 미니맵 범위(근거리/행성 전체). 커서는 숨긴다.
  * 행성 맵이면 오른쪽 위에 미니맵(UHGPlanetMinimap)을 띄운다.
@@ -108,11 +108,6 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Harvest")
 	float HarvestRadius = 220.f;
 
-	// 탐험 맵에 나타날 사장님 클래스. 블루프린트(BP_HG_Explorer)를 넣으면 거기서 정한 모델/수치로 나타난다.
-	// 비어 있으면 C++ 기본 클래스(AHGExplorerCharacter)를 쓴다.
-	UPROPERTY(EditDefaultsOnly, Category = "Player")
-	TSubclassOf<AHGExplorerCharacter> ExplorerClass;
-
 	/**
 	 * 시점 회전 처리. 행성 위에서는 중력 기준 좌표계 안에서 처리한다.
 	 *
@@ -156,6 +151,10 @@ protected:
 
 	UPROPERTY(EditAnywhere, Category = "Scan")
 	float ScanDuration = 2.2f;
+
+	// 스캐너 파동 클래스 (2026-11-28). 파동 BP(BP_HG_ScanWave)를 넣는다. 비어 있으면 C++ 기본 클래스.
+	UPROPERTY(EditDefaultsOnly, Category = "Scan")
+	TSubclassOf<class AHGScanWave> ScanWaveClass;
 
 private:
 	UPROPERTY() TObjectPtr<UInputAction> BrakeAction;

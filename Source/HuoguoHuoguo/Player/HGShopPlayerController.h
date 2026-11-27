@@ -13,7 +13,8 @@ class UHGFurniturePlacer;
  * 경영 파트 컨트롤러 (정거장 맵).
  *
  * 맵 시작:
- *   도착 태그(행성에서 돌아왔으면 FromPlanet)에 맞는 AHGExplorerStart에 경영용 사장님을 만들어 빙의한다.
+ *   경영용 사장님은 게임 모드가 엔진 표준 흐름으로 PlayerStart에 만들어 빙의시킨다 (행성에서 돌아왔으면 "FromPlanet" 태그, AHGGameModeBase).
+ *   어떤 사장님 BP인지는 게임 모드 BP(BP_HG_ShopGameMode)의 Default Pawn Class가 정한다.
  *   카메라의 처음 방향은 AHGShopCameraAnchor의 Yaw(없으면 시작점 Yaw)다.
  *
  * 조작:
@@ -148,11 +149,6 @@ protected:
 	// Q/E 한 번에 도는 각도.
 	UPROPERTY(EditAnywhere, Category = "Shop Camera")
 	float RotateStepDegrees = 90.f;
-
-	// 가게에 나타날 사장님 클래스. 블루프린트(BP_HG_ShopBoss)를 넣으면 거기서 정한 모델/수치로 나타난다.
-	// 비어 있으면 C++ 기본 클래스(AHGShopBossCharacter)를 쓴다.
-	UPROPERTY(EditDefaultsOnly, Category = "Player")
-	TSubclassOf<AHGShopBossCharacter> ShopBossClass;
 
 	// 가구 배치 모드. 고를 수 있는 가구 목록, 격자 간격 등은 이 컴포넌트의 속성이다.
 	UPROPERTY(VisibleAnywhere, Category = "Furniture")
