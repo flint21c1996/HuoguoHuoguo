@@ -72,6 +72,12 @@ void AHGExplorePlayerController::InitializeFromLevel()
 		// 소행성 지대: 본 소행성 + 둘레 소행성 모두가 중력을 가진다 (뛰어 건너기 모드).
 		Explorer->SetGravityBodies(Planet->GetGravityBodies());
 	}
+	else if (Planet && Planet->IsFlatSite())
+	{
+		// 평지 행성: 중력은 늘 아래(-Z). 분지 밖으로 떨어지면(맵의 KillZ 아래) 착륙 지점으로 돌아온다.
+		Explorer->SetFixedGravity(FVector::UpVector, Planet->GetPlanet().GravityScale);
+		Explorer->SetFallRespawn(StartTransform);
+	}
 	else if (Planet)
 	{
 		Explorer->SetPlanetGravity(Planet->GetGravityCenter(), Planet->GetPlanet().GravityScale);
@@ -693,6 +699,17 @@ void AHGExplorePlayerController::OnInteract(const FInputActionValue& Value)
 	UpdateHarvestTarget();
 }
 
+void AHGExplorePlayerController::HGWarpTo(float X, float Y, float Z)
+{
+	if (!Explorer)
+	{
+		return;
+	}
+	Explorer->GetCharacterMovement()->StopMovementImmediately();
+	Explorer->SetActorLocation(FVector(X, Y, Z), false, nullptr, ETeleportType::TeleportPhysics);
+	UE_LOG(LogHuoguo, Log, TEXT("[Warp] 사장님을 (%.0f, %.0f, %.0f)로 옮김"), X, Y, Z);
+}
+
 void AHGExplorePlayerController::HGWarpToIngredient(int32 Index)
 {
 	if (!Planet || !Explorer)
@@ -845,7 +862,8 @@ void AHGExplorePlayerController::OnScan(const FInputActionValue& Value)
 	}
 	// 지금 서 있는 천체: 소행성 지대면 밟고 있는(또는 끌리는) 소행성, 아니면 행성.
 	FVector Center = Planet->GetGravityCenter();
-	float Radius = Planet->GetPlanet().Radius;
+	// 평지 행성이면 땅 아래 먼 중심과 그 거리 (아주 큰 구의 표면 = 평지).
+	float Radius = Planet->GetGravityRadius();
 	if (Explorer->IsHopMode() && Planet->GetGravityBodies().IsValidIndex(Explorer->GetCurrentBody()))
 	{
 		const FHGGravityBody& Body = Planet->GetGravityBodies()[Explorer->GetCurrentBody()];

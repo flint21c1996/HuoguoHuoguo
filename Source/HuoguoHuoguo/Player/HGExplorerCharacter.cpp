@@ -9,6 +9,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "HuoguoHuoguo.h"
+#include "Player/HGExplorePlayerController.h"
 #include "UObject/ConstructorHelpers.h"
 
 AHGExplorerCharacter::AHGExplorerCharacter()
@@ -110,6 +111,25 @@ void AHGExplorerCharacter::SetFixedGravity(const FVector& Up, float Scale)
 	Move->SetGravityDirection(-FixedUp);
 	Move->SetMovementMode(MOVE_Falling);
 	UE_LOG(LogHuoguo, Log, TEXT("[Float] 인공 중력 %.1f"), Scale);
+}
+
+void AHGExplorerCharacter::FellOutOfWorld(const UDamageType& DamageType)
+{
+	if (!bHasFallRespawn)
+	{
+		Super::FellOutOfWorld(DamageType);
+		return;
+	}
+	// 평지 행성 가장자리 밖으로 떨어졌다: 사장님을 없애지 않고 착륙 지점으로 순간 이동한다. 떨어지던 속도는 버린다.
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	Move->StopMovementImmediately();
+	SetActorLocationAndRotation(FallRespawn.GetLocation(), FallRespawn.GetRotation(), false, nullptr, ETeleportType::TeleportPhysics);
+	Move->SetMovementMode(MOVE_Falling);
+	UE_LOG(LogHuoguo, Log, TEXT("[Flat] 분지 밖으로 떨어져서 착륙 지점으로 돌아왔다 (%s)"), *FallRespawn.GetLocation().ToString());
+	if (const AHGExplorePlayerController* PC = Cast<AHGExplorePlayerController>(GetController()))
+	{
+		PC->NotifyFellOffAndReturned();
+	}
 }
 
 void AHGExplorerCharacter::FloatMove(const FVector2D& Input)

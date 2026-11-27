@@ -107,7 +107,8 @@ FVector2D UHGPlanetMinimap::ProjectToMap(const FVector& PlanetCenter, float Plan
 
 bool UHGPlanetMinimap::IsRadar() const
 {
-	return Planet.IsValid() && (Planet->GetPlanet().bAsteroidField || Planet->GetPlanet().bDerelict);
+	// 평지 행성도 레이더로 그린다 (구 표면 지도는 구에서만 맞다).
+	return Planet.IsValid() && (Planet->GetPlanet().bAsteroidField || Planet->GetPlanet().bDerelict || Planet->IsFlatSite());
 }
 
 FVector UHGPlanetMinimap::GetRadarUp() const

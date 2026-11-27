@@ -26,6 +26,13 @@ class HUOGUOHUOGUO_API AHGExplorePlayerController : public AHGPlayerControllerBa
 	GENERATED_BODY()
 
 public:
+	// 평지 행성에서 사장님이 분지 밖으로 떨어져 착륙 지점으로 돌아왔을 때 캐릭터가 부른다 (안내 한 줄).
+	void NotifyFellOffAndReturned() const { ShowMessage(TEXT("분지 밖으로 떨어져서 착륙 지점으로 돌아왔어요"), FColor(150, 200, 255)); }
+
+	// HGWarpTo X Y Z : 시험용. 사장님을 월드 좌표(cm)로 순간 이동한다 (평지 행성 가장자리 밖 떨어짐 복귀 확인 등).
+	UFUNCTION(Exec)
+	void HGWarpTo(float X, float Y, float Z);
+
 	// HGWarpToIngredient : 시험용. 가장 가까운 캐지 않은 재료 표식 바로 옆으로 사장님을 옮긴다.
 	UFUNCTION(Exec)
 	void HGWarpToIngredient(int32 Index = -1);

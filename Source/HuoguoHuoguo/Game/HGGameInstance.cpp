@@ -2,6 +2,7 @@
 
 #include "Engine/DataTable.h"
 #include "Game/HGIngredientTypes.h"
+#include "Game/HGSiteSettings.h"
 #include "HuoguoHuoguo.h"
 
 namespace
@@ -21,7 +22,8 @@ const TArray<FHGPlanetSeed>& UHGGameInstance::GetApproachingPlanets()
 {
 	if (!bPlanetsBuilt)
 	{
-		ApproachingPlanets = HGPlanet::MakeApproachingPlanets(UniverseSeed, OrbitCycle, ApproachingPlanetCount);
+		// 평지 행성이 섞일 확률은 프로젝트 설정(HG 환경 맵)에서 정한다.
+		ApproachingPlanets = HGPlanet::MakeApproachingPlanets(UniverseSeed, OrbitCycle, ApproachingPlanetCount, GetDefault<UHGSiteSettings>()->FlatPlanetChance);
 		SelectedPlanetIndex = 0;
 		bPlanetsBuilt = true;
 	}

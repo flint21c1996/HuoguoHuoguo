@@ -62,7 +62,15 @@ public:
 	void SetFloating(const FVector& Up);
 
 	// 폐우주선 안: 방향이 고정된 인공 중력 (Up의 반대쪽으로 Scale배). 걷기와 점프는 행성과 같다.
+	// 평지 행성도 이것을 쓴다 (Up = +Z).
 	void SetFixedGravity(const FVector& Up, float Scale);
+
+	// 평지 행성: 맵의 KillZ(World Settings) 아래로 떨어지면 액터를 없애지 않고 이 자리로 돌려보낸다.
+	// 부르지 않으면 엔진 기본 동작(떨어진 액터 파괴)이다.
+	void SetFallRespawn(const FTransform& InRespawn) { bHasFallRespawn = true; FallRespawn = InRespawn; }
+
+	// 엔진이 KillZ 아래로 떨어진 액터에 부른다.
+	virtual void FellOutOfWorld(const UDamageType& DamageType) override;
 
 	bool IsFloating() const { return bFloating; }
 
@@ -242,6 +250,10 @@ private:
 	// 방향 고정 중력(우주선 안)이나 무중력(우주선 밖)일 때의 "위".
 	bool bFixedUp = false;
 	FVector FixedUp = FVector::UpVector;
+
+	// 평지 행성에서 떨어졌을 때 돌아갈 자리 (SetFallRespawn).
+	bool bHasFallRespawn = false;
+	FTransform FallRespawn = FTransform::Identity;
 	bool bFloating = false;
 	bool bDownHeld = false;
 	bool bBrakeHeld = false;

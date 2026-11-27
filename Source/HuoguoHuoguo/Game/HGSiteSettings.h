@@ -24,6 +24,11 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "다이빙", meta = (DisplayName = "환경별 맵"))
 	TMap<EHGSiteType, TSoftObjectPtr<UWorld>> SiteMaps;
 
+	// 접근 행성 목록에서 셋째부터 각 행성이 평지 행성(대형, 랜드스케이프 분지)이 될 확률. 0이면 평지 행성이 나오지 않는다.
+	// 첫째(소형)와 둘째(중형)는 늘 구 행성이다.
+	UPROPERTY(config, EditAnywhere, Category = "다이빙", meta = (DisplayName = "평지 행성 확률", ClampMin = "0", ClampMax = "1"))
+	float FlatPlanetChance = 0.35f;
+
 	// 환경에 맞는 맵. 없으면 빈 값(호출하는 쪽이 기본 목적지를 쓴다).
 	static TSoftObjectPtr<UWorld> FindMap(EHGSiteType Site)
 	{
