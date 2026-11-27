@@ -11,5 +11,6 @@ public class HuoguoHuoguoEditorTarget : TargetRules
 		DefaultBuildSettings = BuildSettingsVersion.V7;
 		IncludeOrderVersion = EngineIncludeOrderVersion.Unreal5_8;
 		ExtraModuleNames.Add("HuoguoHuoguo");
+		ExtraModuleNames.Add("HuoguoHuoguoEditor");
 	}
 }
