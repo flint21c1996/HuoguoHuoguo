@@ -72,6 +72,12 @@ C++는 기능과 규칙을 맡고, "어떤 모델/값을 쓸지"는 블루프린
 - 언리얼 3인칭 템플릿의 마네킹 맨손 동작을 사장님 뼈대로 리타게팅했다. 원본 = 엔진 `Templates/TemplateResources/High/Characters`를 `Content/Characters/Mannequins`로 복사한 것.
 - `Rigs/IK_Mannequin`, `Rigs/IK_HG_Boss`: 뼈 이름이 같아서 체인 29개가 자동으로 맞았다. `Rigs/RTG_Mannequin_To_HGBoss`: 사장님 T자세를 마네킹 A자세에 자동 정렬.
 - `Anims/ABP_HG_Boss` (템플릿 `ABP_Unarmed`를 복사), `BS_Idle_Walk_Run`, 서기/걷기 8방향/뛰기 8방향/점프/떨어지기/착지 21개.
+- `BS_Idle_Walk_Run`은 앞으로 걷기/뛰기만 쓴다 (2026-11-28, 사용자 발견: 캐릭터가 가끔 대각선으로 틀어짐).
+  2D 블렌드 스페이스(가로 Direction -180 ~ 180, 세로 Speed 0 ~ 600)에 옆걸음, 대각선, 뒷걸음 동작이 들어 있었다. 템플릿 그래프가 Direction = 속도 방향 - 몸 방향으로 계산해서,
+  몸을 가는 방향으로 돌리는 우리 캐릭터도 방향을 바꾸는 순간(몸이 덜 돌아감)이나 행성 위(월드 Z 기준 계산)에서 ±45 근처가 나와 대각선 걷기가 섞였다.
+  우리는 옆걸음(스트레이프)을 쓰지 않으므로 Speed 300 줄의 옆/대각선/뒤 칸 8개를 `MF_Unarmed_Walk_Fwd`로, Speed 600 줄 8개를 `MF_Unarmed_Jog_Fwd`로 바꿨다 (스크립트, 동작 파일은 지우지 않음).
+  애님 BP 7개가 모두 이 에셋을 써서 한 번에 고쳐진다. 옆걸음이 필요해지면 그 칸에 원래 동작을 다시 넣는다.
+  게임에서의 움직임은 사용자가 에디터에서 확인한다 (정지 캡처로는 틀어짐을 판단하기 어렵다).
 - 환경별 애님 BP (2026-11-28): `ABP_HG_Boss`를 복제한 `ABP_HG_Boss_Shop`, `_PlanetSmall`, `_PlanetMedium`, `_PlanetLarge`, `_AsteroidField`, `_Derelict`.
   지금은 모두 원본과 같은 그래프다. 환경마다 다른 동작(무중력에서 떠 있는 자세, 가게 걷기 등)은 각자의 그래프에서 고친다.
   `ABP_HG_Boss`는 쓰지 않는 바탕(새 환경 애님 BP를 만들 때 복제할 원본)으로 남긴다.

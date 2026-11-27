@@ -25,6 +25,9 @@
 - `Move(Input)`: 카메라(컨트롤러) 회전을 `GetMoveFrame()` 좌표계로 옮겨 Yaw만 남기고 앞/오른쪽을 구한다.
   카메라를 어느 방향으로 돌려도 W = 화면 위쪽(카메라가 보는 쪽).
 - `GetMoveFrame()`: 기본 항등 회전. 구형 중력을 쓰는 하위 클래스가 바꾼다.
+- 시험용 방향 화살표 (2026-11-28): 콘솔 `hg.ShowFacing 1`. 사장님 허리에서 빨강 = 캐릭터(캡슐) 앞, 초록 = 모델(메시) 앞(메시 Y축), 파랑 = 실제 이동 방향, 노랑 = 입력(가속) 방향, 흰색 = 위.
+  걸을 때 빨강, 초록, 파랑이 같은 방향이어야 정상이다. 꺼져 있으면 `Tick`에서 정수 비교 하나로 끝난다 (`ENABLE_DRAW_DEBUG` 빌드만).
+  엔진 스크린샷(HighResShot)에는 디버그 선이 찍히지 않아서 화면으로 확인하지 못했다. PIE나 게임 창에서 직접 본다.
 
 ### HGBossAnimInstance (.h/.cpp) (2026-11-28)
 사장님 애님 BP(`ABP_HG_Boss_*`)의 부모 C++ 클래스 (Under One Umbrella의 `UUOUPlayerAnimInstance`와 같은 방식).
