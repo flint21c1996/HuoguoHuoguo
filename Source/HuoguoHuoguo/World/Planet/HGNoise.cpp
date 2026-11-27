@@ -118,7 +118,7 @@ float HGNoise::Perlin(const FVector& P)
 	return static_cast<float>(static_cast<double>(PerlinFixed(ToFixed(P.X), ToFixed(P.Y), ToFixed(P.Z))) / static_cast<double>(One));
 }
 
-float HGNoise::Fbm(const FVector& P, int32 Octaves, int32 LacunarityPercent)
+float HGNoise::Fbm(const FVector& P, int32 Octaves, int32 LacunarityPercent, int32 PersistencePercent)
 {
 	int64 X = ToFixed(P.X);
 	int64 Y = ToFixed(P.Y);
@@ -130,7 +130,8 @@ float HGNoise::Fbm(const FVector& P, int32 Octaves, int32 LacunarityPercent)
 	{
 		Sum += Mul(Amp, PerlinFixed(X, Y, Z));
 		Norm += Amp;
-		Amp >>= 1;
+		// 다음 겹의 세기. 정수 곱셈 뒤 나눗셈(0 쪽으로 버림)이라 어디서나 같다.
+		Amp = Amp * PersistencePercent / 100;
 		// 좌표를 LacunarityPercent/100배. 정수 나눗셈도 어디서나 같은 규칙(0 쪽으로 버림)이다.
 		X = X * LacunarityPercent / 100;
 		Y = Y * LacunarityPercent / 100;

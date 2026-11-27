@@ -38,10 +38,12 @@ namespace HGNoise
 	HUOGUOHUOGUO_API float Perlin(const FVector& P);
 
 	/**
-	 * 여러 겹 노이즈(fBm). 한 겹 올라갈 때마다 세기는 절반, 좌표는 LacunarityPercent/100배.
-	 * 정수배(200)로 키우면 격자점이 겹쳐 무늬가 반복되므로 203처럼 어긋난 값을 쓴다. 결과는 대략 -1 ~ 1.
+	 * 여러 겹 노이즈(fBm). 한 겹 올라갈 때마다 세기는 PersistencePercent/100배(기본 50 = 절반), 좌표는 LacunarityPercent/100배.
+	 * 정수배(200)로 키우면 격자점이 겹쳐 무늬가 반복되므로 203처럼 어긋난 값을 쓴다. 결과는 대략 -1 ~ 1
+	 * (겹마다 세기의 합으로 나누므로 감쇠를 바꿔도 범위는 같다).
+	 * 감쇠 50일 때 세기는 65536, 32768, ... 로 정확히 절반씩이라 예전(오른쪽 시프트) 결과와 비트까지 같다.
 	 */
-	HUOGUOHUOGUO_API float Fbm(const FVector& P, int32 Octaves, int32 LacunarityPercent = 203);
+	HUOGUOHUOGUO_API float Fbm(const FVector& P, int32 Octaves, int32 LacunarityPercent = 203, int32 PersistencePercent = 50);
 
 	/**
 	 * 능선 노이즈. 한 겹마다 (1 - |노이즈|)² 을 더한다. 노이즈가 0을 지나는 줄을 따라 뾰족한 능선이 생긴다.
