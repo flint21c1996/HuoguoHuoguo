@@ -56,6 +56,7 @@ C++는 기능과 규칙을 맡고, "어떤 모델/값을 쓸지"는 블루프린
   - FBX 내보내기 규칙 (중요): 뼈 길이까지 cm 값이어야 한다. 블렌더에서 아마추어+메시를 100배 하고 배율 적용(Apply Scale),
     씬 Unit Scale 0.01, Apply Unit 켬, Apply Scalings = All Local로 내보낸다 (작업 .blend는 저장하지 않고 내보내기만 한다).
     예전 방식(미터 데이터 + 단위 변환)은 100배가 뿌리 뼈 배율로 들어가서, 리타게팅 애니메이션이 그 배율을 1로 덮어써 캐릭터가 1/100로 줄어 안 보였다.
+- 사장님 BP(`BP_HG_ShopBoss`, `BP_HG_Explorer`)의 Mesh에서 `Component Use Fixed Skel Bounds`를 켰다. 탐험 환경별 자식 BP 다섯 개도 이 값을 물려받는다. 기존 동적 Bounds로 가림을 판정할 때 사장님 몸이 일부 프레임 빠지면서 TSR에서 반투명해 보였다. 고정 Bounds는 메시 에셋의 경계를 쓰므로 크게 뻗는 애니메이션을 추가할 때는 화면 가장자리와 물체 뒤에서 잘리는지 다시 확인한다.
 - `M_HG_Boss`: 베이스 컬러 + ORM(R=AO, G=러프니스, B=메탈릭). "Used with Skeletal Mesh"를 켜 두어야 게임에서 회색 기본 머티리얼로 바뀌지 않는다.
 - `T_HG_Boss_BaseColor` (4096, sRGB), `T_HG_Boss_ORM` (4096, sRGB 끔, Masks 압축).
   - 베이스 컬러는 면(face)마다 한 가지 색인 단색 텍스처다 (2026-11-27). 바이저(헬멧 유리)만 그라데이션을 남겼다. 원본 PNG = `T_HG_Boss_BaseColor_Face.png`.
