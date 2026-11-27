@@ -256,7 +256,7 @@ void AHGShopPlayerController::UpdateControlsHint() const
 	else
 	{
 		const UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
-		SetControlsHint(FString::Printf(TEXT("[경영] 가진 돈 %d | WASD 사장님 이동 | 우클릭 드래그 회전 | Q/E 90도 회전 | 휠 확대 | F 육수 내기 | 1~4 행성 선택 | B 가구 배치 | T 시간 넘기기 | 청록 발판 = 다이빙"),
+		SetControlsHint(FString::Printf(TEXT("[경영] 가진 돈 %d | WASD 사장님 이동 | 우클릭 드래그 회전 | Q/E 45도 회전 | 휠 확대 | F 육수 내기 | 1~4 행성 선택 | B 가구 배치 | T 시간 넘기기 | 청록 발판 = 다이빙"),
 			GI ? GI->GetMoney() : 0));
 	}
 }
@@ -293,10 +293,15 @@ void AHGShopPlayerController::OnRotateHoldCompleted(const FInputActionValue& Val
 void AHGShopPlayerController::OnRotateStep(const FInputActionValue& Value)
 {
 	const float Dir = Value.Get<float>();
-	if (!FMath::IsNearlyZero(Dir))
+	if (FMath::IsNearlyZero(Dir) || RotateStepDegrees <= 0.f)
 	{
-		HGRotate(Dir > 0.f ? RotateStepDegrees : -RotateStepDegrees);
+		return;
 	}
+	// 다음 칸(RotateStepDegrees의 배수)으로 간다. 이미 칸 위에 있으면 한 칸, 칸 사이면 그 방향의 가까운 칸까지.
+	const float Yaw = GetControlRotation().Yaw;
+	const float Slot = Yaw / RotateStepDegrees;
+	const float Next = Dir > 0.f ? FMath::FloorToFloat(Slot + 0.01f) + 1.f : FMath::CeilToFloat(Slot - 0.01f) - 1.f;
+	HGRotate(Next * RotateStepDegrees - Yaw);
 }
 
 void AHGShopPlayerController::OnZoom(const FInputActionValue& Value)

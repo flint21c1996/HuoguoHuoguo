@@ -146,9 +146,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Shop Camera")
 	float RotateSensitivity = 1.f;
 
-	// Q/E 한 번에 도는 각도.
+	// Q/E 한 번에 도는 각도 (2026-11-28, 90 -> 45. Under One Umbrella와 같다).
+	// 누를 때마다 이 각도의 배수 위치로 맞춘다 (우클릭으로 자유롭게 돌려 놓았어도 Q/E 한 번이면 45도 칸에 맞는다).
 	UPROPERTY(EditAnywhere, Category = "Shop Camera")
-	float RotateStepDegrees = 90.f;
+	float RotateStepDegrees = 45.f;
 
 	// 가구 배치 모드. 고를 수 있는 가구 목록, 격자 간격 등은 이 컴포넌트의 속성이다.
 	UPROPERTY(VisibleAnywhere, Category = "Furniture")

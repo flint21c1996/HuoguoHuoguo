@@ -8,18 +8,20 @@ class USpringArmComponent;
 class UCameraComponent;
 
 /**
- * 경영 파트의 사장님. 가게 안을 걸어 다니고, 카메라는 가짜 아이소메트릭 시점으로 사장님을 따라간다.
+ * 경영 파트의 사장님. 가게 안을 걸어 다니고, 카메라는 아이소메트릭 시점으로 사장님을 따라간다.
  *
- * 가짜 아이소메트릭 원리:
- *   진짜 직교 투영 대신 원근 카메라를 아주 멀리(스프링 암 수천 유닛) 두고 시야각을 좁게(약 15도) 잡는다.
- *   멀리서 좁게 보면 화면 안 물체들 사이의 거리 차이가 카메라 거리에 비해 작아져서
- *   원근에 의한 크기 차이와 소실점 효과가 거의 사라지고, 결과적으로 평행 투영처럼 보인다.
- *   원근 카메라이므로 Lumen, 그림자, 포스트 프로세스가 그대로 동작한다.
+ * 투영 방식 (2026-11-28, 사용자 결정: 경영 = 직교, 탐험 = 원근):
+ *   카메라 컴포넌트의 Projection Mode로 고른다. 기본은 직교(Orthographic). BP_HG_ShopBoss의 Camera 디테일에서 바꿀 수 있다.
+ *   - 직교: 진짜 평행 투영. 멀고 가까운 물체가 같은 크기로 보인다. 확대/축소는 화면 폭(Ortho Width)을 바꾼다.
+ *   - 원근: 예전 "가짜 아이소". 원근 카메라를 멀리(스프링 암 수천 유닛) 두고 시야각을 좁게(15도) 잡아 평행 투영처럼 보이게 한다.
+ *     확대/축소는 카메라 거리를 바꾼다.
+ *   두 방식 모두 스프링 암 길이(카메라가 가게 밖에 있는 거리)는 같다. 직교에서는 거리가 화면 크기를 바꾸지 않지만,
+ *   카메라가 벽 안쪽으로 들어오면 앞쪽이 잘리므로 멀리 둔다.
  *
  * 카메라 회전:
  *   스프링 암이 컨트롤러 회전을 따른다. 컨트롤러는 Yaw(Z축 기준 좌우)만 바꾸고 Pitch는 CameraPitch로 고정한다.
  *   위아래로 기울지 않아야 아이소 시점의 "가게를 내려다보는 판" 느낌과 가림 규칙이 유지된다.
- *   카메라 회전 지연(rotation lag)을 켜 두어서 마우스 회전과 Q/E 90도 회전이 모두 부드럽게 따라간다.
+ *   카메라 회전 지연(rotation lag)을 켜 두어서 마우스 회전과 Q/E 45도 회전이 모두 부드럽게 따라간다.
  *
  * 이동:
  *   AHGBossCharacter::Move가 카메라 Yaw 기준으로 바꾸므로 W는 언제나 화면 위쪽(카메라가 보는 쪽)이다.
@@ -72,6 +74,22 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Camera|Iso")
 	float ZoomInterpSpeed = 8.f;
 
+	// 직교 투영일 때 화면 가로 폭(cm). 원근 15도 + 거리 5000일 때 보이던 폭(약 1300)에 맞췄다. 작을수록 확대.
+	UPROPERTY(EditAnywhere, Category = "Camera|Ortho", meta = (DisplayName = "직교 화면 폭(cm)", ClampMin = "100"))
+	float DefaultOrthoWidth = 1300.f;
+
+	UPROPERTY(EditAnywhere, Category = "Camera|Ortho", meta = (DisplayName = "직교 최소 폭(cm)", ClampMin = "100"))
+	float MinOrthoWidth = 650.f;
+
+	UPROPERTY(EditAnywhere, Category = "Camera|Ortho", meta = (DisplayName = "직교 최대 폭(cm)", ClampMin = "100"))
+	float MaxOrthoWidth = 2400.f;
+
+	// 스폰할 때 확대/축소 목표를 지금 투영 방식에 맞춘다 (BP에서 Projection Mode를 바꿔도 맞게).
+	virtual void PostInitializeComponents() override;
+
 private:
 	float TargetArmLength = 5000.f;
+	float TargetOrthoWidth = 1300.f;
+
+	bool IsOrthographic() const;
 };
