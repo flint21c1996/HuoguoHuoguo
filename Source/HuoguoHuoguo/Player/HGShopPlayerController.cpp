@@ -163,6 +163,7 @@ void AHGShopPlayerController::SetupInputComponent()
 	Input->BindAction(CycleFurnitureAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnCycleFurniture);
 	Input->BindAction(UnlockFurnitureAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnUnlockFurniture);
 	Input->BindAction(PassTimeAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnPassTime);
+	Input->BindAction(ServeBrothAction, ETriggerEvent::Started, this, &AHGShopPlayerController::OnServeBroth);
 }
 
 void AHGShopPlayerController::BuildInputObjects()
@@ -186,6 +187,7 @@ void AHGShopPlayerController::BuildInputObjects()
 	CycleFurnitureAction = MakeAction(TEXT("IA_Shop_CycleFurniture"), EInputActionValueType::Axis1D);
 	UnlockFurnitureAction = MakeAction(TEXT("IA_Shop_UnlockFurniture"), EInputActionValueType::Boolean);
 	PassTimeAction = MakeAction(TEXT("IA_Shop_PassTime"), EInputActionValueType::Boolean);
+	ServeBrothAction = MakeAction(TEXT("IA_Shop_ServeBroth"), EInputActionValueType::Boolean);
 
 	// 숫자 키: 액션 하나에 키 여러 개를 매핑하고, 배율 수정자로 키마다 값을 1, 2, 3...으로 다르게 낸다.
 	// 받는 쪽은 값을 반올림해서 몇 번인지 안다. 키마다 액션을 따로 만들지 않아도 된다.
@@ -195,6 +197,7 @@ void AHGShopPlayerController::BuildInputObjects()
 	ShopContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Shop"));
 	MapCommonKeys(ShopContext);
 	ShopContext->MapKey(PassTimeAction, EKeys::T);
+	ShopContext->MapKey(ServeBrothAction, EKeys::F);
 	for (int32 i = 0; i < 4; ++i)
 	{
 		MapScaledKey(ShopContext, SelectPlanetAction, NumberKeys[i], static_cast<float>(i + 1));
@@ -253,7 +256,7 @@ void AHGShopPlayerController::UpdateControlsHint() const
 	else
 	{
 		const UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
-		SetControlsHint(FString::Printf(TEXT("[경영] 가진 돈 %d | WASD 사장님 이동 | 우클릭 드래그 회전 | Q/E 90도 회전 | 휠 확대 | 1~4 행성 선택 | B 가구 배치 | T 시간 넘기기 | 청록 발판 = 다이빙"),
+		SetControlsHint(FString::Printf(TEXT("[경영] 가진 돈 %d | WASD 사장님 이동 | 우클릭 드래그 회전 | Q/E 90도 회전 | 휠 확대 | F 육수 내기 | 1~4 행성 선택 | B 가구 배치 | T 시간 넘기기 | 청록 발판 = 다이빙"),
 			GI ? GI->GetMoney() : 0));
 	}
 }
@@ -351,6 +354,15 @@ void AHGShopPlayerController::OnCycleFurniture(const FInputActionValue& Value)
 	{
 		FurniturePlacer->CycleInCategory(Dir > 0.f ? 1 : -1);
 		UpdateControlsHint();
+	}
+}
+
+void AHGShopPlayerController::OnServeBroth(const FInputActionValue& Value)
+{
+	if (ShopBoss && !bTraveling)
+	{
+		const bool bServed = CustomerDirector->ServeNearbyBroth(ShopBoss->GetActorLocation());
+		ShowMessage(bServed ? TEXT("육수를 냈다. 손님이 꼬치를 담가 먹는다.") : TEXT("[F] 손님이 기다리는 식탁에 가까이 가서 육수를 내세요."));
 	}
 }
 

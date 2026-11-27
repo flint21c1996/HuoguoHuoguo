@@ -74,6 +74,9 @@ public:
 	// 냄비 위 김을 켜고 끈다 (식탁만 김 부품이 있다). 켤 때 색을 정한다.
 	void SetSteam(bool bOn, const FLinearColor& Color = FLinearColor::White);
 
+	// 빈 냄비나 사장님이 내준 육수의 표면을 보여 준다.
+	void SetBrothServed(bool bOn);
+
 	// 밤 불빛을 켜고 끈다 (등불, 홍등, 식탁 냄비, 수조에만 있다). 정거장 조명이 낮/밤에 따라 부른다.
 	void SetNightLight(bool bOn);
 
@@ -141,6 +144,10 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<class UPointLightComponent> NightLight;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UStaticMeshComponent>> BrothParts;
+	bool bBrothServed = false;
 
 	bool bSteamOn = false;
 	FLinearColor SteamColor = FLinearColor::White;

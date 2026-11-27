@@ -183,6 +183,7 @@ private:
 	UPROPERTY() TObjectPtr<UInputAction> CycleFurnitureAction;
 	UPROPERTY() TObjectPtr<UInputAction> UnlockFurnitureAction;
 	UPROPERTY() TObjectPtr<UInputAction> PassTimeAction;
+	UPROPERTY() TObjectPtr<UInputAction> ServeBrothAction;
 
 	UPROPERTY() TObjectPtr<AHGShopBossCharacter> ShopBoss;
 
@@ -218,4 +219,5 @@ private:
 	void OnCycleFurniture(const FInputActionValue& Value);
 	void OnUnlockFurniture(const FInputActionValue& Value);
 	void OnPassTime(const FInputActionValue& Value);
+	void OnServeBroth(const FInputActionValue& Value);
 };

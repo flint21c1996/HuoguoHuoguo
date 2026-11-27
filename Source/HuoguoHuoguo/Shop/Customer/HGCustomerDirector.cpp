@@ -36,6 +36,26 @@ namespace
 		return ComboCount == 1 ? FLinearColor(1.00f, 0.85f, 0.45f) : FLinearColor(1.00f, 0.55f, 0.18f);
 	}
 
+	const FLinearColor BasicFoodColor(1.0f, 0.58f, 0.19f);
+
+	void GetStockedIngredients(const UHGGameInstance& GI, TArray<FName>& OutIngredients)
+	{
+		for (const TPair<FName, int32>& Entry : GI.GetBag())
+		{
+			if (!Entry.Key.IsNone() && Entry.Value > 0)
+			{
+				OutIngredients.Add(Entry.Key);
+			}
+		}
+		OutIngredients.Sort(FNameLexicalLess());
+	}
+
+	FLinearColor GetFoodColor(UHGGameInstance& GI, FName Ingredient)
+	{
+		const FHGIngredientRow* Row = Ingredient.IsNone() ? nullptr : GI.FindIngredient(Ingredient);
+		return Row ? Row->Color : BasicFoodColor;
+	}
+
 	const FIntPoint Directions[] = { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) };
 }
 
@@ -73,6 +93,7 @@ void UHGCustomerDirector::Start(UHGFurniturePlacer* InPlacer)
 {
 	Placer = InPlacer;
 	ComputeStaticBlocked();
+	RefreshSkewerDisplay();
 	bStarted = true;
 }
 
@@ -210,13 +231,20 @@ bool UHGCustomerDirector::TrySpawnCustomer(FString& OutResult)
 	TArray<FHGGridItem> Items;
 	HGShopGrid::GatherItems(GetWorld(), Grid, Items);
 
-	// 다른 손님이 잡은 의자.
-	TSet<const AHGFurniture*> Reserved;
+	// 진열대 앞의 칸과 식탁은 손님마다 따로 잡아 둔다.
+	TSet<FIntPoint> ReservedPickupTiles;
+	TSet<const AHGFurniture*> ReservedTables;
+	TSet<int32> ActiveSkewerCounts;
 	for (const FVisit& Visit : Visits)
 	{
-		if (Visit.State != EVisitState::Leaving && Visit.Chair.IsValid())
+		if (Visit.State == EVisitState::ToShelf || Visit.State == EVisitState::Picking)
 		{
-			Reserved.Add(Visit.Chair.Get());
+			ReservedPickupTiles.Add(Visit.PickupTile);
+		}
+		if (Visit.State != EVisitState::Leaving && Visit.Table.IsValid())
+		{
+			ReservedTables.Add(Visit.Table.Get());
+			ActiveSkewerCounts.Add(Visit.SkewerCount);
 		}
 	}
 
@@ -225,7 +253,7 @@ bool UHGCustomerDirector::TrySpawnCustomer(FString& OutResult)
 	for (const FHGGridItem& Chair : Items)
 	{
 		AHGFurniture* ChairActor = Chair.Actor.Get();
-		if (!ChairActor || !ChairActor->IsChair() || Reserved.Contains(ChairActor))
+		if (!ChairActor || !ChairActor->IsChair())
 		{
 			continue;
 		}
@@ -233,7 +261,7 @@ bool UHGCustomerDirector::TrySpawnCustomer(FString& OutResult)
 		for (const FHGGridItem& Table : Items)
 		{
 			AHGFurniture* TableActor = Table.IsTable() ? Table.Actor.Get() : nullptr;
-			if (TableActor && Table.Rect.Contains(Front))
+			if (TableActor && !ReservedTables.Contains(TableActor) && Table.Rect.Contains(Front))
 			{
 				Seats.Emplace(ChairActor, TableActor);
 				break;
@@ -253,49 +281,89 @@ bool UHGCustomerDirector::TrySpawnCustomer(FString& OutResult)
 	}
 	TSet<FIntPoint> Occupied;
 	GatherOccupied(Items, Occupied);
-	for (const TPair<AHGFurniture*, AHGFurniture*>& Seat : Seats)
+	TArray<FVector> ShelfPath;
+	const TPair<AHGFurniture*, AHGFurniture*>* ChosenSeat = nullptr;
+	FIntPoint PickupTile = SkewerPickupTile;
+	for (const int32 Offset : { 0, 1, -1 })
 	{
-		TArray<FVector> Points;
-		const FIntPoint ChairTile = Grid.WorldToTile(Seat.Key->GetActorLocation());
-		if (!FindPath(Grid.EntranceTile, ChairTile, Occupied, Points))
+		PickupTile = SkewerPickupTile + FIntPoint(0, Offset);
+		if (ReservedPickupTiles.Contains(PickupTile) || StaticBlocked.Contains(PickupTile) || Occupied.Contains(PickupTile)
+			|| !FindPath(Grid.EntranceTile, PickupTile, Occupied, ShelfPath))
 		{
 			continue;
 		}
-
-		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		AHGCustomer* Customer = GetWorld()->SpawnActor<AHGCustomer>(CustomerClass ? CustomerClass.Get() : AHGCustomer::StaticClass(), Grid.TileCenter(Grid.EntranceTile), FRotator::ZeroRotator, Params);
-		if (!Customer)
+		ChosenSeat = Seats.FindByPredicate([&](const TPair<AHGFurniture*, AHGFurniture*>& Seat)
 		{
-			OutResult = TEXT("손님을 만들지 못했다");
-			return false;
+			TArray<FVector> SeatPath;
+			return FindPath(PickupTile, Grid.WorldToTile(Seat.Key->GetActorLocation()), Occupied, SeatPath);
+		});
+		if (ChosenSeat)
+		{
+			break;
 		}
-		Customer->SetBodyColor(CustomerColors[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(CustomerColors)) - 1)]);
-		Customer->WalkPath(Points);
-
-		FVisit& Visit = Visits.AddDefaulted_GetRef();
-		Visit.Customer = Customer;
-		Visit.Chair = Seat.Key;
-		Visit.Table = Seat.Value;
-		Visit.State = EVisitState::ToSeat;
-		++SpawnedCount;
-
-		OutResult = FString::Printf(TEXT("손님 %d번이 들어왔다 -> 의자 칸 (%d, %d), %d칸 걸음"), SpawnedCount, ChairTile.X, ChairTile.Y, Points.Num());
-		UE_LOG(LogHuoguo, Log, TEXT("[Customer] %s"), *OutResult);
-		return true;
 	}
-	OutResult = TEXT("빈자리까지 가는 길이 없어서 손님이 들어오지 않았다");
-	return false;
+	if (!ChosenSeat)
+	{
+		OutResult = TEXT("진열대 앞에 빈 칸이 없거나 자리에 갈 수 없다");
+		return false;
+	}
+	if (!ShelfPath.IsEmpty())
+	{
+		// 접시가 진열대와 겹치지 않는 거리에서 꼬치를 고른다.
+		const FVector ToDisplay = (SkewerDisplayLocation - ShelfPath.Last()).GetSafeNormal2D();
+		ShelfPath.Last() += ToDisplay * (Grid.TileSize * 0.32f);
+	}
+
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	AHGCustomer* Customer = GetWorld()->SpawnActor<AHGCustomer>(CustomerClass ? CustomerClass.Get() : AHGCustomer::StaticClass(), Grid.TileCenter(Grid.EntranceTile), FRotator::ZeroRotator, Params);
+	if (!Customer)
+	{
+		OutResult = TEXT("손님을 만들지 못했다");
+		return false;
+	}
+	Customer->SetBodyColor(CustomerColors[Random.RandRange(0, static_cast<int32>(UE_ARRAY_COUNT(CustomerColors)) - 1)]);
+	Customer->ShowPlate();
+	Customer->WalkPath(ShelfPath);
+
+	FVisit& Visit = Visits.AddDefaulted_GetRef();
+	Visit.Customer = Customer;
+	Visit.Chair = ChosenSeat->Key;
+	Visit.Table = ChosenSeat->Value;
+	Visit.PickupTile = PickupTile;
+
+	// 동시에 보이는 접시는 가능한 한 다른 높이로 고른다. 모두 쓰는 중이면 반복한다.
+	const int32 MinSkewers = FMath::Max(1, SkewersPerCustomerRange.X);
+	const int32 MaxSkewers = FMath::Max(MinSkewers, SkewersPerCustomerRange.Y);
+	const int32 InitialCount = Random.RandRange(MinSkewers, MaxSkewers);
+	Visit.SkewerCount = InitialCount;
+	while (ActiveSkewerCounts.Contains(Visit.SkewerCount))
+	{
+		Visit.SkewerCount = Visit.SkewerCount == MaxSkewers ? MinSkewers : Visit.SkewerCount + 1;
+		if (Visit.SkewerCount == InitialCount)
+		{
+			break;
+		}
+	}
+	++SpawnedCount;
+
+	const FIntPoint ChairTile = Grid.WorldToTile(Visit.Chair->GetActorLocation());
+	OutResult = FString::Printf(TEXT("손님 %d번이 들어왔다 -> 진열대 (%d, %d) -> 의자 칸 (%d, %d), 꼬치 목표 %d개"),
+		SpawnedCount, PickupTile.X, PickupTile.Y, ChairTile.X, ChairTile.Y, Visit.SkewerCount);
+	UE_LOG(LogHuoguo, Log, TEXT("[Customer] %s"), *OutResult);
+	return true;
 }
 
 void UHGCustomerDirector::SendHome(FVisit& Visit)
 {
+	ReturnUneatenSkewers(Visit);
 	Visit.State = EVisitState::Leaving;
 	AHGCustomer* Customer = Visit.Customer.Get();
 	if (!Customer)
 	{
 		return;
 	}
+	Customer->ClearMeal();
 	const FHGShopGrid& Grid = GetGrid();
 	TArray<FHGGridItem> Items;
 	HGShopGrid::GatherItems(GetWorld(), Grid, Items);
@@ -311,6 +379,166 @@ void UHGCustomerDirector::SendHome(FVisit& Visit)
 	Customer->WalkPath(Points);
 }
 
+void UHGCustomerDirector::PickSkewer(FVisit& Visit)
+{
+	UHGGameInstance* GI = GetWorld()->GetGameInstance<UHGGameInstance>();
+	FName Ingredient;
+	if (GI)
+	{
+		TArray<FName> Available;
+		GetStockedIngredients(*GI, Available);
+		if (!Available.IsEmpty())
+		{
+			const FName Chosen = Available[Random.RandRange(0, Available.Num() - 1)];
+			if (GI->RemoveFromBag(Chosen, 1))
+			{
+				Ingredient = Chosen;
+			}
+		}
+	}
+	const TArray<TWeakObjectPtr<AHGSkewer>>* DisplayStack = DisplaySkewers.Find(Ingredient);
+	const AHGSkewer* TopSkewer = DisplayStack && !DisplayStack->IsEmpty() ? DisplayStack->Last().Get() : nullptr;
+	const FVector PickupLocation = TopSkewer ? TopSkewer->GetActorLocation() : SkewerDisplayLocation;
+	Visit.Skewers.Add(Ingredient);
+	Visit.Customer->AddSkewer(GI ? GetFoodColor(*GI, Ingredient) : BasicFoodColor,
+		PickupLocation, FMath::Max(SkewerPickInterval, 0.15f) * 0.6f);
+	UE_LOG(LogHuoguo, Log, TEXT("[Meal] %s 진열대에서 %s 선택: 접시 %d개"),
+		*GetNameSafe(Visit.Customer.Get()), Ingredient.IsNone() ? TEXT("기본 꼬치") : *Ingredient.ToString(), Visit.Skewers.Num());
+	RefreshSkewerDisplay();
+}
+
+void UHGCustomerDirector::ReturnUneatenSkewers(FVisit& Visit)
+{
+	if (UHGGameInstance* GI = GetWorld() ? GetWorld()->GetGameInstance<UHGGameInstance>() : nullptr)
+	{
+		// 쌓은 순서의 역순으로 먹으므로 배열 앞쪽에 남은 것만 돌려준다.
+		for (int32 Index = 0; Index < Visit.Skewers.Num() - Visit.EatenCount; ++Index)
+		{
+			if (!Visit.Skewers[Index].IsNone())
+			{
+				GI->AddToBag(Visit.Skewers[Index], 1);
+			}
+		}
+	}
+	Visit.Skewers.Reset();
+}
+
+void UHGCustomerDirector::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	for (FVisit& Visit : Visits)
+	{
+		ReturnUneatenSkewers(Visit);
+	}
+	for (const TPair<FName, TArray<TWeakObjectPtr<AHGSkewer>>>& Entry : DisplaySkewers)
+	{
+		for (const TWeakObjectPtr<AHGSkewer>& Part : Entry.Value)
+		{
+			if (AHGSkewer* Skewer = Part.Get())
+			{
+				Skewer->Destroy();
+			}
+		}
+	}
+	DisplaySkewers.Reset();
+	Super::EndPlay(EndPlayReason);
+}
+
+void UHGCustomerDirector::RefreshSkewerDisplay()
+{
+	UHGGameInstance* GI = GetWorld()->GetGameInstance<UHGGameInstance>();
+	if (!GI)
+	{
+		return;
+	}
+	TArray<FName> Stocked;
+	GetStockedIngredients(*GI, Stocked);
+	Stocked.Insert(NAME_None, 0);
+	for (auto It = DisplaySkewers.CreateIterator(); It; ++It)
+	{
+		if (!Stocked.Contains(It.Key()))
+		{
+			for (const TWeakObjectPtr<AHGSkewer>& Part : It.Value())
+			{
+				if (AHGSkewer* Skewer = Part.Get())
+				{
+					Skewer->Destroy();
+				}
+			}
+			It.RemoveCurrent();
+		}
+	}
+
+	const float Spacing = FMath::Min(19.f, 108.f / FMath::Max(1, Stocked.Num() - 1));
+	for (int32 Index = 0; Index < Stocked.Num(); ++Index)
+	{
+		const FName Ingredient = Stocked[Index];
+		const FVector Base = SkewerDisplayLocation + FVector(0.f, (Index - (Stocked.Num() - 1) * 0.5f) * Spacing, 0.f);
+		const int32 Height = Ingredient.IsNone() ? 5 : FMath::Min(GI->GetBagCount(Ingredient), 5);
+		TArray<TWeakObjectPtr<AHGSkewer>>& Stack = DisplaySkewers.FindOrAdd(Ingredient);
+		while (Stack.Num() > Height)
+		{
+			if (AHGSkewer* Skewer = Stack.Pop().Get())
+			{
+				Skewer->Destroy();
+			}
+		}
+		Stack.SetNum(Height);
+		for (int32 Layer = 0; Layer < Height; ++Layer)
+		{
+			const FVector Location = Base + FVector(0.f, 0.f, Layer * AHGSkewer::StackSpacing);
+			if (AHGSkewer* Existing = Stack[Layer].Get())
+			{
+				Existing->SetActorLocation(Location);
+			}
+			else if (AHGSkewer* Skewer = GetWorld()->SpawnActor<AHGSkewer>(Location, FRotator::ZeroRotator))
+			{
+				Skewer->SetFoodColor(GetFoodColor(*GI, Ingredient));
+				Stack[Layer] = Skewer;
+			}
+		}
+	}
+}
+
+bool UHGCustomerDirector::ServeNearbyBroth(const FVector& BossLocation)
+{
+	FVisit* Nearest = nullptr;
+	double BestDistanceSq = FMath::Square(BrothServeRange);
+	for (FVisit& Visit : Visits)
+	{
+		if (Visit.State == EVisitState::WaitingForBroth && Visit.Customer.IsValid() && Visit.Table.IsValid() && !Visit.Table->IsGhost())
+		{
+			const double DistanceSq = FVector::DistSquared2D(BossLocation, Visit.Table->GetActorLocation());
+			if (DistanceSq <= BestDistanceSq)
+			{
+				Nearest = &Visit;
+				BestDistanceSq = DistanceSq;
+			}
+		}
+	}
+	if (!Nearest)
+	{
+		return false;
+	}
+
+	Nearest->Customer->SetWaitingForBroth(false);
+	Nearest->State = EVisitState::Eating;
+	UE_LOG(LogHuoguo, Log, TEXT("[Meal] 사장님이 %s 식탁에 육수를 냈다"), *GetNameSafe(Nearest->Customer.Get()));
+	StartNextDip(*Nearest);
+	RefreshSteam();
+	return true;
+}
+
+void UHGCustomerDirector::StartNextDip(FVisit& Visit)
+{
+	Visit.Timer = FMath::Max(EatSeconds / FMath::Max(1, Visit.Skewers.Num()), 0.5f);
+	const FVector BrothLocation = Visit.Table->GetActorLocation() + FVector(0.f, 0.f, 125.f);
+	const FName Ingredient = Visit.Skewers[Visit.Skewers.Num() - 1 - Visit.EatenCount];
+	Visit.Customer->StartDip(BrothLocation, Visit.Timer);
+	UE_LOG(LogHuoguo, Log, TEXT("[Meal] %s %d/%d번째 꼬치를 육수에 담근다: %s"),
+		*GetNameSafe(Visit.Customer.Get()), Visit.EatenCount + 1, Visit.Skewers.Num(),
+		Ingredient.IsNone() ? TEXT("기본 꼬치") : *Ingredient.ToString());
+}
+
 void UHGCustomerDirector::Pay(FVisit& Visit)
 {
 	UHGGameInstance* GI = GetWorld()->GetGameInstance<UHGGameInstance>();
@@ -320,25 +548,15 @@ void UHGCustomerDirector::Pay(FVisit& Visit)
 		return;
 	}
 
-	// 꼬치 값: 가방 재료를 하나씩 꺼내 그 재료의 Price, 가방이 비면 기본 꼬치.
+	// 진열대에서 챙겨 끝까지 먹은 접시를 계산한다. 재료를 다시 빼지 않는다.
 	int32 BasePrice = 0;
 	TMap<FString, int32> Eaten;
 	TArray<FString> EatenOrder;
-	for (int32 i = 0; i < SkewersPerCustomer; ++i)
+	for (const FName IngredientId : Visit.Skewers)
 	{
-		FName IngredientId;
-		FString Name;
-		if (GI->TakeOneFromBag(IngredientId))
-		{
-			const FHGIngredientRow* Row = GI->FindIngredient(IngredientId);
-			BasePrice += Row ? Row->Price : BasicSkewerPrice;
-			Name = GI->GetIngredientName(IngredientId);
-		}
-		else
-		{
-			BasePrice += BasicSkewerPrice;
-			Name = TEXT("기본 꼬치");
-		}
+		const FHGIngredientRow* Row = IngredientId.IsNone() ? nullptr : GI->FindIngredient(IngredientId);
+		BasePrice += Row ? Row->Price : BasicSkewerPrice;
+		const FString Name = IngredientId.IsNone() ? TEXT("기본 꼬치") : GI->GetIngredientName(IngredientId);
 		if (!Eaten.Contains(Name))
 		{
 			EatenOrder.Add(Name);
@@ -422,7 +640,9 @@ void UHGCustomerDirector::RefreshSteam()
 		{
 			continue;
 		}
-		if (EatingTables.Contains(*It))
+		const bool bHasMeal = EatingTables.Contains(*It);
+		It->SetBrothServed(bHasMeal);
+		if (bHasMeal)
 		{
 			const FHGComboResult Combos = HGCombo::EvaluateTable(ComboTable, HGShopGrid::GetFurnitureRect(GetGrid(), *It), Items);
 			It->SetSteam(true, SteamColor(Combos.Num()));
@@ -462,47 +682,99 @@ void UHGCustomerDirector::TickComponent(float DeltaTime, ELevelTick TickType, FA
 		AHGCustomer* Customer = Visit.Customer.Get();
 		if (!Customer)
 		{
+			ReturnUneatenSkewers(Visit);
 			Visits.RemoveAt(i);
 			bSteamDirty = true;
 			continue;
 		}
-		const bool bSeatGone = !Visit.Chair.IsValid() || !Visit.Table.IsValid();
+		const bool bSeatGone = !Visit.Chair.IsValid() || !Visit.Table.IsValid() || Visit.Chair->IsGhost() || Visit.Table->IsGhost();
+		if (Visit.State != EVisitState::Leaving && bSeatGone)
+		{
+			if (Visit.State == EVisitState::WaitingForBroth || Visit.State == EVisitState::Eating)
+			{
+				Customer->StandUp();
+			}
+			Message(TEXT("손님 자리가 없어져서 남은 꼬치를 돌려놓고 나갔다"));
+			SendHome(Visit);
+			bSteamDirty = true;
+			continue;
+		}
 
 		switch (Visit.State)
 		{
-		case EVisitState::ToSeat:
-			if (bSeatGone)
+		case EVisitState::ToShelf:
+			if (!Customer->IsWalking())
 			{
-				Message(TEXT("손님이 가려던 자리가 없어져서 그냥 나갔다"));
-				SendHome(Visit);
-			}
-			else if (!Customer->IsWalking())
-			{
-				// 의자에 앉아 식탁 가운데를 본다.
-				const FVector ToTable = Visit.Table->GetActorLocation() - Visit.Chair->GetActorLocation();
-				Customer->SitAt(Visit.Chair->GetActorLocation(), ToTable.Rotation().Yaw);
-				Visit.State = EVisitState::Eating;
-				Visit.Timer = EatSeconds;
-				bSteamDirty = true;
+				const FVector ToDisplay = SkewerDisplayLocation - Customer->GetActorLocation();
+				Customer->SetActorRotation(FRotator(0.f, ToDisplay.Rotation().Yaw, 0.f));
+				Visit.State = EVisitState::Picking;
+				Visit.Timer = FMath::Max(SkewerPickInterval, 0.15f);
 			}
 			break;
 
-		case EVisitState::Eating:
-			if (bSeatGone)
-			{
-				Customer->StandUp();
-				Message(TEXT("먹던 자리가 없어져서 손님이 계산하지 않고 나갔다"));
-				SendHome(Visit);
-				bSteamDirty = true;
-				break;
-			}
+		case EVisitState::Picking:
 			Visit.Timer -= DeltaTime;
 			if (Visit.Timer <= 0.f)
 			{
-				Pay(Visit);
-				Customer->StandUp();
-				SendHome(Visit);
-				bSteamDirty = true;
+				if (Visit.Skewers.Num() < Visit.SkewerCount)
+				{
+					PickSkewer(Visit);
+					Visit.Timer = FMath::Max(SkewerPickInterval, 0.15f);
+					break;
+				}
+				TArray<FHGGridItem> Items;
+				HGShopGrid::GatherItems(GetWorld(), GetGrid(), Items);
+				TSet<FIntPoint> Occupied;
+				GatherOccupied(Items, Occupied);
+				TArray<FVector> Path;
+				if (FindPath(Visit.PickupTile, GetGrid().WorldToTile(Visit.Chair->GetActorLocation()), Occupied, Path))
+				{
+					Customer->WalkPath(Path);
+					Visit.State = EVisitState::ToSeat;
+					UE_LOG(LogHuoguo, Log, TEXT("[Meal] %s 꼬치 %d개를 들고 식탁으로 이동"), *GetNameSafe(Customer), Visit.Skewers.Num());
+				}
+				else
+				{
+					SendHome(Visit);
+				}
+			}
+			break;
+
+		case EVisitState::ToSeat:
+			if (!Customer->IsWalking())
+			{
+				const FVector TableLocation = Visit.Table->GetActorLocation();
+				const FVector ChairLocation = Visit.Chair->GetActorLocation();
+				const FVector ToTable = TableLocation - ChairLocation;
+				Customer->SitAt(ChairLocation, ToTable.Rotation().Yaw);
+				const FVector PlateLocation = FMath::Lerp(ChairLocation, TableLocation, 0.61f) + FVector(0.f, 0.f, 85.f);
+				Customer->PlacePlate(PlateLocation);
+				Customer->SetWaitingForBroth(true);
+				Visit.State = EVisitState::WaitingForBroth;
+				UE_LOG(LogHuoguo, Log, TEXT("[Meal] %s 꼬치 %d개를 들고 착석, 육수 대기: 식탁 %s"),
+					*GetNameSafe(Customer), Visit.Skewers.Num(), *TableLocation.ToCompactString());
+			}
+			break;
+
+		case EVisitState::WaitingForBroth:
+			break;
+
+		case EVisitState::Eating:
+			Visit.Timer -= DeltaTime;
+			if (Visit.Timer <= 0.f)
+			{
+				++Visit.EatenCount;
+				if (Visit.EatenCount < Visit.Skewers.Num())
+				{
+					StartNextDip(Visit);
+				}
+				else
+				{
+					Pay(Visit);
+					Customer->StandUp();
+					SendHome(Visit);
+					bSteamDirty = true;
+				}
 			}
 			break;
 
@@ -521,6 +793,7 @@ void UHGCustomerDirector::TickComponent(float DeltaTime, ELevelTick TickType, FA
 	if (bSteamDirty || SteamTimer <= 0.f)
 	{
 		RefreshSteam();
+		RefreshSkewerDisplay();
 		SteamTimer = 0.5f;
 	}
 }
@@ -532,13 +805,13 @@ void UHGCustomerDirector::TickComponent(float DeltaTime, ELevelTick TickType, FA
 FString UHGCustomerDirector::DescribeCustomers() const
 {
 	const UHGGameInstance* GI = GetWorld()->GetGameInstance<UHGGameInstance>();
-	int32 Counts[3] = { 0, 0, 0 };
+	int32 Counts[static_cast<int32>(EVisitState::Leaving) + 1] = {};
 	for (const FVisit& Visit : Visits)
 	{
 		++Counts[static_cast<int32>(Visit.State)];
 	}
-	return FString::Printf(TEXT("손님: 자리로 가는 중 %d, 먹는 중 %d, 나가는 중 %d | 들어온 손님 %d, 계산한 손님 %d | 가진 돈 %d | 발견한 콤보 %d개 | 영업 %s"),
-		Counts[0], Counts[1], Counts[2], SpawnedCount, ServedCount, GI ? GI->GetMoney() : 0,
+	return FString::Printf(TEXT("손님: 진열대 %d, 자리로 가는 중 %d, 육수 대기 %d, 먹는 중 %d, 나가는 중 %d | 들어온 손님 %d, 계산한 손님 %d | 가진 돈 %d | 발견한 콤보 %d개 | 영업 %s"),
+		Counts[0] + Counts[1], Counts[2], Counts[3], Counts[4], Counts[5], SpawnedCount, ServedCount, GI ? GI->GetMoney() : 0,
 		GI ? GI->GetDiscoveredCombos().Num() : 0, IsOpen() ? TEXT("중") : TEXT("끝 (문 닫을 시간)"));
 }
 

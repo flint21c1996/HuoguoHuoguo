@@ -7,6 +7,7 @@
 
 class AHGCustomer;
 class AHGFurniture;
+class AHGSkewer;
 class UHGFurniturePlacer;
 
 /**
@@ -16,11 +17,11 @@ class UHGFurniturePlacer;
  *   1. 들어오기: 가게가 열려 있으면(낮, 밤. 문 닫을 시간은 아님) ArrivalInterval 간격으로 입구 칸에 손님이 나타난다.
  *      빈자리 = 식탁을 바라보는 의자(의자 바로 앞 칸이 식탁) 중 다른 손님이 잡지 않은 것. 빈자리가 없으면 오지 않는다.
  *      식탁 두 개 사이에 낀 의자는 바라보는 쪽 식탁의 자리다.
- *   2. 자리로 걷기: 칸 위에서 너비 우선 탐색으로 길을 찾는다. 가구, 카운터, 발판 칸은 피한다.
- *   3. 먹기: 의자에 앉아 식탁을 보고 EatSeconds 동안 먹는다. 그동안 식탁 냄비 위에 김이 오른다.
+ *   2. 진열대에서 꼬치를 하나씩 골라 접시에 쌓고 자리로 걷는다. 칸 위에서 너비 우선 탐색으로 길을 찾는다.
+ *   3. 사장이 육수를 내면 손님은 쌓은 꼬치를 위에서부터 하나씩 담가 먹는다. 그동안 냄비 위에 김이 오른다.
  *      김 색이 식탁의 콤보 수를 보여 준다: 없음 = 흰색, 1개 = 연한 금색, 2개 이상 = 진한 주황.
- *   4. 계산: 꼬치 SkewersPerCustomer개를 먹은 값을 낸다. 꼬치는 가방(지금은 가게 창고 역할)의 재료를 하나씩 쓰고,
- *      가방이 비면 기본 꼬치(BasicSkewerPrice)로 친다. 식탁 콤보 보너스(%)를 모두 더해 곱한다.
+ *   4. 계산: 실제로 집어서 먹은 꼬치의 값을 낸다. 가방이 비면 기본 꼬치(BasicSkewerPrice)를 집는다.
+ *      식탁 콤보 보너스(%)를 모두 더해 곱한다.
  *      식탁 위로 "+금액" 글자가 떠오르고, 화면 메시지에 꼬치와 콤보 내역이 나온다.
  *   5. 나가기: 입구 칸으로 걸어가서 사라진다.
  *   앉을 의자나 식탁이 사라지면(배치 모드에서 집거나 치우면) 계산하지 않고 바로 나간다.
@@ -43,6 +44,9 @@ public:
 	// 개발용: 빈자리가 있으면 지금 바로 손님 한 명을 들인다. 결과 문장.
 	FString SpawnCustomerNow();
 
+	// 사장님이 가까운 대기 손님의 식탁에 육수를 낸다.
+	bool ServeNearbyBroth(const FVector& BossLocation);
+
 	// 개발용: 손님들 상태, 가진 돈, 대접한 손님 수.
 	FString DescribeCustomers() const;
 
@@ -55,15 +59,28 @@ public:
 
 	// 손님이 오는 평균 간격(초). 실제 간격은 이것의 0.6 ~ 1.4배에서 무작위.
 	UPROPERTY(EditAnywhere, Category = "Customers")
-	float ArrivalInterval = 7.f;
+	float ArrivalInterval = 2.5f;
 
 	// 앉아서 먹는 시간(초).
 	UPROPERTY(EditAnywhere, Category = "Customers")
 	float EatSeconds = 10.f;
 
-	// 손님 한 명이 먹는 꼬치 수.
-	UPROPERTY(EditAnywhere, Category = "Customers")
-	int32 SkewersPerCustomer = 3;
+	// 시제품용으로 큰 꼬치 더미를 들고 가는 모습을 보기 위한 수량 범위.
+	UPROPERTY(EditAnywhere, Category = "Customers|Skewers", meta = (ClampMin = "1"))
+	FIntPoint SkewersPerCustomerRange = FIntPoint(6, 8);
+
+	UPROPERTY(EditAnywhere, Category = "Customers|Skewers", meta = (ClampMin = "0.15"))
+	float SkewerPickInterval = 0.65f;
+
+	// 진열대 앞의 가운데 칸. Y 방향 양옆 한 칸에도 손님이 설 수 있다.
+	UPROPERTY(EditAnywhere, Category = "Customers|Skewers")
+	FIntPoint SkewerPickupTile = FIntPoint(3, -4);
+
+	UPROPERTY(EditAnywhere, Category = "Customers|Skewers")
+	FVector SkewerDisplayLocation = FVector(510.f, -330.f, 157.f);
+
+	UPROPERTY(EditAnywhere, Category = "Customers|Skewers", meta = (ClampMin = "100"))
+	float BrothServeRange = 220.f;
 
 	// 가방이 비었을 때 내는 기본 꼬치 값.
 	UPROPERTY(EditAnywhere, Category = "Customers")
@@ -77,12 +94,18 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Customers|Classes")
 	TSubclassOf<class AHGMoneyPopup> MoneyPopupClass;
 
+protected:
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 private:
 	enum class EVisitState : uint8
 	{
-		ToSeat,   // 자리로 걷는 중
-		Eating,   // 앉아서 먹는 중
-		Leaving   // 입구로 걷는 중
+		ToShelf,
+		Picking,
+		ToSeat,
+		WaitingForBroth,
+		Eating,
+		Leaving
 	};
 
 	struct FVisit
@@ -90,11 +113,16 @@ private:
 		TWeakObjectPtr<AHGCustomer> Customer;
 		TWeakObjectPtr<AHGFurniture> Chair;
 		TWeakObjectPtr<AHGFurniture> Table;
-		EVisitState State = EVisitState::ToSeat;
+		EVisitState State = EVisitState::ToShelf;
+		FIntPoint PickupTile = FIntPoint::ZeroValue;
+		TArray<FName> Skewers;
+		int32 SkewerCount = 0;
+		int32 EatenCount = 0;
 		float Timer = 0.f;
 	};
 
 	TArray<FVisit> Visits;
+	TMap<FName, TArray<TWeakObjectPtr<AHGSkewer>>> DisplaySkewers;
 	TWeakObjectPtr<UHGFurniturePlacer> Placer;
 
 	// 카운터, 진열대, 발판처럼 가구가 아닌 것이 차지한 바닥 칸. 맵 시작에 한 번 조사한다.
@@ -122,6 +150,10 @@ private:
 	bool TrySpawnCustomer(FString& OutResult);
 	void SendHome(FVisit& Visit);
 	void Pay(FVisit& Visit);
+	void PickSkewer(FVisit& Visit);
+	void StartNextDip(FVisit& Visit);
+	void ReturnUneatenSkewers(FVisit& Visit);
+	void RefreshSkewerDisplay();
 
 	// 먹는 손님이 있는 식탁에 김을 켜고, 없는 식탁은 끈다. 김 색 = 콤보 수.
 	void RefreshSteam();

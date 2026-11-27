@@ -135,6 +135,7 @@ void AHGFurniture::Rebuild()
 	}
 
 	Repaint();
+	SetBrothServed(bBrothServed);
 	SetNightLight(bNightLightOn);
 	if (bSteamOn)
 	{
@@ -158,6 +159,7 @@ void AHGFurniture::ClearParts()
 	NightLight = nullptr;
 	Parts.Reset();
 	SteamParts.Reset();
+	BrothParts.Reset();
 	GlowParts.Reset();
 	PartColors.Reset();
 	PartCollides.Reset();
@@ -364,11 +366,17 @@ void AHGFurniture::BuildPot(float P, const FLinearColor& PotColor)
 {
 	// 냄비는 모두 장식(충돌 없음)이다. 상판 윗면 높이 82 위에 놓인다. P = 냄비 지름(m).
 	const FName Pot = Data.Pot;
+	auto AddBroth = [this](const TCHAR* Shape, const FVector& Location, const FVector& Scale, const FLinearColor& Color)
+	{
+		// 육수 표면은 냄비와 별개로 켜고 끄며, 얇은 모양을 그대로 보여 준다.
+		TGuardValue<bool> KeepThin(bCapturing, false);
+		BrothParts.Add(AddPart(Shape, Location, Scale, Color, false));
+	};
 	if (Pot == TEXT("NineGrid"))
 	{
 		// 구궁격: 네모난 냄비를 가로세로 두 줄씩 칸막이로 나눈 9칸 냄비.
 		AddPart(TEXT("Cube"), FVector(0.f, 0.f, 92.f), FVector(P, P, 0.2f), PotColor, false);
-		AddPart(TEXT("Cube"), FVector(0.f, 0.f, 102.f), FVector(P * 0.9f, P * 0.9f, 0.01f), RedBroth, false);
+		AddBroth(TEXT("Cube"), FVector(0.f, 0.f, 102.5f), FVector(P * 0.9f, P * 0.9f, 0.01f), RedBroth);
 		const float Third = P * 100.f / 6.f;
 		for (const float Offset : { -Third, Third })
 		{
@@ -382,13 +390,13 @@ void AHGFurniture::BuildPot(float P, const FLinearColor& PotColor)
 	if (Pot == TEXT("YinYang"))
 	{
 		// 원앙 냄비: 가운데 칸막이로 나눠 한쪽은 홍탕, 한쪽은 백탕. 반원 대신 납작한 타원 두 개로 표시한다.
-		AddPart(TEXT("Cylinder"), FVector(-P * 22.f, 0.f, 102.5f), FVector(P * 0.42f, P * 0.84f, 0.01f), RedBroth, false);
-		AddPart(TEXT("Cylinder"), FVector(P * 22.f, 0.f, 102.5f), FVector(P * 0.42f, P * 0.84f, 0.01f), WhiteBroth, false);
+		AddBroth(TEXT("Cylinder"), FVector(-P * 22.f, 0.f, 102.5f), FVector(P * 0.42f, P * 0.84f, 0.01f), RedBroth);
+		AddBroth(TEXT("Cylinder"), FVector(P * 22.f, 0.f, 102.5f), FVector(P * 0.42f, P * 0.84f, 0.01f), WhiteBroth);
 		AddPart(TEXT("Cube"), FVector(0.f, 0.f, 103.f), FVector(0.02f, P * 0.9f, 0.03f), PotColor, false);
 		return;
 	}
 	// 단일 냄비(Single)와 큰 냄비(Big): 홍탕 하나.
-	AddPart(TEXT("Cylinder"), FVector(0.f, 0.f, 102.5f), FVector(P * 0.87f, P * 0.87f, 0.01f), RedBroth, false);
+	AddBroth(TEXT("Cylinder"), FVector(0.f, 0.f, 102.5f), FVector(P * 0.87f, P * 0.87f, 0.01f), RedBroth);
 }
 
 void AHGFurniture::BuildChair(const FLinearColor& InA, const FLinearColor& InB)
@@ -573,6 +581,19 @@ void AHGFurniture::SetPartColor(UStaticMeshComponent* Part, const FLinearColor& 
 	}
 	PartColors[Index] = Color;
 	Repaint();
+}
+
+void AHGFurniture::SetBrothServed(bool bOn)
+{
+	bBrothServed = bOn;
+	const bool bVisible = bOn || bGhost || (GetWorld() && !GetWorld()->IsGameWorld());
+	for (UStaticMeshComponent* Surface : BrothParts)
+	{
+		if (IsValid(Surface))
+		{
+			Surface->SetVisibility(bVisible);
+		}
+	}
 }
 
 void AHGFurniture::SetSteam(bool bOn, const FLinearColor& Color)

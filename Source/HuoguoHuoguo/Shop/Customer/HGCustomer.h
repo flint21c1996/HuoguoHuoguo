@@ -6,6 +6,7 @@
 
 class UStaticMeshComponent;
 class UTextRenderComponent;
+class AHGSkewer;
 
 /**
  * 가게 손님 한 명의 몸 (자리 표시 도형: 원통 몸통 + 구 머리).
@@ -38,21 +39,67 @@ public:
 	// 앉아 있던 의자 칸 바닥으로 내려선다.
 	void StandUp();
 
+	void ShowPlate();
+	void AddSkewer(const FLinearColor& Color, const FVector& From, float Duration);
+	void PlacePlate(const FVector& Location);
+	void SetWaitingForBroth(bool bWaiting);
+	void StartDip(const FVector& BrothLocation, float Duration);
+	void ClearMeal();
+
 	// 걷는 속도 (cm/s).
 	UPROPERTY(EditAnywhere, Category = "Customer")
 	float WalkSpeed = 170.f;
+
+protected:
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
 	UPROPERTY() TObjectPtr<USceneComponent> Root;
 	UPROPERTY() TObjectPtr<USceneComponent> Body;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> Torso;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> Head;
+	UPROPERTY() TObjectPtr<USceneComponent> PlateAnchor;
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> Plate;
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> LeftGrip;
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> RightGrip;
+	UPROPERTY() TObjectPtr<UTextRenderComponent> BrothPrompt;
+	UPROPERTY() TArray<TObjectPtr<AHGSkewer>> Stack;
+	UPROPERTY() TObjectPtr<AHGSkewer> DippingSkewer;
+	UPROPERTY() TObjectPtr<AHGSkewer> PickingSkewer;
+	FVector PickupStart = FVector::ZeroVector;
+	float PickupTime = 0.f;
+	float PickupDuration = 0.f;
+	FVector DipStart = FVector::ZeroVector;
+	FVector DipTarget = FVector::ZeroVector;
+	FRotator DipStartRotation = FRotator::ZeroRotator;
+	float DipTime = 0.f;
+	float DipDuration = 0.f;
+
+	void TickMeal(float DeltaSeconds);
+	void UpdateStackSway(float DeltaSeconds, bool bWalking);
 
 	TArray<FVector> Path;
 	bool bSeated = false;
 	bool bVoxelBody = false;
 	float WalkTime = 0.f;
+	float StackSwayWeight = 0.f;
 	FVector SeatFloor = FVector::ZeroVector;
+};
+
+/** 진열대와 접시에서 함께 쓰는 임시 꼬치. */
+UCLASS()
+class HUOGUOHUOGUO_API AHGSkewer : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	AHGSkewer();
+	static constexpr float StackSpacing = 13.f;
+	void SetFoodColor(const FLinearColor& Color);
+
+private:
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> Stick;
+	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> FoodPieces;
 };
 
 /**
