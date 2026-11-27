@@ -373,7 +373,7 @@ def ensure_scan_material():
 
 LOOK_TOON_MATERIAL = "/Game/HG/Materials/M_HG_LookToon"
 # 그림체 비교 머티리얼 판 번호. 계산식이나 연결을 바꾸면 올린다 (옛 판을 지우고 다시 만든다).
-LOOK_VERSION = 8.0
+LOOK_VERSION = 10.0
 
 # 셀 셰이딩 (톤 매핑 전, HDR 화면 색). 화면의 각 점에서
 #   빛 = 화면 색 / 바탕색(GBuffer BaseColor). 빛의 밝기(휘도)를 로그 눈금으로 Stops(단) 간격 계단으로 끊고,
@@ -382,6 +382,10 @@ LOOK_VERSION = 8.0
 # 윤곽선: 깊이의 역수(1/깊이)를 가로, 세로로 이계 미분한다. 평평한 면은 1/깊이가 화면에서 직선으로 변해서 0이 되고,
 #   물체 테두리(뒤의 먼 것과 겹친 곳)에서만 커진다. 복셀 계단 하나하나에는 선이 생기지 않게 깊이만 쓴다.
 #   Line(선 세기)이 0이면 선을 그리지 않는다.
+#   직교 투영(경영 화면, 2026-11-28 판 10): 평평한 면은 깊이 자체가 화면에서 직선으로 변한다. 그래서 1/깊이 대신 -깊이를 쓴다
+#   (부호를 뒤집어 "앞쪽 물체 = 음수" 규칙을 원근과 같게 맞춘다). 상대 크기로 나누는 값도 1/깊이 대신 깊이.
+#   어느 쪽인지는 파라미터 Ortho(0/1)로 받는다. 플레이어 컨트롤러가 카메라 투영 방식을 보고 넣는다
+#   (셰이더 안의 엔진 함수 IsOrthoProjection()을 썼더니 이 머티리얼이 원근 화면까지 깨져서 값으로 넘기는 방식으로 바꿨다).
 # 하늘(아주 먼 곳)과 바탕색이 거의 검은 곳(빛을 받지 않는 하늘 돔, 우주)은 계단을 넣지 않는다.
 TOON_HLSL = """
 float3 c = Scene.rgb;
@@ -407,11 +411,18 @@ if (Stops > 0.001 && max(max(b.r, b.g), b.b) > 0.02 && d0 < SkyDepth)
 // 그래서 이웃은 늘 정수 픽셀(최소 1) 떨어진 곳을 읽고, 1보다 얇은 굵기는 1px 선의 진하기로 낸다.
 float w = max(1.0, floor(LineWidth + 0.5));
 float thin = saturate(LineWidth);
-float iz0 = 1.0 / d0;
-float izL = 1.0 / max(SceneTextureFetch(PPI_SceneDepth, float2(-w, 0)).r, 1.0);
-float izR = 1.0 / max(SceneTextureFetch(PPI_SceneDepth, float2(w, 0)).r, 1.0);
-float izU = 1.0 / max(SceneTextureFetch(PPI_SceneDepth, float2(0, -w)).r, 1.0);
-float izD = 1.0 / max(SceneTextureFetch(PPI_SceneDepth, float2(0, w)).r, 1.0);
+// 원근이면 1/깊이, 직교면 -깊이 (위 설명). norm은 상대 크기로 나누는 값 (원근 1/깊이, 직교 깊이).
+bool ortho = Ortho > 0.5;
+float dL = max(SceneTextureFetch(PPI_SceneDepth, float2(-w, 0)).r, 1.0);
+float dR = max(SceneTextureFetch(PPI_SceneDepth, float2(w, 0)).r, 1.0);
+float dU = max(SceneTextureFetch(PPI_SceneDepth, float2(0, -w)).r, 1.0);
+float dD = max(SceneTextureFetch(PPI_SceneDepth, float2(0, w)).r, 1.0);
+float iz0 = ortho ? -d0 : 1.0 / d0;
+float izL = ortho ? -dL : 1.0 / dL;
+float izR = ortho ? -dR : 1.0 / dR;
+float izU = ortho ? -dU : 1.0 / dU;
+float izD = ortho ? -dD : 1.0 / dD;
+float norm = ortho ? d0 : iz0;
 // 부호를 본다: 앞쪽 물체의 테두리 점은 옆이 먼 배경이라 값이 음수, 배경 쪽 점은 양수다.
 // 음수 쪽(앞쪽 물체)에만 선을 그어서 테두리 안팎 두 겹이 아니라 한 겹만 생긴다 (선이 절반 굵기).
 // 땅의 꺾임 빼기: 진짜 테두리는 한쪽 이웃만 갑자기 멀어지고 다른 쪽은 거의 그대로다.
@@ -419,13 +430,13 @@ float izD = 1.0 / max(SceneTextureFetch(PPI_SceneDepth, float2(0, w)).r, 1.0);
 //   그래서 이계 미분이 "작은 쪽 변화"의 Ratio배를 넘을 때만 선으로 본다.
 float lx = -(izL + izR - 2.0 * iz0);
 float ly = -(izU + izD - 2.0 * iz0);
-float ex = smoothstep(LineDepth, LineDepth * 2.0, lx / iz0) * step(Ratio * min(abs(izL - iz0), abs(izR - iz0)), lx);
-float ey = smoothstep(LineDepth, LineDepth * 2.0, ly / iz0) * step(Ratio * min(abs(izU - iz0), abs(izD - iz0)), ly);
+float ex = smoothstep(LineDepth, LineDepth * 2.0, lx / norm) * step(Ratio * min(abs(izL - iz0), abs(izR - iz0)), lx);
+float ey = smoothstep(LineDepth, LineDepth * 2.0, ly / norm) * step(Ratio * min(abs(izU - iz0), abs(izD - iz0)), ly);
 // 옅은 선 (높낮이): 언덕 능선이 뒤쪽 땅을 가리는 곳처럼 깊이 차이가 작은 테두리에 FaintLine 세기로 긋는다.
 //   능선 앞쪽은 비스듬한 비탈이라 이웃 변화가 커서 Ratio(4)로는 걸러지므로, 더 느슨한 FaintRatio를 쓴다.
 //   둥근 땅이나 완만한 꺾임은 이계 미분이 이웃 변화보다 훨씬 작아서 여전히 걸러진다.
-float fx = smoothstep(FaintLineDepth, FaintLineDepth * 2.0, lx / iz0) * step(FaintRatio * min(abs(izL - iz0), abs(izR - iz0)), lx);
-float fy = smoothstep(FaintLineDepth, FaintLineDepth * 2.0, ly / iz0) * step(FaintRatio * min(abs(izU - iz0), abs(izD - iz0)), ly);
+float fx = smoothstep(FaintLineDepth, FaintLineDepth * 2.0, lx / norm) * step(FaintRatio * min(abs(izL - iz0), abs(izR - iz0)), lx);
+float fy = smoothstep(FaintLineDepth, FaintLineDepth * 2.0, ly / norm) * step(FaintRatio * min(abs(izU - iz0), abs(izD - iz0)), ly);
 float edge = max(max(ex, ey), max(fx, fy) * FaintLine) * Line * thin;
 // 커스텀 스텐실이 NoLineStencil(1)인 점(외계 식물)은 선을 긋지 않는다.
 // 커스텀 깊이는 화면 깊이와 따로 그려져서, 언덕 뒤에 가려진 식물도 스텐실이 찍혀 있다.
@@ -514,7 +525,7 @@ def ensure_look_materials():
         # 톤 매핑 전 (HDR 빛 값으로 계단을 끊는다). 5.4부터 이름이 BL_SCENE_COLOR_AFTER_DOF.
         _set_location(mat, ("BL_SCENE_COLOR_AFTER_DOF", "BL_BEFORE_TONEMAPPING"))
         names = ["Scene", "Base", "Depth", "Stencil", "CDepth", "Stops", "Soft", "Saturation", "SkyDepth", "LineWidth", "LineDepth", "Ratio", "FaintLineDepth", "FaintRatio", "FaintLine", "Line",
-                 "NoLineStencil", "LineColor"]
+                 "NoLineStencil", "Ortho", "LineColor"]
         custom = _custom_with_inputs(mel, mat, TOON_HLSL, names)
         _scene_texture(mel, mat, custom, ids.PPI_POST_PROCESS_INPUT0, "Scene", -620)
         _scene_texture(mel, mat, custom, ids.PPI_BASE_COLOR, "Base", -500)
@@ -523,7 +534,7 @@ def ensure_look_materials():
         _scene_texture(mel, mat, custom, ids.PPI_CUSTOM_DEPTH, "CDepth", -140)
         _params(mel, mat, custom,
                 (("Stops", 1.0), ("Soft", 0.08), ("Saturation", 1.2), ("SkyDepth", 2000000.0), ("LineWidth", 0.5), ("LineDepth", 0.004),
-                 ("Ratio", 4.0), ("FaintLineDepth", 0.002), ("FaintRatio", 1.5), ("FaintLine", 0.35), ("Line", 1.0), ("NoLineStencil", 1.0), ("LookVersion", LOOK_VERSION)),
+                 ("Ratio", 4.0), ("FaintLineDepth", 0.002), ("FaintRatio", 1.5), ("FaintLine", 0.35), ("Line", 1.0), ("NoLineStencil", 1.0), ("Ortho", 0.0), ("LookVersion", LOOK_VERSION)),
                 (("LineColor", unreal.LinearColor(0.12, 0.09, 0.11, 1)),), -120)
         mel.connect_material_property(custom, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
         mel.recompile_material(mat)

@@ -110,6 +110,19 @@ void AHGPlayerControllerBase::PlayerTick(float DeltaTime)
 	{
 		ApplyLook(Wanted);
 	}
+	// 윤곽선 계산은 카메라 투영 방식(원근 / 직교, 경영 화면은 직교)에 따라 달라서 셀 셰이딩 머티리얼에 알려 준다.
+	// 바뀌었을 때만 넣는다 (평소 프레임에는 bool 비교 하나).
+	if (ToonMaterial && PlayerCameraManager)
+	{
+		const bool bOrtho = PlayerCameraManager->GetCameraCacheView().ProjectionMode == ECameraProjectionMode::Orthographic;
+		if (bOrtho != bAppliedOrtho || !bOrthoApplied)
+		{
+			ToonMaterial->SetScalarParameterValue(TEXT("Ortho"), bOrtho ? 1.f : 0.f);
+			bAppliedOrtho = bOrtho;
+			bOrthoApplied = true;
+			UE_LOG(LogHuoguo, Log, TEXT("[Look] M_HG_LookToon Ortho = %d (카메라 %s)"), bOrtho ? 1 : 0, bOrtho ? TEXT("직교") : TEXT("원근"));
+		}
+	}
 	// 조절 값은 프로젝트 설정 → Game → HG 그림체(UHGLookSettings, DefaultGame.ini)에 있다.
 	// 설정 번호(Revision)가 바뀌었을 때(PIE 중에 설정 화면에서 값을 바꿈)나 머티리얼 인스턴스를 새로 만들었을 때만 넣는다.
 	// 평소 프레임에는 정수 비교 하나로 끝난다.
@@ -162,8 +175,9 @@ void AHGPlayerControllerBase::ApplyLook(int32 Look)
 			if (UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/HG/Materials/M_HG_LookToon.M_HG_LookToon")))
 			{
 				ToonMaterial = UMaterialInstanceDynamic::Create(Base, this);
-				// 머티리얼 인스턴스를 새로 만들었으니 다음 PlayerTick에서 설정 값을 넣게 한다.
+				// 머티리얼 인스턴스를 새로 만들었으니 다음 PlayerTick에서 설정 값과 투영 방식을 넣게 한다.
 				AppliedSettingsRevision = -1;
+				bOrthoApplied = false;
 			}
 			else
 			{

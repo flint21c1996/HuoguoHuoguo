@@ -145,6 +145,10 @@ private:
 	// 지금 화면에 얹은 그림체 번호. -1이면 아직 한 번도 맞추지 않았다.
 	int32 AppliedLook = -1;
 
+	// 셀 셰이딩 머티리얼에 마지막으로 넣은 투영 방식 (Ortho 파라미터). bOrthoApplied가 false면 아직 안 넣었다.
+	bool bAppliedOrtho = false;
+	bool bOrthoApplied = false;
+
 	// 머티리얼 인스턴스에 마지막으로 넣은 설정 번호 (UHGLookSettings::Revision). 다르면 그때만 값을 다시 넣는다.
 	int32 AppliedSettingsRevision = -1;
 
