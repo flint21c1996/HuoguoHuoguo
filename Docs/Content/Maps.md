@@ -1,6 +1,6 @@
 # Maps - 맵 에셋
 
-> 경로: `Content/HG/Maps/` (`Legacy/` = 안 쓰는 옛 맵, `Development/` = 개발용 맵) · 마지막 갱신: 2026-11-27
+> 경로: `Content/HG/Maps/` (`Legacy/` = 안 쓰는 옛 맵, `Development/` = 개발용 맵) · 마지막 갱신: 2026-11-28
 
 ## 역할
 
@@ -23,7 +23,11 @@
 - 주의: 처음 콘텐츠 브라우저에서 복제한 4개는 액터가 0개인 빈 맵이었다 (생성기도 조명도 없어 행성이 안 생김).
   커맨드렛으로 `Legacy/L_PlanetSurface`를 같은 이름으로 다시 복사해 고쳤다 (액터 5개). 소형 행성에서 생성까지 확인 (109ms).
   맵을 새로 복제한 뒤에는 아웃라이너에 액터가 들어 있는지 확인한다.
-- 네 맵 모두 안은 같다: 조명, 생성기(`AHGPlanetGenerator`, 고른 행성 값으로 지형을 만듦), 게임 모드 `BP_HG_ExploreGameMode`.
+- 네 맵 모두 안은 같다: 조명, 생성기(`BP_HG_PlanetGenerator`, 고른 행성 값으로 지형을 만듦).
+- 게임 모드는 환경마다 따로다 (2026-11-28): `L_Planet_Small` → `BP_HG_ExploreGameMode_PlanetSmall`, `_PlanetMedium`, `_PlanetLarge`, `_AsteroidField`, `_Derelict`.
+  각 게임 모드의 Default Pawn = `BP_HG_Explorer_<환경>`, 그 애님 = `ABP_HG_Boss_<환경>` (`Docs/Content/Blueprints.md`).
+  `Development/L_PlanetMaker`, `Legacy/` 맵은 바탕 `BP_HG_ExploreGameMode`(캐릭터 `BP_HG_Explorer`)를 그대로 쓴다.
+- 행성 맵의 생성기는 C++ 클래스에서 `BP_HG_PlanetGenerator`로 바꿨다 (2026-11-28, 값 그대로. 평지 맵의 `bFlatSite`/`FlatHalfExtent`도 확인).
 - 중력 규칙(사용자 의견): 점프 손맛은 모든 행성에서 거의 같게. 큰 행성이라고 점프가 낮아지면 재미가 없다. 크기 차이는 지평선, 탐험 범위로 보인다.
 
 ## 맵
@@ -44,8 +48,9 @@
 - 아웃라이너 폴더: `Lighting`, `Gameplay`, `Shop/Structure`, `Shop/Kitchen`, `Shop/Hall`, `Shop/Props`
 - 카메라 쪽 두 벽(서, 남)은 발목 높이, 먼 쪽 두 벽(동, 북)은 높게 (기본 카메라 45도 기준).
 - 주방(카운터, 화구 2개, 마라탕/백탕), 재료 진열대, 도착 전광판, 에어록 문.
-- 홀(`Shop/Hall`): 가구 액터 `Table_0~3`(`HGTable`, (-300,-250) (100,-250) (-300,50) (100,50))과 `Chair_0~3`(`HGChair`, 각 식탁 남쪽 105, Yaw 90). 경영 파트에서 옮기거나 치울 수 있는 처음 배치다. 예전 도형 묶음(Table_N_Top/Leg/Pot/Seat)은 `upgrade_station()`이 이것으로 바꿨다.
-- 게임플레이: `ShopCameraAnchor`(원점, Yaw 45 = 카메라 처음 방향), `ExplorerStart_Default`(-100, 220, 사장님 시작), `ExplorerStart_FromPlanet`(-450, 250, 행성에서 귀환), `TravelPad_Airlock`(-450, 400, 60, 다이빙 발판 → `L_PlanetSurface`).
+- 홀(`Shop/Hall`): 가구 액터 `Table_0~3`(`BP_HG_Furniture` ID `Table`, (-300,-250) (100,-250) (-300,50) (100,50))과 `Chair_0~3`(ID `Chair`, 각 식탁 남쪽 105, Yaw 90). 경영 파트에서 옮기거나 치울 수 있는 처음 배치다. 예전 도형 묶음(Table_N_Top/Leg/Pot/Seat)은 `upgrade_station()`이 이것으로 바꿨다.
+- 게임플레이: `ShopCameraAnchor`(`BP_HG_ShopCameraAnchor`, 원점, Yaw 45 = 카메라 처음 방향), `PlayerStart_Default`(엔진 PlayerStart, 태그 Default, -100, 220, 사장님 시작), `PlayerStart_FromPlanet`(태그 FromPlanet, -450, 250, 행성에서 귀환), `TravelPad_Airlock`(`BP_HG_TravelPad`, -450, 400, 60, 다이빙 발판 → `L_PlanetSurface`).
+- 2026-11-28: 시작점을 엔진 PlayerStart로, 가구/발판/카메라 기준점을 C++ 클래스에서 BP로 바꿨다 (값과 위치 그대로, 엔진 Convert Actors). 가구 ID는 변환 때 비어서 다시 넣었다.
 - 조명: DirectionalLight, SkyAtmosphere, SkyLight(실시간 캡처).
 - `PostProcess_Station`(무한 범위, 노출 EV100 2.0 고정). 자동 노출을 두면 멀리 줌아웃했을 때 화면 대부분이 어두운 우주가 되어 카메라가 밝기를 끌어올리고 가게가 하얗게 날아갔다.
   측정(FOV를 넓혀 멀리 보기를 흉내): 자동 노출일 때 가게 바닥 밝기가 가까이 175 → 멀리 254(거의 흰색), EV 2.0 고정 후 168 → 179. 가까이 본 모습은 자동 노출일 때와 거의 같다. 에디터에서 이 볼륨의 Exposure Min/Max Brightness를 고쳐 밝기를 바꾼다.
@@ -62,6 +67,7 @@
 ### Legacy/L_Asteroid_Krak7 - 이전 손배치 소행성 (연결 끊김)
 - 탐험 파트 (GameMode = `BP_HG_ExploreGameMode`). 지름 40m 평평한 원판과 바위 26개, 재료 표식 9개. 절차적 행성으로 대체되어 지금은 어느 발판도 이리로 보내지 않는다.
 - 이 맵의 귀환 발판은 `FromAsteroid` 태그로 보내는데 정거장에 그 시작점이 없어서 `Default`로 대체된다. 지울지 결정이 필요하다.
+- 2026-11-28: 시작점 `PlayerStart_FromStation`(엔진 PlayerStart), 발판 `BP_HG_TravelPad`로 바꿨다.
 
 ## 흐름 / 규칙
 

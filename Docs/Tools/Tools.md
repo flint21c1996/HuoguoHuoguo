@@ -1,6 +1,6 @@
 # Tools - 빌드, 맵 생성, 문서 색인 스크립트
 
-> 경로: `Tools/` · 마지막 갱신: 2026-11-26
+> 경로: `Tools/` · 마지막 갱신: 2026-11-28
 
 ## 스크립트
 
@@ -26,6 +26,7 @@ powershell -ExecutionPolicy Bypass -File .\Tools\Invoke-HGBuild.ps1
 - `ensure_scan_material()`: 스캐너 파동 화면 효과 `M_HG_ScanPulse`(포스트 프로세스)를 만든다. 이 도구만 만드는 효과라 판 번호 `ScanVersion`이 `SCAN_VERSION`과 다르면 지우고 다시 만든다 (같으면 건너뛴다). 이웃 파라미터는 4칸이라 RGBA 출력에 잇는다 (RGB에 이었다가 셰이더 컴파일이 실패했다).
 - `ensure_look_materials()`: 그림체 비교 화면 효과 `M_HG_LookToon`(셀 셰이딩, 톤 매핑 전)을 만든다. HLSL은 `TOON_HLSL`. 판 번호 `LookVersion`이 `LOOK_VERSION`(지금 8)과 다르면 지우고 다시 만든다. Custom 노드에서 깊이와 GBuffer를 읽으려면 그 화면 텍스처 노드(SceneTexture)를 Custom 입력에 이어 둬야 엔진이 텍스처를 묶는다.
 - `ensure_fixed_exposure(label, ev)`: 맵 전체 노출을 고정하는 포스트 프로세스 볼륨. 없을 때만 만들고, 있으면 에디터에서 고친 값을 존중해 건드리지 않는다. 정거장은 `STATION_EXPOSURE_EV`(2.0). 값을 맞춰 볼 때는 환경 변수 `HG_STATION_EXPOSURE`를 주고 실행하면 그 값으로 덮어쓴다.
+- 새 맵에 놓는 게임 액터 (2026-11-28): C++ 클래스 대신 BP(`ACTOR_BPS`: 발판, 생성기, 카메라 기준점, 가구)를 놓는다. BP가 없으면 C++ 클래스. 시작점은 엔진 PlayerStart(`player_start`, Player Start Tag). 예전 `HGExplorerStart`는 지웠다.
 - `MAP_GAME_MODES`: 맵마다 World Settings GameMode를 정한다 (L_Station = 경영, 나머지 = 탐험). 새 맵을 만들 때와 이미 있는 맵 모두에 적용한다.
   값은 (C++ 클래스, 블루프린트 경로). `/Game/HG/BluePrint/Game`의 게임 모드 BP가 있으면 BP를, 없으면 C++ 클래스를 넣는다. BP 자체는 만들거나 고치지 않는다.
 - `upgrade_station()` / `upgrade_existing_map()`: (2026-11-27부터 부르지 않음) 예전에 이미 있는 맵의 값(게임 모드, 에어록 발판, 시작점, 홀 가구)을 새 규칙으로 바꾸던 함수. 손으로 고친 맵을 덮어쓸 수 있어서 기록으로만 남긴다.

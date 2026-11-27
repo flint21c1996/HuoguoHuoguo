@@ -1,6 +1,6 @@
 # Explore - 탐험 파트 (3인칭으로 행성을 걷고 재료를 캐고 미니맵을 본다)
 
-> 경로: `Game/HGExploreGameMode`, `Player/HGExplore*`·`HGExplorerCharacter`, `UI/`, `World/Scan/` (Source/HuoguoHuoguo 기준) · 마지막 갱신: 2026-11-24
+> 경로: `Game/HGExploreGameMode`, `Player/HGExplore*`·`HGExplorerCharacter`, `UI/`, `World/Scan/` (Source/HuoguoHuoguo 기준) · 마지막 갱신: 2026-11-28
 
 ## 역할
 
@@ -9,7 +9,8 @@
 ## 파일
 
 ### HGExploreGameMode (.h/.cpp)
-- `PlayerControllerClass = AHGExplorePlayerController`. L_PlanetSurface, Legacy/L_Asteroid_Krak7의 World Settings에서 지정.
+- `PlayerControllerClass = AHGExplorePlayerController`, `DefaultPawnClass = AHGExplorerCharacter`. 환경 맵마다 이것의 BP(`BP_HG_ExploreGameMode_<환경>`)를 World Settings에서 지정한다.
+- 행성 맵의 스폰: 생성기 지형을 먼저 만들고 착륙 지점에 엔진 표준 스폰 (`Docs/Source/Game.md`).
 - 프로젝트 기본 게임 모드이기도 하다 (지정 없는 시험용 맵을 열면 바로 걸어 다닐 수 있게).
 
 ### HGExplorerCharacter (.h/.cpp)
@@ -26,10 +27,13 @@
 
 ### HGExplorePlayerController (.h/.cpp)
 `AHGPlayerControllerBase` 상속.
-- 맵 시작: `AHGPlanetGenerator`가 있으면 `EnsureGenerated()` 후 `GetLandingTransform()`(북극)에 사장님을 만들고 구형 중력을 켠다. 없으면 도착 태그의 `AHGExplorerStart`. 우주복 차림.
-  만드는 클래스 = `ExplorerClass`(블루프린트에서 정함, 지금 `BP_HG_Explorer`). 비어 있으면 `AHGExplorerCharacter`.
+- 맵 시작 (2026-11-28부터): 사장님은 게임 모드가 엔진 표준 흐름으로 만들어 빙의시킨다 (행성 맵은 착륙 지점, 아니면 PlayerStart. `Docs/Source/Game.md`).
+  어떤 캐릭터인지는 환경 맵의 게임 모드 BP(`BP_HG_ExploreGameMode_<환경>`)의 Default Pawn Class(`BP_HG_Explorer_<환경>`)가 정한다.
+  컨트롤러는 빙의된 사장님(`GetPawn()`)에 환경 규칙(구형/고정/여러 천체 중력, 무중력 비행, 떨어짐 복귀)을 켜고 입력과 화면을 준비한다.
+  예전 `ExplorerClass` 속성은 지웠다.
   평지 행성 맵(생성기 `IsFlatSite()`)이면 구형 중력 대신 아래 방향 고정 중력 + 떨어짐 복귀(착륙 지점)를 켠다. 스캐너는 `GetGravityRadius()`(평지면 땅 아래 100km 중심까지 거리)로 퍼진다. 미니맵은 레이더로 그린다.
 - 시험 명령 `HGWarpTo X Y Z` (2026-11-27): 사장님을 월드 좌표로 순간 이동 (떨어짐 복귀 확인용).
+- `ScanWaveClass` (2026-11-28): 스캐너 파동 클래스. `BP_HG_ExplorePlayerController`에서 `BP_HG_ScanWave`. 비어 있으면 C++ 클래스.
 - 조작 (`IMC_Explore`, 커서 숨김, GameOnly): WASD 이동(카메라 기준), 마우스 시점, Space 점프, E 채집, 마우스 휠 = 카메라 거리(`IA_Explore_Zoom`).
   - 카메라 "위": 사장님 몸의 중력 기준을 그대로 쓰지 않고 지수적으로 늦게 따라간다 (`CameraUpFollowSpeed` 3, 약 0.33초에 차이 63% 감소). 가까운 소행성으로 뛰면 "위"가 크게 뒤집히고 착지 때 몸이 남은 각도를 한 번에 맞추는데, 카메라가 그대로 따라 돌아 순간이동처럼 보였다 (사용자 의견). 로그 `[Cam]`: 공중 최대 회전 속도와 착지 때 몸과 카메라의 위 차이. 확인됨: 점프 세 번에 최대 초속 144 ~ 178도, 착지 때 차이 18 ~ 90도를 착지 뒤 부드럽게 맞춤 (예전에는 한 프레임에 맞춤).
   - 카메라 거리: 휠 한 칸에 목표 거리의 12%씩(`ZoomStep`, 가까울 때 잘게, 멀 때 크게), 1.8 ~ 16m(`MinArmLength`/`MaxArmLength`, 기본 4.2m). 실제 거리는 목표로 부드럽게 따라간다(`ZoomSpeed` 10). 맵을 옮기면 기본 거리로 돌아간다. 확인됨: 휠을 뒤로 8칸 굴리면 본 소행성 전체가 보이는 거리까지 멀어짐.

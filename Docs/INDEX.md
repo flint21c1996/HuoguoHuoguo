@@ -148,6 +148,7 @@
 - 역할
 - 파일
   - HGBossCharacter (.h/.cpp)
+  - HGBossAnimInstance (.h/.cpp) (2026-11-28)
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
 
@@ -175,7 +176,7 @@
 - 역할
 - 파일
   - HGShopCameraAnchor (.h/.cpp)
-  - HGExplorerStart (.h/.cpp)
+  - 시작점 = 엔진 PlayerStart (2026-11-28)
   - HGTravelPad (.h/.cpp)
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
@@ -185,7 +186,8 @@
 ### [Blueprints - 기획/아트가 직접 고치는 클래스 설정](Content/Blueprints.md)
 
 - 역할
-- 연결 순서
+- 연결 순서 (2026-11-28, Under One Umbrella와 같은 방식)
+- 월드/가게 액터 BP (2026-11-28, UOU의 `BluePrint/World/<종류>/BP_*` 방식)
 - 주인공 모델 에셋 (`Content/ArtSource/`: 메시 `Fbx/Characters/Player`, 머티리얼 `Material/Character`, 텍스처 `Texture/Character`)
 - 주인공 애니메이션 (애니메이션 `Content/ArtSource/Fbx/Animation/Character`, ABP/블렌드 스페이스/리그 `Content/HG/Player/Animations`) (2026-11-27)
 - 알려진 문제와 다음 할 일

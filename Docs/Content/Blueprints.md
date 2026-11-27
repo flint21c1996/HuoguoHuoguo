@@ -1,6 +1,6 @@
 # Blueprints - 기획/아트가 직접 고치는 클래스 설정
 
-> 경로: `Content/HG/BluePrint/Game/`, `Content/HG/Player/`, `Content/ArtSource/` · 마지막 갱신: 2026-11-27
+> 경로: `Content/HG/BluePrint/Game/`, `Content/HG/Player/`, `Content/ArtSource/` · 마지막 갱신: 2026-11-28
 
 ## 역할
 
@@ -8,22 +8,46 @@ C++는 기능과 규칙을 맡고, "어떤 모델/값을 쓸지"는 블루프린
 코드를 고치거나 빌드하지 않고 에디터에서 바꿀 수 있게 하려는 것이다.
 도구(`Tools/GenerateGreyboxMaps.py`)는 이 블루프린트를 만들거나 고치지 않고, 맵이 가리키게만 한다.
 
-## 연결 순서
+## 연결 순서 (2026-11-28, Under One Umbrella와 같은 방식)
 
-맵 World Settings의 GameMode Override → 게임 모드 BP → 컨트롤러 BP → 사장님 BP.
+맵 World Settings의 GameMode Override → 게임 모드 BP(Player Controller Class, **Default Pawn Class**) → 사장님 BP(Mesh의 Anim Class) → 애님 BP.
+사장님은 엔진 표준 흐름으로 게임 모드가 PlayerStart(행성 맵은 착륙 지점)에 만든다 (`Docs/Source/Game.md`). 예전에는 컨트롤러 BP의 Explorer Class / Shop Boss Class가 정했다 (지움).
 
-| 블루프린트 | 부모 (C++) | 여기서 정하는 것 |
+| 블루프린트 | 부모 | 여기서 정하는 것 |
 |---|---|---|
-| `BP_HG_ShopGameMode` | `AHGShopGameMode` | Player Controller Class = `BP_HG_ShopPlayerController` |
-| `BP_HG_ExploreGameMode` | `AHGExploreGameMode` | Player Controller Class = `BP_HG_ExplorePlayerController` |
-| `BP_HG_ShopPlayerController` | `AHGShopPlayerController` | Player > Shop Boss Class = `BP_HG_ShopBoss` |
-| `BP_HG_ExplorePlayerController` | `AHGExplorePlayerController` | Player > Explorer Class = `BP_HG_Explorer` |
-| `BP_HG_ShopBoss` | `AHGShopBossCharacter` | Mesh = `SK_HG_Boss`, 크기 1.8. 걷기 속도 등은 Character Movement, 아이소 카메라 값은 Camera\|Iso |
-| `BP_HG_Explorer` | `AHGExplorerCharacter` | Mesh = `SK_HG_Boss`, 크기 1.8. 점프/카메라/소행성 뛰기 값은 Jump, Camera, Hop, Float |
+| `BP_HG_ShopGameMode` | `AHGShopGameMode` | Player Controller = `BP_HG_ShopPlayerController`, Default Pawn = `BP_HG_ShopBoss` |
+| `BP_HG_ExploreGameMode` | `AHGExploreGameMode` | Player Controller = `BP_HG_ExplorePlayerController`, Default Pawn = `BP_HG_Explorer` (바탕) |
+| `BP_HG_ExploreGameMode_<환경>` (5개) | `BP_HG_ExploreGameMode` | Default Pawn = `BP_HG_Explorer_<환경>`. 환경: PlanetSmall, PlanetMedium, PlanetLarge, AsteroidField, Derelict |
+| `BP_HG_ShopPlayerController` | `AHGShopPlayerController` | 손님(Customer Director): Customer Class = `BP_HG_Customer`, Money Popup Class = `BP_HG_MoneyPopup`. 가구(Furniture Placer): Default Furniture Class = `BP_HG_Furniture` |
+| `BP_HG_ExplorePlayerController` | `AHGExplorePlayerController` | Scan > Scan Wave Class = `BP_HG_ScanWave` |
+| `BP_HG_ShopBoss` | `AHGShopBossCharacter` | Mesh = `SK_HG_Boss`, 크기 1.8, Anim Class = `ABP_HG_Boss_Shop`. 걷기 속도 등은 Character Movement, 아이소 카메라 값은 Camera\|Iso |
+| `BP_HG_Explorer` | `AHGExplorerCharacter` | Mesh = `SK_HG_Boss`, 크기 1.8. 점프/카메라/소행성 뛰기 값은 Jump, Camera, Hop, Float. 우주복 차림(Look) |
+| `BP_HG_Explorer_<환경>` (5개) | `BP_HG_Explorer` | Mesh의 Anim Class = `ABP_HG_Boss_<환경>`. 나머지는 바탕 값을 물려받는다. 환경마다 다르게 하고 싶은 값(점프, 카메라 등)만 여기서 바꾼다 |
 
-- 맵: `L_Station` → `BP_HG_ShopGameMode`, `L_PlanetSurface`·`Legacy/L_Asteroid_Krak7` → `BP_HG_ExploreGameMode`. 프로젝트 기본값도 `BP_HG_ExploreGameMode`.
-- 컨트롤러의 사장님 클래스가 비어 있으면 C++ 기본 클래스로 나타난다 (모델 없이 자리 표시).
+- 경로: 게임 모드 `Content/HG/BluePrint/Game/`, 사장님과 컨트롤러 `Content/HG/Player/Blueprints/`, 애님 BP `Content/HG/Player/Animations/AnimationBlueprints/`.
+- 맵: `L_Station` → `BP_HG_ShopGameMode`. 환경 맵 → 각자의 `BP_HG_ExploreGameMode_<환경>`. `L_PlanetMaker`·`Legacy/` → `BP_HG_ExploreGameMode`. 프로젝트 기본값도 `BP_HG_ExploreGameMode`.
+- 게임 모드의 Default Pawn이 비어 있으면 C++ 기본 클래스로 나타난다 (모델 없이 자리 표시).
 - 가게와 탐험은 사장님 BP가 따로라서, 나중에 가게 차림(앞치마)을 다른 모델로 둘 수 있다.
+- 만든 방법: 파이썬 커맨드렛 (BP 하위 클래스 만들기, CDO 값 넣기, 맵 World Settings 바꾸기). 확인됨: 정거장 → 중형/평지/소행성 지대 다이빙과 귀환에서 로그에 환경별 게임 모드와 캐릭터(`BP_HG_Explorer_PlanetMedium_C` 등)가 찍히고, 모델이 달리는 동작과 함께 보인다.
+
+## 월드/가게 액터 BP (2026-11-28, UOU의 `BluePrint/World/<종류>/BP_*` 방식)
+
+맵에 놓거나 게임이 스폰하는 C++ 액터마다 BP 하위 클래스를 둔다. 맵에는 BP를 놓고, 스폰하는 쪽은 BP 클래스를 속성으로 받는다 (비어 있으면 C++ 클래스).
+모델, 색, 크기 같은 "어떻게 보일지"는 앞으로 이 BP에서 바꾼다.
+
+| 블루프린트 | 부모 (C++) | 놓는 곳 / 스폰하는 곳 |
+|---|---|---|
+| `BluePrint/World/Travel/BP_HG_TravelPad` | `AHGTravelPad` | 정거장 에어록, Krak7 귀환 발판(맵). 행성/폐우주선 귀환 발판(생성기 `ReturnPadClass`) |
+| `BluePrint/World/Planet/BP_HG_PlanetGenerator` | `AHGPlanetGenerator` | 행성 맵 8개의 생성기. Return Pad Class = `BP_HG_TravelPad` |
+| `BluePrint/World/Camera/BP_HG_ShopCameraAnchor` | `AHGShopCameraAnchor` | 정거장 카메라 기준점 |
+| `BluePrint/World/Scan/BP_HG_ScanWave` | `AHGScanWave` | 스캐너 파동 (탐험 컨트롤러 `ScanWaveClass`) |
+| `BluePrint/Shop/Customer/BP_HG_Customer` | `AHGCustomer` | 손님 (Customer Director `CustomerClass`) |
+| `BluePrint/Shop/Customer/BP_HG_MoneyPopup` | `AHGMoneyPopup` | 계산 "+금액" 글자 (`MoneyPopupClass`) |
+| `BluePrint/Shop/Furniture/BP_HG_Furniture` | `AHGFurniture` | 정거장 처음 가구 8개(맵), CSV `ActorClass`가 빈 가구 (Furniture Placer `DefaultFurnitureClass`) |
+
+- 맵의 C++ 액터는 엔진 Convert Actors로 BP로 바꿨다 (이름표, 폴더, 위치, 값 그대로). 원래 클래스의 기본값과 같은 값은 옮겨지지 않는다 (가구 ID가 비어서 다시 넣었다).
+- 맵 생성 도구(`Tools/GenerateGreyboxMaps.py`)도 새 맵을 만들 때 이 BP를 놓는다 (BP가 없으면 C++ 클래스).
+- 확인됨: 정거장에서 손님 2명이 들어와 앉고, 평지 행성에서 스캔(재료 5개 감지)과 귀환 발판(`BP_HG_TravelPad_C_0`)으로 정거장 복귀.
 
 ## 주인공 모델 에셋 (`Content/ArtSource/`: 메시 `Fbx/Characters/Player`, 머티리얼 `Material/Character`, 텍스처 `Texture/Character`)
 
@@ -46,7 +70,12 @@ C++는 기능과 규칙을 맡고, "어떤 모델/값을 쓸지"는 블루프린
 - 언리얼 3인칭 템플릿의 마네킹 맨손 동작을 사장님 뼈대로 리타게팅했다. 원본 = 엔진 `Templates/TemplateResources/High/Characters`를 `Content/Characters/Mannequins`로 복사한 것.
 - `Rigs/IK_Mannequin`, `Rigs/IK_HG_Boss`: 뼈 이름이 같아서 체인 29개가 자동으로 맞았다. `Rigs/RTG_Mannequin_To_HGBoss`: 사장님 T자세를 마네킹 A자세에 자동 정렬.
 - `Anims/ABP_HG_Boss` (템플릿 `ABP_Unarmed`를 복사), `BS_Idle_Walk_Run`, 서기/걷기 8방향/뛰기 8방향/점프/떨어지기/착지 21개.
-- `BP_HG_Explorer`, `BP_HG_ShopBoss`의 Mesh > Anim Class = `ABP_HG_Boss`. 다른 애니메이션 블루프린트로 바꾸려면 여기만 바꾼다.
+- 환경별 애님 BP (2026-11-28): `ABP_HG_Boss`를 복제한 `ABP_HG_Boss_Shop`, `_PlanetSmall`, `_PlanetMedium`, `_PlanetLarge`, `_AsteroidField`, `_Derelict`.
+  지금은 모두 원본과 같은 그래프다. 환경마다 다른 동작(무중력에서 떠 있는 자세, 가게 걷기 등)은 각자의 그래프에서 고친다.
+  `ABP_HG_Boss`는 쓰지 않는 바탕(새 환경 애님 BP를 만들 때 복제할 원본)으로 남긴다.
+- 모든 애님 BP의 부모 = C++ `UHGBossAnimInstance` (`Docs/Source/Player.md`): `Speed`, `VerticalSpeed`, `IsMoving`, `IsInAir`, `IsFloating`을 캐릭터의 위(중력) 기준으로 준다.
+  그래프는 아직 템플릿 변수를 읽는다. 행성 옆면에서도 맞게 하려면 그래프 노드를 이 변수로 바꾼다.
+- 어떤 애님 BP를 쓸지는 사장님 BP의 Mesh > Anim Class (`BP_HG_ShopBoss` = `_Shop`, `BP_HG_Explorer_<환경>` = `_<환경>`).
 - 리타겟 자세 조정 (2~3등신 몸): 척추/목/머리는 자동 정렬을 되돌려 사장님 원래 자세(똑바로)를 쓴다 (마네킹의 굽은 자세에 맞추면 큰 머리 때문에 구부정해 보임).
   팔은 자동 정렬 각의 60%만 내린다 (덜 내려야 동작할 때 팔이 두꺼운 배를 뚫지 않고 바깥으로 벌어진다).
 - 발 IK 컨트롤 리그 `Rigs/CR_HG_Boss_FootIK`: 템플릿 `CR_Mannequin_FootIK`를 옮겨 와 고친 것. ABP가 하드 참조한다.

@@ -1,6 +1,6 @@
 # Shop - 경영 파트 (아이소 시점, 칸 배치와 콤보, 손님)
 
-> 경로: `Game/HGShopGameMode`, `Player/HGShop*`, `Shop/Core/`·`Customer/`·`Furniture/`, `World/Light/`, `World/Camera/` (Source/HuoguoHuoguo 기준) · 마지막 갱신: 2026-11-24
+> 경로: `Game/HGShopGameMode`, `Player/HGShop*`, `Shop/Core/`·`Customer/`·`Furniture/`, `World/Light/`, `World/Camera/` (Source/HuoguoHuoguo 기준) · 마지막 갱신: 2026-11-28
 
 ## 역할
 
@@ -14,7 +14,7 @@ B로 가구 배치 모드에 들어가 정해진 칸 위에 식탁, 의자, 장�
 ## 파일
 
 ### HGShopGameMode (.h/.cpp)
-- `PlayerControllerClass = AHGShopPlayerController`. L_Station의 World Settings에서 지정.
+- `PlayerControllerClass = AHGShopPlayerController`, `DefaultPawnClass = AHGShopBossCharacter`. L_Station의 World Settings에는 BP `BP_HG_ShopGameMode`(Default Pawn = `BP_HG_ShopBoss`).
 
 ### HGShopBossCharacter (.h/.cpp)
 `AHGBossCharacter` 상속. 경영용 사장님 + 아이소 카메라.
@@ -26,8 +26,9 @@ B로 가구 배치 모드에 들어가 정해진 칸 위에 식탁, 의자, 장�
 
 ### HGShopPlayerController (.h/.cpp)
 `AHGPlayerControllerBase` 상속.
-- 맵 시작: 도착 태그(`FromPlanet` 등)에 맞는 `AHGExplorerStart`에 경영용 사장님을 만든다.
-  만드는 클래스 = `ShopBossClass`(블루프린트에서 정함, 지금 `BP_HG_ShopBoss`). 비어 있으면 `AHGShopBossCharacter`. 카메라 처음 방향 = `AHGShopCameraAnchor`의 Yaw(없으면 시작점 Yaw).
+- 맵 시작 (2026-11-28부터): 경영용 사장님은 게임 모드가 엔진 표준 흐름으로 도착 태그(`FromPlanet` 등)의 PlayerStart에 만들어 빙의시킨다.
+  어떤 사장님인지는 `BP_HG_ShopGameMode`의 Default Pawn Class(`BP_HG_ShopBoss`). 예전 `ShopBossClass` 속성은 지웠다.
+  카메라 처음 방향 = `AHGShopCameraAnchor`(맵에는 `BP_HG_ShopCameraAnchor`)의 Yaw(없으면 시작점 Yaw).
 - 조작 (`IMC_Shop`, 커서 보임, GameAndUI)
   - WASD: 사장님 이동. 카메라 Yaw 기준이라 W = 화면 위쪽. (`AHGBossCharacter::Move`)
   - 우클릭 드래그: 카메라 좌우 자유 회전. 우클릭을 누르는 동안만 마우스 X를 `AddYawInput`. 커서는 손님/UI 클릭용으로 남겨 둔다.
@@ -77,7 +78,9 @@ B로 가구 배치 모드에 들어가 정해진 칸 위에 식탁, 의자, 장�
   - 충돌 부품은 보이지 않는 채로 그대로 만든다. 배치 검사, 사장님 막기, 칸 판정은 기본 도형일 때와 같다.
   - 그래서 데이터를 고치지 않고 19종 모두 복셀로 보인다. `HGVoxel`은 맵의 가구를 모두 다시 만든다 (`Rebuild`, 김과 밤 불빛 상태 유지).
 - 밤 불빛(`SetLightAnchor`, `SetNightLight`): 생김새를 만들 때 불빛 자리를 정하면 점광원 하나를 단다 (그림자 없음, 반경 450, 칸델라). 식탁 냄비 위 175 따뜻한 빛 2.5, 등불 등 아래 25, 홍등 등 아래 25, 수조 푸른 빛 8. 게임 중이면 지금 시간대로 켜고 끈다. 유령에는 달지 않는다.
-- `AHGTable`, `AHGChair`: 맵 에셋(L_Station)에 이미 놓인 옛 가구 액터의 클래스라서 남겨 둔다. 기본 ID(`Table`, `Chair`)만 다르다. 새로 쓰지 않는다.
+- 가구 BP (2026-11-28): `BP_HG_Furniture`(부모 `AHGFurniture`). 맵의 처음 가구 8개(`Table_0~3`, `Chair_0~3`)는 이 BP에 가구 ID만 정해 둔 것이다.
+  배치 컴포넌트의 `DefaultFurnitureClass`(`BP_HG_ShopPlayerController`에서 `BP_HG_Furniture`)가 CSV `ActorClass`가 빈 가구에 쓰는 클래스다.
+  예전 `AHGTable`, `AHGChair` 클래스는 맵을 BP로 바꾼 뒤 지웠다.
 ### HGShopGrid (.h/.cpp)
 가게 바닥 칸 규칙 `FHGShopGrid` (배치 컴포넌트의 `Grid` 속성).
 - 칸 번호 = 월드 좌표 / `TileSize`(100) 내림. 칸 사각형 `FIntRect`는 Min 포함, Max 제외.
@@ -97,7 +100,7 @@ B로 가구 배치 모드에 들어가 정해진 칸 위에 식탁, 의자, 장�
 
 ### HGFurniturePlacer (.h/.cpp)
 경영 컨트롤러에 붙는 배치 모드 컴포넌트.
-- 속성: `Grid`(`FHGShopGrid`), `RotateStepDegrees` 90.
+- 속성: `Grid`(`FHGShopGrid`), `RotateStepDegrees` 90, `DefaultFurnitureClass`(2026-11-28, CSV `ActorClass`가 빈 가구의 클래스, `BP_HG_Furniture`).
 - 가구 목록(`GetCatalog`): 가구 DataTable의 행 이름을 행 순서대로. 처음 부를 때 불러오고 표를 UPROPERTY로 잡아 둔다. `SelectCategory`(분류마다 마지막 가구 기억), `CycleInCategory`(Z/C), `SelectFurniture(ID)`.
 - 가구는 ID로 만든다(`SpawnFurniture`): 행의 `ActorClass`(비면 `AHGFurniture`)를 미뤄서 스폰하고 `FurnitureId`를 정한 뒤 스폰을 끝낸다. 유령도 같은 길.
 - 배치 모드에 들어가면 칸 판(1m 평면을 줄인 것)을 인스턴스 메시 세 장으로 깐다 (`ShowGridOverlay`). 충돌, 그림자 없음. 판끼리 깜빡이지 않게 층마다 높이가 다르다(0.6 / 1.0 / 1.4).
@@ -138,6 +141,7 @@ B로 가구 배치 모드에 들어가 정해진 칸 위에 식탁, 의자, 장�
 
 ### HGCustomerDirector (.h/.cpp)
 경영 컨트롤러에 붙는 손님 흐름 컴포넌트 (첫 시제품).
+- 스폰 클래스 (2026-11-28): `CustomerClass`(`BP_HG_Customer`), `MoneyPopupClass`(`BP_HG_MoneyPopup`). `BP_HG_ShopPlayerController`의 이 컴포넌트에서 정한다. 비어 있으면 C++ 클래스.
 - 들어오기: 영업 중(낮, 밤)이면 `ArrivalInterval`(7초)의 0.6 ~ 1.4배 간격으로 입구 칸에 손님이 나타난다. 문 닫을 시간에는 새 손님이 없고, 안에 있던 손님은 마저 먹고 나간다.
 - 빈자리 = 식탁을 바라보는 의자(의자 앞 칸이 식탁, `GetFrontTile`) 중 다른 손님이 잡지 않은 것. 빈자리가 없으면 오지 않는다. 빈자리를 섞어 길이 있는 첫 자리로 보낸다.
 - 길 찾기(`FindPath`): 바닥 칸 위 상하좌우 너비 우선 탐색. 가구 칸과 고정 장애물 칸(`StaticBlocked`)을 피한다. 출발 칸과 도착 칸(의자)은 가구가 있어도 지나간다.
@@ -204,7 +208,7 @@ B로 가구 배치 모드에 들어가 정해진 칸 위에 식탁, 의자, 장�
 - 카메라를 돌리면 높은 벽이 사장님을 가린다. 벽 자동 낮추기(컷어웨이)가 필요하다.
 - 가구 배치, 돈, 발견한 콤보는 게임이 켜져 있는 동안만 남는다 (저장 파일 없음).
 - 배치 모드에서 유령은 단색(초록/빨강)이다. 반투명 머티리얼은 아트 단계에서 바꾼다.
-- 맵 에셋의 처음 가구가 칸에 맞지 않은 자유 좌표의 옛 클래스(`AHGTable`/`AHGChair`) 액터다 (실행 때 데이터로 다시 만듦). 맵을 다시 다듬을 때 `AHGFurniture`로 바꾸고 칸 좌표에 놓으면 좋다.
+- 맵 에셋의 처음 가구(`BP_HG_Furniture` 8개)가 칸에 맞지 않은 자유 좌표다 (실행 때 데이터로 다시 만듦). 맵을 다시 다듬을 때 칸 좌표에 놓으면 좋다.
 - 시험 중 가끔 사장님이 혼자 걸어 다이빙 발판에 닿는 일: 시험 명령이 없는데 맵 시작 4.9초 만에 사장님이 (-100, 220) → (-340, 371)로 움직여 다이빙했다 (2026-11-24, `RequestTravel` 로그). 카메라 Yaw 45에서 D 키 방향이다.
   원인 추정: 시험용 게임 창이 뜨면서 키보드 포커스를 가져가, 그때 사람이 다른 창에서 치던 키가 게임으로 들어갔다. 코드 문제는 아닌 것으로 본다. 앞서 "돌아온 지 1.3초 만에 다시 다이빙"도 같은 원인일 가능성이 높다. 시험 결과에 다이빙이 섞이면 로그의 "이동 시작"을 먼저 본다.
 - 행성 선택과 출항이 키 입력 + 발판이다. 정식 UI(레이더/출항 화면)로 바꿀 후보.

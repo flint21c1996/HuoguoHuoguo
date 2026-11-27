@@ -1,6 +1,6 @@
 # World - 맵에 배치하는 표식과 발판 액터
 
-> 경로: `Source/HuoguoHuoguo/World/Travel/`, `World/Camera/` · 마지막 갱신: 2026-11-23
+> 경로: `Source/HuoguoHuoguo/World/Travel/`, `World/Camera/` · 마지막 갱신: 2026-11-28
 
 ## 역할
 
@@ -13,10 +13,12 @@
 - 카메라가 사장님을 따라가므로 위치는 쓰지 않는다. 예전의 `PanRadius`는 없앴다.
 - 화살표는 게임 중 숨김, 에디터 전용 빌보드 아이콘.
 
-### HGExplorerStart (.h/.cpp)
-- 사장님이 나타나는 위치 (경영/탐험 공통). `StartTag`(기본 `Default`)로 구분, `bSpaceSuit`면 헬멧 차림(탐험 파트에서만 반영).
-- 캐릭터와 같은 크기 캡슐(40/92, 게임 중 숨김, 충돌 없음)과 화살표. 바닥 + 93에 두면 발이 닿는다.
-- 행성 맵에는 두지 않는다 (지형이 시드마다 달라서 생성기가 착륙 지점을 준다).
+### 시작점 = 엔진 PlayerStart (2026-11-28)
+- 자체 시작점 `HGExplorerStart`를 지우고 엔진 `PlayerStart`를 쓴다 (Under One Umbrella와 같은 방식). 맵의 시작점 3개를 바꿨다:
+  `L_Station`의 `PlayerStart_Default`(-100, 220), `PlayerStart_FromPlanet`(-450, 250), `Legacy/L_Asteroid_Krak7`의 `PlayerStart_FromStation`.
+- 도착 태그 = PlayerStart의 **Player Start Tag**. 캡슐 크기가 사장님과 같아서(40/92) 바닥 + 93에 두면 발이 닿는다.
+- 우주복 차림은 시작점이 아니라 캐릭터 BP의 **우주복 차림**(`bWearSpaceSuit`)이 정한다.
+- 행성 맵에는 두지 않는다 (지형이 시드마다 달라서 생성기가 착륙 지점을 준다, `Docs/Source/Explore.md`).
 
 ### HGTravelPad (.h/.cpp)
 - 밟으면(사장님 `AHGBossCharacter`와 겹치면) 그 사장님의 컨트롤러 `AHGPlayerControllerBase::RequestTravel(this)`. 경영/탐험 어느 파트에서도 동작한다.
@@ -30,8 +32,10 @@
 ## 흐름 / 규칙
 
 - 발판은 "어디로 보낼지"만 갖고, 암전/맵 열기는 컨트롤러가 한다.
+- 맵을 열 때 주소 끝에 `#도착태그`(엔진 Portal)를 붙인다. 도착 맵의 게임 모드가 같은 태그의 PlayerStart를 고른다 (`Docs/Source/Game.md`).
 - 현재 태그 약속: 정거장 `Default`(가게 안), `FromPlanet`(에어록 앞, 행성에서 귀환).
+- 맵에는 C++ 클래스가 아니라 BP를 놓는다: 발판 `BP_HG_TravelPad`, 카메라 기준점 `BP_HG_ShopCameraAnchor` (`Docs/Content/Blueprints.md`).
 
 ## 알려진 문제와 다음 할 일
 
-- 행성 귀환 발판은 생성기가 런타임에 만든다 (`Docs/Source/Planet.md`).
+- 행성 귀환 발판은 생성기가 런타임에 만든다 (`Docs/Source/Planet.md`). 클래스는 생성기의 `ReturnPadClass`(BP_HG_PlanetGenerator에서 `BP_HG_TravelPad`).

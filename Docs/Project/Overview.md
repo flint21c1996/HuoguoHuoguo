@@ -54,7 +54,7 @@ Source는 `Game / Player / UI / Shop/<기능> / World/<기능> / Debug`로 나�
 | `Source/HuoguoHuoguo/UI/` | 탐험 UI 위젯 (미니맵, 도감) | `Docs/Source/Explore.md` |
 | `Source/HuoguoHuoguo/Shop/Core/`, `Customer/`, `Furniture/` | 경영 시스템: 칸/콤보, 손님 흐름, 가구와 배치 모드 | `Docs/Source/Shop.md` |
 | `Source/HuoguoHuoguo/World/Planet/` | 행성 시드, 절차적 행성 생성기, 폐우주선 | `Docs/Source/Planet.md` |
-| `Source/HuoguoHuoguo/World/Travel/`, `Camera/` | 맵에 배치하는 이동 발판, 시작점, 가게 카메라 기준점 | `Docs/Source/World.md` |
+| `Source/HuoguoHuoguo/World/Travel/`, `Camera/` | 맵에 배치하는 이동 발판, 가게 카메라 기준점 (시작점은 엔진 PlayerStart) | `Docs/Source/World.md` |
 | `Source/HuoguoHuoguo/World/Light/`, `Scan/` | 정거장 조명, 스캐너 파동 | `Docs/Source/Shop.md`, `Docs/Source/Explore.md` |
 | `Source/HuoguoHuoguo/Debug/` | 개발용 도우미 | `Docs/Source/Debug.md` |
 | `Source/HuoguoHuoguoEditor/` | 에디터 전용 모듈 (게임에 안 들어감): Planet Maker 창 | `Docs/Tools/PlanetMaker.md`, `Docs/Source/Module.md` |

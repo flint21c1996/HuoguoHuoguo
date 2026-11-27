@@ -1,6 +1,6 @@
 # Game - 두 파트의 공통 부모(게임 모드, 컨트롤러), GameInstance, 재료 데이터 구조
 
-> 경로: `Source/HuoguoHuoguo/Game/` (플레이어 컨트롤러 공통 부모는 `Player/HGPlayerControllerBase`) · 마지막 갱신: 2026-11-26
+> 경로: `Source/HuoguoHuoguo/Game/` (플레이어 컨트롤러 공통 부모는 `Player/HGPlayerControllerBase`) · 마지막 갱신: 2026-11-28
 
 ## 역할
 
@@ -10,17 +10,22 @@
 ## 파일
 
 ### HGGameModeBase (.h/.cpp)
-- 추상 클래스. `DefaultPawnClass = nullptr`, `RestartPlayer`를 비워서 엔진 기본 Pawn 생성을 막는다. 사장님은 각 파트 컨트롤러가 직접 만든다.
-- 하위: `AHGShopGameMode`(L_Station), `AHGExploreGameMode`(L_PlanetSurface, Legacy/L_Asteroid_Krak7, 프로젝트 기본값).
-  맵과 프로젝트 기본값에는 이들의 블루프린트(`BP_HG_ShopGameMode`, `BP_HG_ExploreGameMode`)가 들어간다 (`Docs/Content/Blueprints.md`).
+- 추상 클래스. 사장님 스폰은 **엔진 표준 흐름**이다 (2026-11-28, Under One Umbrella와 같은 방식. 예전에는 컨트롤러가 직접 만들었다):
+  접속 → 시작점 찾기(`FindPlayerStart`) → 게임 모드의 Default Pawn Class 스폰 → 빙의.
+  - 시작점 = 엔진 `PlayerStart`. 이동해 왔으면 맵 주소의 `#태그`(Portal)와 Player Start Tag가 같은 것. 없으면 경고 `[Start]`.
+  - `ChoosePlayerStart`: 태그 없이 시작하면 "Default" 태그 > 아무 PlayerStart (엔진 기본은 무작위라서 바꿨다).
+- 하위: `AHGShopGameMode`(기본 캐릭터 `AHGShopBossCharacter`), `AHGExploreGameMode`(기본 캐릭터 `AHGExplorerCharacter`, 프로젝트 기본값).
+  - `AHGExploreGameMode`: 행성 생성기가 있는 맵이면 `FindPlayerStart`가 생성기를 돌려주고(PlayerStart 없음 경고 방지), `RestartPlayer`가 지형을 먼저 만들게 한 뒤(`EnsureGenerated`) 착륙 지점에 `RestartPlayerAtTransform`으로 스폰한다.
+  - 접속은 액터들의 BeginPlay보다 먼저라서, 행성 지형은 이제 게임 모드가 처음 만든다.
+  맵에는 이들의 BP가 들어간다: 정거장 `BP_HG_ShopGameMode`, 환경 맵마다 `BP_HG_ExploreGameMode_<환경>` (`Docs/Content/Blueprints.md`).
 
 ### HGPlayerControllerBase (.h/.cpp)
 추상 클래스. 두 파트 컨트롤러의 공통 기능.
-- `Boss`: 지금 조종 중인 사장님(`AHGBossCharacter`). 하위 클래스가 만들어 넣는다.
+- `Boss`: 지금 조종 중인 사장님(`AHGBossCharacter`). 게임 모드가 빙의시킨 Pawn을 하위 클래스가 넣는다.
 - 맵 이동 `RequestTravel(Pad)`: 이동 발판이 부른다.
   - 다이빙 발판(`bDiveToSelectedPlanet`)이면 `GI->CommitDiveToSelectedPlanet()`으로 고른 행성을 고정한다. 문 닫을 시간(`!GI->CanDive()`)이면 거절 메시지를 띄우고 이동하지 않는다.
-  - 화면 암전 후 타이머로 도착 태그를 GameInstance에 맡기고 `OpenLevelBySoftObjectPtr`.
-- 맵 시작 도우미: `ConsumeArrivalTag()`, `FindStart(Tag)`(태그 > Default > 아무거나), `FadeInAfterTravel()`.
+  - 화면 암전 후 타이머로 도착 태그를 GameInstance에 맡기고 `OpenLevel("맵 패키지#도착태그")` (엔진 Portal로 시작점을 고르게).
+- 맵 시작 도우미: `ConsumeArrivalTag()`(이동해 왔는지, 시간대 넘기기용), `FadeInAfterTravel()`. 시작점 고르기는 게임 모드가 한다.
 - 입력 도우미 (Enhanced Input을 에셋 없이 코드로 만든다)
   - `MakeAction`, `ApplyMappingContext`(컨텍스트 하나만 남김)
   - `MapWASD`/`MapDirectionalKey`: 키보드 키를 Swizzle(YXZ)/Negate 수정자로 2D 축의 한 방향으로 매핑
