@@ -23,6 +23,7 @@
 #include "Math/RandomStream.h"
 #include "ProceduralMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
+#include "World/Planet/HGNoise.h"
 #include "World/Travel/HGTravelPad.h"
 
 namespace
@@ -49,22 +50,12 @@ namespace
 
 	/**
 	 * 여러 겹 노이즈(fBm). 큰 언덕 위에 작은 굴곡을 겹쳐 자연스러운 지형을 만든다.
-	 * 한 겹 올라갈 때마다 주파수는 약 2배, 세기는 절반이다. 결과는 대략 -1 ~ 1.
+	 * 한 겹 올라갈 때마다 주파수는 약 2배(2.03), 세기는 절반이다. 결과는 대략 -1 ~ 1.
+	 * 계산은 정수(고정소수점) 노이즈 HGNoise로 한다. 어느 컴퓨터에서든 같은 시드면 같은 지형이 나오게 하려는 것이다 (2026-11-27).
 	 */
-	float Fbm(FVector P, int32 Octaves)
+	float Fbm(const FVector& P, int32 Octaves)
 	{
-		float Sum = 0.f;
-		float Amp = 1.f;
-		float Norm = 0.f;
-		for (int32 i = 0; i < Octaves; ++i)
-		{
-			Sum += Amp * FMath::PerlinNoise3D(P);
-			Norm += Amp;
-			Amp *= 0.5f;
-			// 정수배로 키우면 격자점이 겹쳐 무늬가 반복되므로 2.03처럼 어긋난 값을 쓴다.
-			P *= 2.03;
-		}
-		return Sum / Norm;
+		return HGNoise::Fbm(P, Octaves, 203);
 	}
 
 	/**
@@ -1409,11 +1400,11 @@ void AHGPlanetGenerator::BuildAsteroidField()
 					{
 						N = -N;
 					}
-					const float Patch = FMath::Clamp(0.5f + 1.6f * FMath::PerlinNoise3D(P / 500.0 + Rock.Offset), 0.f, 1.f);
+					const float Patch = FMath::Clamp(0.5f + 1.6f * HGNoise::Perlin(P / 500.0 + Rock.Offset), 0.f, 1.f);
 					const float Slope = 1.f - static_cast<float>(FMath::Abs(N | (P - Rock.Center).GetSafeNormal()));
-					const float Moss = FMath::SmoothStep(0.15f, 0.35f, FMath::PerlinNoise3D(P / 300.0 - Rock.Offset));
+					const float Moss = FMath::SmoothStep(0.15f, 0.35f, HGNoise::Perlin(P / 300.0 - Rock.Offset));
 					FLinearColor Color = FMath::Lerp(Pal.Ground, Pal.GroundB, FMath::SmoothStep(0.25f, 0.75f, Patch));
-					Color *= 1.f + 0.15f * FMath::PerlinNoise3D(P / 200.0);
+					Color *= 1.f + 0.15f * HGNoise::Perlin(P / 200.0);
 					Color = FMath::Lerp(Color, Pal.Grass[1] * 0.8f, Moss * 0.6f);
 					Color = FMath::Lerp(Color, Pal.Rock, FMath::SmoothStep(0.15f, 0.4f, Slope));
 					Color.A = 1.f;
@@ -1596,19 +1587,9 @@ float AHGPlanetGenerator::SurfaceRadiusAt(const FVector& Dir) const
 
 		// 1) 능선(ridged noise): 노이즈 값이 0을 지나는 줄을 따라 1 - |노이즈|가 뾰족하게 솟는다. 제곱해서 봉우리를 더 날카롭게 한다.
 		//    큰 언덕보다 약 2.7배 촘촘하게 깔고 세 겹 겹친다. 평균이 약 0.5라 빼서 행성이 통째로 부풀지 않게 한다.
-		FVector P = Dir * (Planet.TerrainFrequency * 2.7f) + NoiseOffset * 1.37;
-		float Ridge = 0.f;
-		float Amp = 1.f;
-		float Norm = 0.f;
-		for (int32 i = 0; i < 3; ++i)
-		{
-			const float R = 1.f - FMath::Abs(FMath::PerlinNoise3D(P));
-			Ridge += Amp * R * R;
-			Norm += Amp;
-			Amp *= 0.5f;
-			P *= 2.07;
-		}
-		Height += RidgeWeight * TerrainRuggedness * (Ridge / Norm - 0.5f);
+		const FVector P = Dir * (Planet.TerrainFrequency * 2.7f) + NoiseOffset * 1.37;
+		const float Ridge = HGNoise::Ridged(P, 3, 207);
+		Height += RidgeWeight * TerrainRuggedness * (Ridge - 0.5f);
 
 		// 2) 잔 굴곡: 약 9m 폭의 둔덕. 지형 격자 한 칸이 크면(중형 행성) 격자가 담을 수 있게 폭을 격자 4칸 이상으로 늘리고,
 		//    폭이 늘어난 만큼 높이도 키워 기울기가 비슷하게 보이게 한다.
@@ -1745,14 +1726,14 @@ void AHGPlanetGenerator::BuildTerrain()
 		{
 			const FVector& P = Vertices[v];
 			const FVector Up = P.GetSafeNormal();
-			const float Patch = FMath::Clamp(0.5f + 1.6f * FMath::PerlinNoise3D(P / 800.0 + NoiseOffset * 0.5), 0.f, 1.f);
+			const float Patch = FMath::Clamp(0.5f + 1.6f * HGNoise::Perlin(P / 800.0 + NoiseOffset * 0.5), 0.f, 1.f);
 			const float Height = static_cast<float>((P.Size() - Planet.Radius) / Amp);
-			const float Warp = FMath::PerlinNoise3D(P / 2500.0 - NoiseOffset * 0.3);
+			const float Warp = HGNoise::Perlin(P / 2500.0 - NoiseOffset * 0.3);
 			const float Strata = 0.5f + 0.5f * FMath::Sin((Height * 3.f + Warp * 2.5f) * UE_PI);
 			const float Slope = 1.f - static_cast<float>(FMath::Abs(Normals[v] | Up));
-			const float Speckle = FMath::PerlinNoise3D(P / 250.0 + NoiseOffset);
+			const float Speckle = HGNoise::Perlin(P / 250.0 + NoiseOffset);
 			// 외계 이끼: 4m 크기 얼룩이 일정 값을 넘는 곳만 식물 색으로 덮는다 (땅에 낀 낯선 색 이끼/균사 무늬).
-			const float Moss = FMath::SmoothStep(0.15f, 0.35f, FMath::PerlinNoise3D(P / 400.0 - NoiseOffset * 0.8));
+			const float Moss = FMath::SmoothStep(0.15f, 0.35f, HGNoise::Perlin(P / 400.0 - NoiseOffset * 0.8));
 
 			FLinearColor Color = FMath::Lerp(Pal.Ground, Pal.GroundB, FMath::SmoothStep(0.25f, 0.75f, Patch));
 			Color *= FMath::Lerp(0.85f, 1.15f, Strata) * (1.f + 0.18f * Speckle) * FMath::Lerp(0.9f, 1.1f, FMath::Clamp(Height * 0.5f + 0.5f, 0.f, 1.f));
@@ -1791,7 +1772,7 @@ void AHGPlanetGenerator::BuildTerrain()
 			{
 				N = -N;
 			}
-			const float Patch = FMath::Clamp(0.5f + 1.4f * FMath::PerlinNoise3D(Centroid / 1500.0 + NoiseOffset * 0.5), 0.f, 1.f);
+			const float Patch = FMath::Clamp(0.5f + 1.4f * HGNoise::Perlin(Centroid / 1500.0 + NoiseOffset * 0.5), 0.f, 1.f);
 			const float Height = FMath::Clamp(static_cast<float>((Centroid.Size() - Planet.Radius) / Amp) * 0.5f + 0.5f, 0.f, 1.f);
 			FLinearColor Color = FMath::Lerp(Pal.Ground, Pal.GroundB, FMath::SmoothStep(0.35f, 0.65f, Patch)) * FMath::Lerp(0.85f, 1.15f, Height);
 			Color = ShadeOf(Color, static_cast<uint32>(t / 3) * 2654435761u);
