@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
 #include "Game/HGDayTypes.h"
+#include "World/Planet/HGPlanetPreset.h"
 #include "World/Planet/HGPlanetTypes.h"
 #include "HGGameInstance.generated.h"
 
@@ -57,7 +58,14 @@ public:
 	}
 
 	// 지금 궤도 주기에 정거장으로 접근 중인 행성 목록. 처음 부를 때 만든다.
+	// 생성 행성 사이에 고정 행성(프리셋 JSON)이 섞인다 (프로젝트 설정 HG 환경 맵의 "고정 행성 확률").
 	const TArray<FHGPlanetSeed>& GetApproachingPlanets();
+
+	// 고정 행성 프리셋 목록 (Content/HG/Planets/*.json). 처음 부를 때 한 번 읽는다 (게임을 켤 때마다, PIE를 시작할 때마다 새로 읽는다).
+	const TArray<FHGPlanetPreset>& GetFixedPlanets();
+
+	// 파일 이름(FHGPlanetSeed::PresetName)으로 고정 행성 프리셋을 찾는다. 없으면 nullptr.
+	const FHGPlanetPreset* FindFixedPlanet(const FString& PresetName) const;
 
 	// 궤도 주기를 하나 넘긴다. 접근 행성 목록이 새로 바뀌고 다음 날 낮이 된다. 하루를 마칠 때 부른다.
 	void AdvanceOrbitCycle();
@@ -250,4 +258,7 @@ private:
 	bool bPlanetsBuilt = false;
 	TArray<FHGPlanetSeed> ApproachingPlanets;
 	TOptional<FHGPlanetSeed> DivePlanet;
+
+	bool bFixedPlanetsLoaded = false;
+	TArray<FHGPlanetPreset> FixedPlanets;
 };

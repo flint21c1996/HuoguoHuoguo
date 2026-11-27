@@ -1697,9 +1697,25 @@ void AHGPlanetGenerator::ChoosePlanet()
 		Planet.Radius = FlatHalfExtent * 0.5f;
 	}
 
-	// 지형 모양 값: 맵을 바로 열었고 PreviewShape를 쓰라고 했으면 그 값을, 아니면 행성 값(군계, 크기)에 맞는 기본 모양.
-	// 군계와 크기가 정해진 뒤(위의 시험용 강제 변경 포함)에 정해야 기본 모양이 맞는다.
-	TerrainShape = (!bFromDive && bUsePreviewShape) ? PreviewShape : HGPlanet::DefaultShape(Planet);
+	// 지형 모양 값:
+	//   고정 행성에 다이빙해 왔으면 그 프리셋에 저장된 모양 (Planet Maker에서 만든 그대로).
+	//   맵을 바로 열었고 PreviewShape를 쓰라고 했으면 그 값.
+	//   아니면 행성 값(군계, 크기)에 맞는 기본 모양. 군계와 크기가 정해진 뒤(위의 시험용 강제 변경 포함)에 정해야 맞는다.
+	const FHGPlanetPreset* Fixed = nullptr;
+	if (bFromDive && !Planet.PresetName.IsEmpty())
+	{
+		Fixed = GI->FindFixedPlanet(Planet.PresetName);
+		if (Fixed)
+		{
+			UE_LOG(LogHuoguo, Log, TEXT("[Planet] 고정 행성 %s: 프리셋 %s.json의 지형 모양을 씀 (크레이터 %d ~ %d개)"),
+				*Planet.Name, *Planet.PresetName, Fixed->Shape.CraterCountMin, Fixed->Shape.CraterCountMax);
+		}
+		else
+		{
+			UE_LOG(LogHuoguo, Warning, TEXT("[Planet] 고정 행성 프리셋 %s를 찾지 못해 기본 지형 모양을 씀"), *Planet.PresetName);
+		}
+	}
+	TerrainShape = Fixed ? Fixed->Shape : (!bFromDive && bUsePreviewShape) ? PreviewShape : HGPlanet::DefaultShape(Planet);
 
 	// 노이즈 이동값도 시드에서 뽑는다. 큰 값으로 옮겨서 행성마다 노이즈 공간의 전혀 다른 곳을 읽게 한다.
 	FRandomStream Rng(Planet.Seed);

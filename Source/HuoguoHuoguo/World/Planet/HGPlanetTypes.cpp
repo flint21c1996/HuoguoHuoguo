@@ -11,23 +11,25 @@ namespace
 
 FString FHGPlanetSeed::Describe() const
 {
+	// 고정 행성은 이름 뒤에 표시를 붙인다. 지형이 늘 같아서 외워 둔 길로 캘 수 있는 행성이라는 뜻이다.
+	const FString Title = PresetName.IsEmpty() ? Name : Name + TEXT(" (고정)");
 	if (bDerelict)
 	{
 		return FString::Printf(TEXT("%s | 폐우주선 (선체에 %s 재료) | 무중력 + 안쪽 인공 중력 | %d시간 후 이탈"),
-			*Name, HGPlanet::BiomeName(Biome), HoursLeft);
+			*Title, HGPlanet::BiomeName(Biome), HoursLeft);
 	}
 	if (bAsteroidField)
 	{
 		return FString::Printf(TEXT("%s | 소행성 지대 (%s) | 본 소행성 %.0fm | 중력 %.1f | %d시간 후 이탈"),
-			*Name, HGPlanet::BiomeName(Biome), Radius / 100.f, GravityScale, HoursLeft);
+			*Title, HGPlanet::BiomeName(Biome), Radius / 100.f, GravityScale, HoursLeft);
 	}
 	if (bFlat)
 	{
 		return FString::Printf(TEXT("%s | 평지 행성 (%s) | 분지 | 중력 %.1f | %d시간 후 이탈"),
-			*Name, HGPlanet::BiomeName(Biome), GravityScale, HoursLeft);
+			*Title, HGPlanet::BiomeName(Biome), GravityScale, HoursLeft);
 	}
 	return FString::Printf(TEXT("%s | %s %s | 반지름 %.0fm | 중력 %.1f | %d시간 후 이탈"),
-		*Name, SizeClass == EHGPlanetSize::Small ? TEXT("소형") : TEXT("중형"), HGPlanet::BiomeName(Biome),
+		*Title, SizeClass == EHGPlanetSize::Small ? TEXT("소형") : TEXT("중형"), HGPlanet::BiomeName(Biome),
 		Radius / 100.f, GravityScale, HoursLeft);
 }
 

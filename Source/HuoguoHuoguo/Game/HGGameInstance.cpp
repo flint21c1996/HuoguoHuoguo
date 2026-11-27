@@ -22,12 +22,31 @@ const TArray<FHGPlanetSeed>& UHGGameInstance::GetApproachingPlanets()
 {
 	if (!bPlanetsBuilt)
 	{
-		// 평지 행성이 섞일 확률은 프로젝트 설정(HG 환경 맵)에서 정한다.
-		ApproachingPlanets = HGPlanet::MakeApproachingPlanets(UniverseSeed, OrbitCycle, ApproachingPlanetCount, GetDefault<UHGSiteSettings>()->FlatPlanetChance);
+		// 평지 행성과 고정 행성이 섞일 확률은 프로젝트 설정(HG 환경 맵)에서 정한다.
+		const UHGSiteSettings* Settings = GetDefault<UHGSiteSettings>();
+		ApproachingPlanets = HGPlanet::MakeApproachingPlanets(UniverseSeed, OrbitCycle, ApproachingPlanetCount, Settings->FlatPlanetChance);
+		HGPlanet::MixFixedPlanets(ApproachingPlanets, GetFixedPlanets(), UniverseSeed, OrbitCycle, Settings->FixedPlanetChance);
 		SelectedPlanetIndex = 0;
 		bPlanetsBuilt = true;
 	}
 	return ApproachingPlanets;
+}
+
+const TArray<FHGPlanetPreset>& UHGGameInstance::GetFixedPlanets()
+{
+	if (!bFixedPlanetsLoaded)
+	{
+		// 파일 몇 개를 읽는 일이라 한 번만 한다. 패키지 게임에서는 Content/HG/Planets가 pak 안에 들어 있다 (DefaultGame.ini 패키징 설정).
+		FixedPlanets = HGPlanet::LoadPresetsInDirectory(HGPlanet::PresetDirectory());
+		bFixedPlanetsLoaded = true;
+		UE_LOG(LogHuoguo, Log, TEXT("[Planet] 고정 행성 프리셋 %d개를 읽음 (%s)"), FixedPlanets.Num(), *HGPlanet::PresetDirectory());
+	}
+	return FixedPlanets;
+}
+
+const FHGPlanetPreset* UHGGameInstance::FindFixedPlanet(const FString& PresetName) const
+{
+	return FixedPlanets.FindByPredicate([&PresetName](const FHGPlanetPreset& Preset) { return Preset.FileName == PresetName; });
 }
 
 void UHGGameInstance::AdvanceOrbitCycle()

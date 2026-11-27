@@ -120,6 +120,11 @@ struct HUOGUOHUOGUO_API FHGPlanetSeed
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Planet")
 	bool bFlat = false;
 
+	// 고정 행성이면 그 프리셋 파일 이름 (확장자 없이, Content/HG/Planets/<이름>.json). 비어 있으면 시드로 만든 생성 행성이다 (2026-11-28).
+	// 고정 행성에 다이빙하면 생성기가 이 이름으로 프리셋을 찾아 거기 저장된 지형 모양 값을 쓴다 (UHGGameInstance::FindFixedPlanet).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Planet")
+	FString PresetName;
+
 	// 목록과 안내에 쓰는 한 줄 설명. 예) "크락-7 | 소형 바위 | 반지름 80m | 중력 0.6 | 6시간 후 이탈"
 	FString Describe() const;
 };

@@ -29,6 +29,12 @@ public:
 	UPROPERTY(config, EditAnywhere, Category = "다이빙", meta = (DisplayName = "평지 행성 확률", ClampMin = "0", ClampMax = "1"))
 	float FlatPlanetChance = 0.35f;
 
+	// 접근 행성 목록의 자리마다 고정 행성으로 바뀔 확률 (2026-11-28). 고정 행성 = Planet Maker로 저장한 Content/HG/Planets/*.json.
+	// 0이면 고정 행성이 나오지 않는다. 저장한 프리셋이 없으면 이 값과 상관없이 생성 행성만 나온다.
+	// 기획: 행성은 고정판 비중이 크다 (Docs/Project/Design.md "뼈대는 고정, 살은 바뀌게").
+	UPROPERTY(config, EditAnywhere, Category = "다이빙", meta = (DisplayName = "고정 행성 확률", ClampMin = "0", ClampMax = "1"))
+	float FixedPlanetChance = 0.5f;
+
 	// 환경에 맞는 맵. 없으면 빈 값(호출하는 쪽이 기본 목적지를 쓴다).
 	static TSoftObjectPtr<UWorld> FindMap(EHGSiteType Site)
 	{

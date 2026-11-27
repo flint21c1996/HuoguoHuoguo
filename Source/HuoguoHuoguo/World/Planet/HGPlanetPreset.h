@@ -14,8 +14,9 @@
  *   Content/HG/Planets/<이름>.json으로 저장하고 불러온다. 사람이 읽고 고칠 수 있는 글자 파일이라 버전 관리에서 바뀐 값이 그대로 보인다.
  *
  * 쓰는 곳:
- *   지금은 Planet Maker 창(에디터)에서 만들고, 미리보기 맵의 생성기에 넣어 본다.
- *   나중에 "고정 행성"으로 게임에 내보낼 때도 이 파일을 읽는다 (기획서: 고정판과 생성판 섞기).
+ *   Planet Maker 창(에디터)에서 만들고, 미리보기 맵의 생성기에 넣어 본다.
+ *   게임은 이 폴더의 파일을 모두 "고정 행성"으로 읽어 접근 행성 목록에 섞는다 (2026-11-28, 기획서: 고정판과 생성판 섞기).
+ *   고정 행성에 다이빙하면 생성기가 여기 저장된 지형 모양 값(Shape)을 그대로 쓴다.
  *
  * 버전:
  *   값 구성이 바뀌면 CurrentVersion을 올린다. 읽을 때 파일 버전이 더 높으면 거절하고, 낮으면 없는 값은 기본값으로 둔다.
@@ -76,7 +77,12 @@ struct HUOGUOHUOGUO_API FHGPlanetPreset
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "평지 분지", meta = (ShowOnlyInnerProperties, EditCondition = "SiteType == EHGSiteType::PlanetLarge", EditConditionHides))
 	FHGBasinShape Basin;
 
+	// 읽어 온 파일 이름 (확장자 없이). 고정 행성을 구별하는 이름으로 쓴다 (FHGPlanetSeed::PresetName).
+	// UPROPERTY가 아니라서 JSON에는 쓰지 않는다. LoadPresetJson이 채운다.
+	FString FileName;
+
 	// 생성기에 넣을 행성 값으로 바꾼다. 이름, 남은 시간 등 프리셋에 없는 값은 시드로 채운다.
+	// 파일에서 읽은 프리셋이면 PresetName(고정 행성 표시)도 채운다.
 	FHGPlanetSeed ToPlanetSeed() const;
 };
 
@@ -92,4 +98,20 @@ namespace HGPlanet
 	// JSON 파일로 저장 / 불러오기. 실패하면 false와 이유(OutError).
 	HUOGUOHUOGUO_API bool SavePresetJson(const FHGPlanetPreset& Preset, const FString& FilePath, FString& OutError);
 	HUOGUOHUOGUO_API bool LoadPresetJson(const FString& FilePath, FHGPlanetPreset& OutPreset, FString& OutError);
+
+	// 폴더 안의 *.json을 모두 읽는다 (하위 폴더는 보지 않는다). 파일 이름 순으로 정렬해서 어느 컴퓨터에서나 같은 순서다.
+	// 읽지 못한 파일은 건너뛰고 경고 로그를 남긴다. 폴더가 없으면 빈 목록.
+	HUOGUOHUOGUO_API TArray<FHGPlanetPreset> LoadPresetsInDirectory(const FString& Directory);
+
+	/**
+	 * 접근 행성 목록(Planets)에 고정 행성(Fixed)을 섞는다.
+	 *
+	 * 목록의 자리마다 Chance 확률로 그 자리의 생성 행성을 고정 행성 하나로 바꾼다.
+	 * - 같은 우주 시드와 주기면 언제나 같은 결과다 (자리마다 따로 만든 난수).
+	 * - 한 목록에 같은 고정 행성은 한 번만 나온다.
+	 * - 소형과 중형이 하나씩은 남는다: 목록의 마지막 소형(또는 중형)은 같은 종류의 고정 행성으로만 바꾼다.
+	 * - 바뀐 행성은 원래 자리의 남은 시간을 받는다 (곧 떠나는 순서가 그대로 유지된다).
+	 * Fixed가 비어 있거나 Chance가 0이면 목록은 그대로다.
+	 */
+	HUOGUOHUOGUO_API void MixFixedPlanets(TArray<FHGPlanetSeed>& Planets, const TArray<FHGPlanetPreset>& Fixed, int32 UniverseSeed, int32 Cycle, float Chance);
 }

@@ -1,5 +1,6 @@
 ﻿#include "HAL/FileManager.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "UObject/Package.h"
 #include "World/Planet/HGPlanetGenerator.h"
@@ -176,6 +177,107 @@ bool FHGPlanetPresetTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("높이 곡선 키 수"), Loaded.Shape.HeightCurve.GetRichCurveConst()->GetNumKeys(), 2);
 	TestEqual(TEXT("높이 곡선 값"), Loaded.Shape.HeightCurve.GetRichCurveConst()->Eval(1.f), 0.8f);
 	TestEqual(TEXT("버전"), Loaded.Version, FHGPlanetPreset::CurrentVersion);
+	TestEqual(TEXT("파일 이름"), Loaded.FileName, FString(TEXT("HGPresetTest")));
+	TestEqual(TEXT("행성 값의 고정 행성 이름"), Loaded.ToPlanetSeed().PresetName, FString(TEXT("HGPresetTest")));
+	return true;
+}
+
+/**
+ * 고정 행성 시험 (2026-11-28): 폴더의 프리셋을 읽고, 접근 행성 목록에 섞는 규칙이 지켜지는지.
+ * - 폴더 읽기: 파일 이름 순, 깨진 파일은 건너뜀.
+ * - 섞기: 같은 주기면 같은 결과, 확률 0이면 그대로, 같은 고정 행성은 한 번만, 소형과 중형은 하나씩 남음, 남은 시간 순서 유지.
+ * 파일은 Saved/Automation/HGFixedPlanetTest 아래 임시로 쓰고 지운다.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHGFixedPlanetTest, "HG.Planet.FixedPlanets",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FHGFixedPlanetTest::RunTest(const FString& Parameters)
+{
+	const FString Dir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Automation"), TEXT("HGFixedPlanetTest"));
+	IFileManager::Get().DeleteDirectory(*Dir, false, true);
+
+	// 소형 둘, 평지 하나, 깨진 파일 하나. 이름 순서와 저장 순서를 일부러 다르게 둔다.
+	struct FEntry { const TCHAR* File; EHGSiteType Type; int32 Seed; };
+	const FEntry Entries[] = {
+		{ TEXT("c_flat"), EHGSiteType::PlanetLarge, 301 },
+		{ TEXT("a_small"), EHGSiteType::PlanetSmall, 101 },
+		{ TEXT("b_small"), EHGSiteType::PlanetSmall, 201 },
+	};
+	FString Error;
+	for (const FEntry& Entry : Entries)
+	{
+		FHGPlanetPreset Preset = HGPlanet::DefaultPreset(Entry.Type);
+		Preset.Seed = Entry.Seed;
+		Preset.Name = Entry.File;
+		Preset.Shape.CraterCountMin = Entry.Seed;
+		TestTrue(TEXT("시험 프리셋 저장"), HGPlanet::SavePresetJson(Preset, FPaths::Combine(Dir, FString(Entry.File) + TEXT(".json")), Error));
+	}
+	FFileHelper::SaveStringToFile(TEXT("{ 깨진 파일"), *FPaths::Combine(Dir, TEXT("broken.json")));
+
+	AddExpectedMessage(TEXT("고정 행성 프리셋을 건너뜀"), ELogVerbosity::Warning, EAutomationExpectedMessageFlags::Contains, 1, false);
+	const TArray<FHGPlanetPreset> Fixed = HGPlanet::LoadPresetsInDirectory(Dir);
+	IFileManager::Get().DeleteDirectory(*Dir, false, true);
+
+	if (!TestEqual(TEXT("읽은 프리셋 수 (깨진 파일 제외)"), Fixed.Num(), 3))
+	{
+		return false;
+	}
+	TestEqual(TEXT("이름 순 0"), Fixed[0].FileName, FString(TEXT("a_small")));
+	TestEqual(TEXT("이름 순 1"), Fixed[1].FileName, FString(TEXT("b_small")));
+	TestEqual(TEXT("이름 순 2"), Fixed[2].FileName, FString(TEXT("c_flat")));
+	TestEqual(TEXT("지형 모양 값도 읽힘"), Fixed[2].Shape.CraterCountMin, 301);
+
+	// 확률 0이면 그대로.
+	const TArray<FHGPlanetSeed> Base = HGPlanet::MakeApproachingPlanets(20261123, 0, 4, 0.f);
+	{
+		TArray<FHGPlanetSeed> Planets = Base;
+		HGPlanet::MixFixedPlanets(Planets, Fixed, 20261123, 0, 0.f);
+		bool bSame = Planets.Num() == Base.Num();
+		for (int32 i = 0; bSame && i < Planets.Num(); ++i)
+		{
+			bSame = Planets[i].Seed == Base[i].Seed && Planets[i].PresetName.IsEmpty();
+		}
+		TestTrue(TEXT("확률 0이면 목록이 그대로"), bSame);
+	}
+
+	// 확률 1로 여러 주기를 돌려 규칙을 본다.
+	int32 FixedSeen = 0;
+	for (int32 Cycle = 0; Cycle < 20; ++Cycle)
+	{
+		const TArray<FHGPlanetSeed> Generated = HGPlanet::MakeApproachingPlanets(20261123, Cycle, 4, 0.f);
+		TArray<FHGPlanetSeed> A = Generated;
+		TArray<FHGPlanetSeed> B = Generated;
+		HGPlanet::MixFixedPlanets(A, Fixed, 20261123, Cycle, 1.f);
+		HGPlanet::MixFixedPlanets(B, Fixed, 20261123, Cycle, 1.f);
+
+		TSet<FString> Names;
+		int32 Small = 0;
+		int32 Medium = 0;
+		bool bSameResult = true;
+		bool bHoursKept = true;
+		for (int32 i = 0; i < A.Num(); ++i)
+		{
+			bSameResult &= A[i].Seed == B[i].Seed && A[i].PresetName == B[i].PresetName;
+			bHoursKept &= A[i].HoursLeft == Generated[i].HoursLeft;
+			if (!A[i].PresetName.IsEmpty())
+			{
+				TestFalse(FString::Printf(TEXT("주기 %d: 같은 고정 행성이 두 번 나오지 않음"), Cycle), Names.Contains(A[i].PresetName));
+				Names.Add(A[i].PresetName);
+				++FixedSeen;
+				const FHGPlanetPreset* Source = Fixed.FindByPredicate([&](const FHGPlanetPreset& P) { return P.FileName == A[i].PresetName; });
+				TestTrue(TEXT("고정 행성 값이 프리셋에서 옴"), Source && Source->Seed == A[i].Seed && HGPlanet::SiteTypeOf(A[i]) == Source->SiteType);
+			}
+			const EHGSiteType Type = HGPlanet::SiteTypeOf(A[i]);
+			Small += Type == EHGSiteType::PlanetSmall ? 1 : 0;
+			Medium += Type == EHGSiteType::PlanetMedium ? 1 : 0;
+		}
+		TestTrue(FString::Printf(TEXT("주기 %d: 같은 주기면 같은 결과"), Cycle), bSameResult);
+		TestTrue(FString::Printf(TEXT("주기 %d: 남은 시간 순서 유지"), Cycle), bHoursKept);
+		TestTrue(FString::Printf(TEXT("주기 %d: 소형이 하나 이상"), Cycle), Small >= 1);
+		TestTrue(FString::Printf(TEXT("주기 %d: 중형이 하나 이상 (중형 고정 행성이 없으므로 생성 행성이 남음)"), Cycle), Medium >= 1);
+	}
+	TestTrue(TEXT("확률 1이면 고정 행성이 나옴"), FixedSeen > 0);
+	AddInfo(FString::Printf(TEXT("[Fixed] 20주기 동안 고정 행성 %d번"), FixedSeen));
 	return true;
 }
 
