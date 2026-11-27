@@ -20,11 +20,16 @@
   - `GetGravityFrame()`: "중력 기준 위 = 지표 바깥" 회전. 매 프레임 변화량만 이어 붙이는 평행 이동 방식이라 남극에서도 축이 튀지 않는다.
   - `GetMoveFrame()`을 중력 좌표계로 돌려줘서, 공통 `Move`가 행성 위에서도 카메라 기준으로 걷게 한다.
   - CharacterMovement는 캐릭터 Tick 뒤에 틱하므로 바뀐 중력이 같은 프레임에 쓰인다.
+- 평지 행성 (2026-11-27): 방향 고정 중력 `SetFixedGravity(+Z, 중력 배율)`(우주선 안 인공 중력과 같은 함수).
+  `SetFallRespawn(변환)`을 부르면 맵 KillZ 아래로 떨어졌을 때(`FellOutOfWorld`) 액터를 없애지 않고 그 자리로 순간 이동하고 속도를 버린다.
+  컨트롤러의 `NotifyFellOffAndReturned()`로 "분지 밖으로 떨어져서 착륙 지점으로 돌아왔어요"를 띄운다. 로그 `[Flat]`.
 
 ### HGExplorePlayerController (.h/.cpp)
 `AHGPlayerControllerBase` 상속.
 - 맵 시작: `AHGPlanetGenerator`가 있으면 `EnsureGenerated()` 후 `GetLandingTransform()`(북극)에 사장님을 만들고 구형 중력을 켠다. 없으면 도착 태그의 `AHGExplorerStart`. 우주복 차림.
   만드는 클래스 = `ExplorerClass`(블루프린트에서 정함, 지금 `BP_HG_Explorer`). 비어 있으면 `AHGExplorerCharacter`.
+  평지 행성 맵(생성기 `IsFlatSite()`)이면 구형 중력 대신 아래 방향 고정 중력 + 떨어짐 복귀(착륙 지점)를 켠다. 스캐너는 `GetGravityRadius()`(평지면 땅 아래 100km 중심까지 거리)로 퍼진다. 미니맵은 레이더로 그린다.
+- 시험 명령 `HGWarpTo X Y Z` (2026-11-27): 사장님을 월드 좌표로 순간 이동 (떨어짐 복귀 확인용).
 - 조작 (`IMC_Explore`, 커서 숨김, GameOnly): WASD 이동(카메라 기준), 마우스 시점, Space 점프, E 채집, 마우스 휠 = 카메라 거리(`IA_Explore_Zoom`).
   - 카메라 "위": 사장님 몸의 중력 기준을 그대로 쓰지 않고 지수적으로 늦게 따라간다 (`CameraUpFollowSpeed` 3, 약 0.33초에 차이 63% 감소). 가까운 소행성으로 뛰면 "위"가 크게 뒤집히고 착지 때 몸이 남은 각도를 한 번에 맞추는데, 카메라가 그대로 따라 돌아 순간이동처럼 보였다 (사용자 의견). 로그 `[Cam]`: 공중 최대 회전 속도와 착지 때 몸과 카메라의 위 차이. 확인됨: 점프 세 번에 최대 초속 144 ~ 178도, 착지 때 차이 18 ~ 90도를 착지 뒤 부드럽게 맞춤 (예전에는 한 프레임에 맞춤).
   - 카메라 거리: 휠 한 칸에 목표 거리의 12%씩(`ZoomStep`, 가까울 때 잘게, 멀 때 크게), 1.8 ~ 16m(`MinArmLength`/`MaxArmLength`, 기본 4.2m). 실제 거리는 목표로 부드럽게 따라간다(`ZoomSpeed` 10). 맵을 옮기면 기본 거리로 돌아간다. 확인됨: 휠을 뒤로 8칸 굴리면 본 소행성 전체가 보이는 거리까지 멀어짐.

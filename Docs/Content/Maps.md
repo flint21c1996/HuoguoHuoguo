@@ -1,6 +1,6 @@
 # Maps - 맵 에셋
 
-> 경로: `Content/HG/Maps/` (`Legacy/` = 안 쓰는 옛 맵) · 마지막 갱신: 2026-11-27
+> 경로: `Content/HG/Maps/` (`Legacy/` = 안 쓰는 옛 맵, `Development/` = 개발용 맵) · 마지막 갱신: 2026-11-27
 
 ## 역할
 
@@ -17,7 +17,7 @@
 | `L_Planet_Medium` | 중형 행성 (걸을 때 평지처럼 느껴짐) | 위와 같음 |
 | `L_AsteroidField` | 소행성 지대 (여러 천체가 끌어당김, 뛰어 건너기) | 위와 같음 |
 | `L_Derelict` | 폐우주선 (밖은 무중력, 에어록 안은 인공 중력) | 위와 같음 |
-| (대형 행성) | 규칙 미정 (탈것, 여러 지역은 아직 생각 전). 맵 없음 → 발판 기본 목적지로 감 | 나중 |
+| `L_Planet_Large` | 평지 행성 (대형): 구가 아니라 랜드스케이프 분지. 중력은 아래로, 가장자리 밖으로 떨어지면 착륙 지점으로 복귀 | 2026-11-27 새로 만듦 (아래) |
 
 - 확인됨: 정거장에서 다이빙하면 소행성 지대 → `L_AsteroidField`, 소형 → `L_Planet_Small`, 중형 → `L_Planet_Medium`, 폐우주선 → `L_Derelict`가 열린다.
 - 주의: 처음 콘텐츠 브라우저에서 복제한 4개는 액터가 0개인 빈 맵이었다 (생성기도 조명도 없어 행성이 안 생김).
@@ -27,6 +27,17 @@
 - 중력 규칙(사용자 의견): 점프 손맛은 모든 행성에서 거의 같게. 큰 행성이라고 점프가 낮아지면 재미가 없다. 크기 차이는 지평선, 탐험 범위로 보인다.
 
 ## 맵
+
+### L_Planet_Large - 평지 행성 (대형, 랜드스케이프 분지) (2026-11-27)
+- 구 행성은 크게 만들면 다 돌아다닐 수 없고 연산도 늘어서(사용자 판단), 대형은 구 대신 평평한 분지로 따로 만들었다. 구 행성 맵은 그대로다.
+- `L_Planet_Small`을 복사해 만들고, Planet Maker 평지 탭의 **랜드스케이프에 넣기**(기본 분지 값, 시드 22)로 땅을 넣었다.
+  - `BasinLandscape`: 252m x 252m (1m 격자, 63칸 부품 4 x 4), 높이 -34 ~ 28m, 머티리얼 `M_HG_LandscapeBasin`, Use Dynamic Material Instance 켬(군계 색). 맵 파일 약 0.6MB.
+- 정거장에서 다이빙 확인: 접근 목록 2번 "마라탄-84 | 평지 행성 (버섯숲)" → `L_Planet_Large`, 생성 30ms, 보라 땅 + 거대 버섯, 지평선에 둑.
+  - World Settings `KillZ` = -54m (땅에서 가장 낮은 곳 - 20m). 그 아래로 떨어지면 착륙 지점으로 돌아온다.
+  - `PlanetGenerator`: `bFlatSite`(평지 행성 맵) 켬, `FlatHalfExtent` 103m(둑 꼭대기 안쪽). 구 지형을 만들지 않고 랜드스케이프 위에 바위, 재료, 식물, 귀환 발판을 놓는다.
+- 땅은 원하는 곳만 랜드스케이프 도구로 손보면 된다. 다시 **랜드스케이프에 넣기**를 누르면 손본 것도 지워지고 새로 만들어진다 (먼저 묻는다, Ctrl+Z 가능).
+- 확인 (게임 캡처, 맵 바로 열기): 생성 38ms, 바위 20 / 재료 24(지금 보이는 것 11), 풀꽃 5032포기, 아치, 귀환 발판. 140m 밖으로 옮기자 3초 뒤 착륙 지점으로 복귀.
+  위에서 내려다보면 둑과 그 너머 낭떠러지가 보인다.
 
 ### L_Station - 허브 정거장 훠궈집
 - 게임과 에디터의 기본 맵. 경영 파트 (World Settings GameMode = `BP_HG_ShopGameMode`). 12m x 10m 가게, 바닥 윗면 Z = 0, 가게 중심 = 원점.
@@ -41,7 +52,7 @@
 
 ### Legacy/L_PlanetSurface - 예전의 절차적 행성 표면 (은퇴)
 - 환경별 맵으로 나뉘기 전, 모든 행성을 받던 한 장짜리 맵. 2026-11-27에 `Legacy/`로 옮겼다.
-- 지금은 정거장 다이빙 발판의 기본 목적지(`DestinationLevel`)로만 남아 있다. 환경 맵 설정에 없는 환경(대형 행성)이 오면 이리로 온다.
+- 지금은 정거장 다이빙 발판의 기본 목적지(`DestinationLevel`)로만 남아 있다. 환경 맵 설정에 없는 환경이 오면 이리로 온다 (지금은 모든 환경에 맵이 있다).
 - 탐험 파트 (World Settings GameMode = `BP_HG_ExploreGameMode`).
 - 배치는 조명과 생성기뿐. 지형, 바위, 재료, 귀환 발판은 실행할 때 `AHGPlanetGenerator`가 만든다.
 - `Sun`(방향광 10, ForwardShadingPriority 1), `FillLight`(푸른 보조광 1.2, 그림자 없음), `PostProcess_Space`(무한 범위, 노출 EV100 2.5 고정. 검은 하늘 때문에 자동 노출을 쓰지 않는다).
@@ -57,7 +68,15 @@
 - 맵마다 World Settings의 GameMode Override로 파트(경영/탐험)를 정한다. 지정이 없으면 프로젝트 기본값 `BP_HG_ExploreGameMode`.
   게임 모드 → 컨트롤러 → 사장님이 모두 블루프린트로 이어진다 (`Docs/Content/Blueprints.md`).
 - 맵 사이 연결은 `HGTravelPad`의 목적지 + 도착 태그로만 한다 (`Docs/Source/World.md`).
-- 개발용 맵은 `Maps/Development/`에 둔다 (아직 없음).
+- 개발용 맵은 `Maps/Development/`에 둔다.
+
+## 개발용 맵 (`Development/`)
+
+### Development/L_PlanetMaker - Planet Maker 미리보기 맵 (2026-11-27)
+- `Legacy/L_PlanetSurface`를 복사해 만들었다 (액터 5개: Sun, FillLight, PostProcess_Space, PlanetGenerator, GasPlanet).
+- 생성기 설정: `bPreviewInEditor`(에디터에서 미리보기) 켬, `bPreviewFromSeedOnly` 끔, `bUsePreviewShape` 켬.
+  맵을 열기만 해도 지형 미리보기가 생기고(약 50ms), 값을 바꾸면 다시 만든다. 미리보기 메시는 저장하지 않아 맵 파일은 약 28KB다.
+- Planet Maker 창(`Docs/Tools/PlanetMaker.md`)이 이 맵의 생성기에 값을 넣는다. 게임 흐름(다이빙)은 이 맵으로 오지 않는다.
 
 ## 알려진 문제와 다음 할 일
 

@@ -19,6 +19,7 @@
 
 `Config/DefaultGame.ini`
 - `[/Script/HuoguoHuoguo.HGSiteSettings] SiteMaps`: 환경 종류 → 다이빙 맵 (프로젝트 설정 → Game → HG 환경 맵에서 고치면 여기에 저장된다, `Docs/Source/Game.md`).
+  2026-11-27: `PlanetLarge` → `L_Planet_Large`(평지 행성) 추가. 같은 설정의 `FlatPlanetChance`(평지 행성 확률, 기본 0.35)는 ini에 쓰지 않아 코드 기본값을 쓴다.
 - `[/Script/HuoguoHuoguo.HGLookSettings]`: 그림체 조절 값 (프로젝트 설정 → Game → HG 그림체).
 - `GameInstanceClass` = `/Script/HuoguoHuoguo.HGGameInstance`
 

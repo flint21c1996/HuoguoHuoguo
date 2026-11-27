@@ -22,6 +22,7 @@ powershell -ExecutionPolicy Bypass -File .\Tools\Invoke-HGBuild.ps1
 - 이미 있는 맵은 열지도 고치지도 않는다 (2026-11-27). 맵은 에디터에서 사람이 고친다. 환경별 맵(`L_Planet_Small` 등)은 이 도구가 모른다.
 - `ensure_glow_material()`: 발광 머티리얼 `M_HG_Glow`를 만든다. 이미 있으면 인스턴스 메시 사용 표시만 켠다 (`Docs/Content/Materials.md`).
 - `ensure_planet_materials()`: 행성 그림체용 `M_HG_PlanetSky`(하늘 돔, HLSL은 `SKY_HLSL`)와 `M_HG_VertexColor`(각진 지형)를 만든다. 하늘 머티리얼이 이미 있으면 하늘(Is Sky) 표시만 켠다 (`Docs/Content/Materials.md`).
+- `ensure_landscape_material()` (2026-11-27): 평지 행성 랜드스케이프 머티리얼 `M_HG_LandscapeBasin`을 없을 때만 만든다 (`Docs/Content/Materials.md`).
 - `ensure_scan_material()`: 스캐너 파동 화면 효과 `M_HG_ScanPulse`(포스트 프로세스)를 만든다. 이 도구만 만드는 효과라 판 번호 `ScanVersion`이 `SCAN_VERSION`과 다르면 지우고 다시 만든다 (같으면 건너뛴다). 이웃 파라미터는 4칸이라 RGBA 출력에 잇는다 (RGB에 이었다가 셰이더 컴파일이 실패했다).
 - `ensure_look_materials()`: 그림체 비교 화면 효과 `M_HG_LookToon`(셀 셰이딩, 톤 매핑 전)을 만든다. HLSL은 `TOON_HLSL`. 판 번호 `LookVersion`이 `LOOK_VERSION`(지금 8)과 다르면 지우고 다시 만든다. Custom 노드에서 깊이와 GBuffer를 읽으려면 그 화면 텍스처 노드(SceneTexture)를 Custom 입력에 이어 둬야 엔진이 텍스처를 묶는다.
 - `ensure_fixed_exposure(label, ev)`: 맵 전체 노출을 고정하는 포스트 프로세스 볼륨. 없을 때만 만들고, 있으면 에디터에서 고친 값을 존중해 건드리지 않는다. 정거장은 `STATION_EXPOSURE_EV`(2.0). 값을 맞춰 볼 때는 환경 변수 `HG_STATION_EXPOSURE`를 주고 실행하면 그 값으로 덮어쓴다.
@@ -38,6 +39,10 @@ powershell -ExecutionPolicy Bypass -File .\Tools\Invoke-HGBuild.ps1
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Tools\Update-HGDocsIndex.ps1
 ```
+
+## 에디터 도구
+
+- Planet Maker (에디터 창, C++ 에디터 모듈): `Docs/Tools/PlanetMaker.md`
 
 ## 기타 명령
 

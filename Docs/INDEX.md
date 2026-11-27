@@ -121,6 +121,7 @@
 - 파일
   - HuoguoHuoguo.Build.cs
   - HuoguoHuoguo.h / .cpp
+  - HuoguoHuoguoEditor 모듈 (2026-11-27)
 - 규칙
 
 ### [Planet - 행성 시드와 절차적 행성 생성기](Source/Planet.md)
@@ -129,6 +130,11 @@
 - 파일
   - HGPlanetTypes (.h/.cpp)
   - HGNoise (.h/.cpp), HGNoiseTest.cpp (2026-11-27)
+  - HGPlanetShape (.h/.cpp) (2026-11-27)
+  - HGBasinShape (.h/.cpp) (2026-11-27)
+  - 평지 행성 생성 (`AHGPlanetGenerator::bFlatSite`, 2026-11-27)
+  - HGPlanetPreset (.h/.cpp) (2026-11-27)
+  - HGPlanetTerrainTest.cpp (2026-11-27)
   - HGPlanetGenerator (.h/.cpp)
   - 행성 그림체 (`hg.PlanetMood`, 기본 1)
   - 소행성 지대 (`FHGPlanetSeed::bAsteroidField`)
@@ -202,10 +208,13 @@
 - 역할
 - 환경별 맵 (2026-11-27, 사용자가 에디터에서 `L_PlanetSurface`를 복제해 만듦)
 - 맵
+  - L_Planet_Large - 평지 행성 (대형, 랜드스케이프 분지) (2026-11-27)
   - L_Station - 허브 정거장 훠궈집
   - Legacy/L_PlanetSurface - 예전의 절차적 행성 표면 (은퇴)
   - Legacy/L_Asteroid_Krak7 - 이전 손배치 소행성 (연결 끊김)
 - 흐름 / 규칙
+- 개발용 맵 (`Development/`)
+  - Development/L_PlanetMaker - Planet Maker 미리보기 맵 (2026-11-27)
 - 알려진 문제와 다음 할 일
 
 ### [Materials - 머티리얼 에셋](Content/Materials.md)
@@ -216,11 +225,21 @@
   - M_HG_Glow
   - M_HG_PlanetSky
   - M_HG_VertexColor
+  - M_HG_LandscapeBasin (2026-11-27)
   - M_HG_ScanPulse
   - M_HG_LookToon
 - 알려진 문제와 다음 할 일
 
 ## Tools
+
+### [PlanetMaker - 절차적 행성 만들기 창](Tools/PlanetMaker.md)
+
+- 역할
+- 여는 법
+- 화면
+- JSON 파일
+- 확인한 것 (2026-11-27)
+- 다음 할 일
 
 ### [Tools - 빌드, 맵 생성, 문서 색인 스크립트](Tools/Tools.md)
 
@@ -229,6 +248,7 @@
   - Invoke-HGMapGen.ps1 - 블록아웃 맵 생성
   - GenerateGreyboxMaps.py - 맵/머티리얼/데이터 표 생성 내용
   - Update-HGDocsIndex.ps1 - 문서 색인 생성
+- 에디터 도구
 - 기타 명령
 - 알려진 문제와 다음 할 일
 

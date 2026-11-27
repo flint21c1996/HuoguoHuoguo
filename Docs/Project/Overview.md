@@ -57,7 +57,9 @@ Source는 `Game / Player / UI / Shop/<기능> / World/<기능> / Debug`로 나�
 | `Source/HuoguoHuoguo/World/Travel/`, `Camera/` | 맵에 배치하는 이동 발판, 시작점, 가게 카메라 기준점 | `Docs/Source/World.md` |
 | `Source/HuoguoHuoguo/World/Light/`, `Scan/` | 정거장 조명, 스캐너 파동 | `Docs/Source/Shop.md`, `Docs/Source/Explore.md` |
 | `Source/HuoguoHuoguo/Debug/` | 개발용 도우미 | `Docs/Source/Debug.md` |
-| `Content/HG/Maps/` (`Legacy/` = 안 쓰는 옛 맵) | 맵 에셋 | `Docs/Content/Maps.md` |
+| `Source/HuoguoHuoguoEditor/` | 에디터 전용 모듈 (게임에 안 들어감): Planet Maker 창 | `Docs/Tools/PlanetMaker.md`, `Docs/Source/Module.md` |
+| `Content/HG/Maps/` (`Legacy/` = 안 쓰는 옛 맵, `Development/` = 개발용 맵) | 맵 에셋 | `Docs/Content/Maps.md` |
+| `Content/HG/Planets/` | Planet Maker로 저장한 행성 프리셋 JSON (아직 없음, 처음 저장할 때 생김) | `Docs/Tools/PlanetMaker.md` |
 | `Content/HG/BluePrint/Game/`, `Content/HG/Player/` | 게임 모드 BP / 사장님·컨트롤러 BP, 애니메이션 BP·블렌드 스페이스·리그 | `Docs/Content/Blueprints.md` |
 | `Content/HG/Materials/`, `Content/HG/DebugMaterials/Greybox/` | 게임 머티리얼 / 회색 박스용 단색 머티리얼 | `Docs/Content/Materials.md` |
 | `Content/ArtSource/` | 가져온 아트 원본: `Fbx/Characters/Player`(메시), `Fbx/Animation/Character`(애니메이션), `Material/`, `Texture/` | `Docs/Content/Blueprints.md` |

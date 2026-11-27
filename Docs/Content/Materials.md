@@ -27,6 +27,14 @@
 ### M_HG_VertexColor
 - 정점 색(Vertex Color) → Base Color, 거칠기 0.9. 각진 행성 지형이 면마다 넣은 색을 그대로 그린다. `ensure_planet_materials`가 만든다.
 
+### M_HG_LandscapeBasin (2026-11-27)
+- 평지 행성 랜드스케이프 머티리얼. `ensure_landscape_material`이 없을 때만 만든다 (있으면 에디터에서 고친 것을 존중).
+- Custom 노드(HLSL `LANDSCAPE_BASIN_HLSL`) 하나: 월드 법선(`VertexNormalWS`)이 누운 비탈은 `Rock`, 평평한 곳은 `Ground`와 `GroundB`를 큰 얼룩(월드 위치 사인 무늬)으로 섞는다. 거칠기 0.9.
+- 게임에서 행성 생성기가 세 색 값을 군계 색으로 바꾼다 (`AHGPlanetGenerator::PaintFlatGround`, `SetLandscapeMaterialVectorParameterValue`). 기본값은 바위 군계 색.
+  랜드스케이프 디테일의 **Use Dynamic Material Instance**가 켜져 있어야 한다 (꺼져 있으면 엔진이 색 바꾸기를 무시해서 늘 바위 색이었다. Planet Maker가 만들 때 켜고, 꺼진 랜드스케이프는 로그 `[Flat]` 경고).
+  확인됨: 버섯숲 평지 행성에 다이빙하면 땅이 보라색.
+- 레이어 칠하기(풀/흙 페인트)는 아직 없다. 필요하면 이 머티리얼에 랜드스케이프 레이어를 더한다.
+
 ### M_HG_ScanPulse
 - 스캐너 파동 화면 효과 (포스트 프로세스, 톤 매핑 뒤). `ensure_scan_material`이 만든다. Custom 노드(HLSL `SCAN_HLSL`) 하나: 화면 색(`PostProcessInput0`) + 월드 위치로 고리 띠(`Origin`, `Radius`, `Width`)와 1m 격자 선(`Grid`), 천체 안쪽만(`Center`, `Limit`), 세기 `Fade`, 색 `ScanColor`. 이웃 천체 `Neighbor0` ~ 7(xyz 중심, w 반지름)과 `BodyRadius`로 "이 천체에 더 붙은 점"만 받는다. 판 번호 `ScanVersion`(도구의 `SCAN_VERSION`과 다르면 도구가 지우고 다시 만든다, 지금 3). `AHGScanWave`가 동적 인스턴스로 매 프레임 바꾼다. 새로 만든 직후 처음 쓸 때는 셰이더 컴파일 동안 잠깐 기본 머티리얼(돌 무늬)이 보인다.
 
