@@ -6,13 +6,10 @@
   /Game/HG/DebugMaterials/Greybox/MI_GB_*   엔진 BasicShapeMaterial을 부모로 한 단색 머티리얼 인스턴스
   /Game/HG/Maps/L_Station             허브 정거장 훠궈집 (경영 + 탐험 시작 지점)
   /Game/HG/Maps/Legacy/L_Asteroid_Krak7  (이전 단계의 손배치 소행성. 지금은 어느 발판도 이리로 보내지 않는다)
-  /Game/HG/Maps/L_PlanetSurface       절차적 행성 표면. 조명과 AHGPlanetGenerator만 있고 지형은 실행할 때 시드로 만든다.
-- 이미 있는 맵과 머티리얼은 건드리지 않는다. 사람이 에디터에서 고친 배치를 덮어쓰지 않기 위해서이다.
+  /Game/HG/Maps/Legacy/L_PlanetSurface  예전의 "모든 행성을 받는" 표면 맵 (환경별 맵으로 나뉘어 은퇴. 환경별 맵이 설정에 없을 때의 기본 목적지)
+- 이미 있는 맵은 열지도 고치지도 않는다 (2026-11-27부터 upgrade_station/upgrade_existing_map을 부르지 않는다).
+  맵이 없을 때만 처음 배치를 만들어 준다. 환경별 맵(L_Planet_Small 등)은 에디터에서 사람이 만들고 고친다.
   다시 만들고 싶으면 환경 변수 HG_MAPGEN_FORCE=1을 주고 실행한다 (기존 맵을 지우고 새로 만든다).
-- 예외: upgrade_station()/upgrade_existing_map()은 이미 있는 맵에서 "값"만 새 규칙으로 바꾼다
-  (게임 모드 지정, 정거장 에어록 발판과 귀환 시작점). 이미 맞으면 저장하지 않는다.
-  유일하게 액터를 지우는 경우: 정거장 홀 식탁이 예전 도형 묶음(Table_N_Top/Leg/Pot/Seat)이고 가구 액터가 하나도 없으면
-  그 도형들을 지우고 HGTable/HGChair 가구 액터로 바꾼다. 가구 액터가 하나라도 있으면 건드리지 않는다.
 - 이 스크립트는 처음 배치를 잡아 주는 용도이다. 이후의 배치 수정은 에디터에서 맵을 직접 고치는 것이 기준이다.
 
 좌표 단위는 언리얼 유닛(1 = 1cm)이다. 엔진 기본 도형(Cube, Cylinder, Sphere)은 Scale 1일 때 1m 크기이고 중심이 원점이다.
@@ -27,7 +24,7 @@ MAP_DIR = "/Game/HG/Maps"
 MAT_DIR = "/Game/HG/DebugMaterials/Greybox"
 STATION_MAP = MAP_DIR + "/L_Station"
 ASTEROID_MAP = MAP_DIR + "/Legacy/L_Asteroid_Krak7"
-PLANET_MAP = MAP_DIR + "/L_PlanetSurface"
+PLANET_MAP = MAP_DIR + "/Legacy/L_PlanetSurface"
 
 # 행성에서 정거장으로 돌아올 때 쓰는 도착 태그. AHGPlanetGenerator의 ReturnArrivalTag 기본값과 같다.
 FROM_PLANET = "FromPlanet"
@@ -888,12 +885,8 @@ for map_path, builder in targets:
     unreal.EditorLoadingAndSavingUtils.save_map(world, map_path)
     unreal.log("[MapGen] 맵 저장: " + map_path)
 
-# 이미 있던 맵은 값만 새 규칙으로 맞춘다 (예외: 정거장 홀 식탁 도형을 가구 액터로 바꾸는 것, 위 설명 참고).
-new_paths = [path for path, _ in targets]
-if STATION_MAP not in new_paths:
-    upgrade_station()
-for map_path in (PLANET_MAP, ASTEROID_MAP):
-    if map_path not in new_paths:
-        upgrade_existing_map(map_path)
+# 이미 있는 맵은 열지도 고치지도 않는다 (2026-11-27). 맵은 에디터에서 사람이 직접 만들고 고치는 것이 기준이다.
+# 예전에는 여기서 upgrade_station()/upgrade_existing_map()으로 게임 모드, 노출, 에어록 발판, 시작점, 홀 가구를
+# 새 규칙으로 바꿨는데, 손으로 고친 맵을 덮어쓸 수 있어서 부르지 않는다 (함수는 기록으로 남겨 둔다).
 
 unreal.log("[MapGen] 완료. 새로 만든 맵 %d개" % len(targets))
