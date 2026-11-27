@@ -583,6 +583,7 @@ ACTOR_BPS = {
     "PlanetGenerator": "/Game/HG/BluePrint/World/Planet/BP_HG_PlanetGenerator",
     "ShopCameraAnchor": "/Game/HG/BluePrint/World/Camera/BP_HG_ShopCameraAnchor",
     "Furniture": "/Game/HG/BluePrint/Shop/Furniture/BP_HG_Furniture",
+    "StoveCounter": "/Game/HG/BluePrint/Shop/Kitchen/BP_HG_StoveCounter",
 }
 
 
@@ -679,14 +680,18 @@ def build_station():
     shape("cube", "Trim_East", f, (HX - 2, 0, 35), (0.05, d, 0.06), "Oxygen", collide=False)
     shape("cube", "Trim_North", f, (0, HY - 2, 35), (w, 0.05, 0.06), "Oxygen", collide=False)
 
-    # 주방: 카운터와 화구 2개. 냄비 위에 마라탕(빨강)과 백탕(흰색) 반원판을 얹는다.
+    # 주방: 카운터와 화구 2개를 한 액터로 배치한다. BP가 없는 프로젝트의 블록아웃은 기본 도형을 쓴다.
     f = "Shop/Kitchen"
-    shape("cube", "Counter", f, (100, 400, 45), (4.8, 1.0, 0.9), "Broth")
-    shape("cube", "Counter_Top", f, (100, 400, 93), (4.9, 1.1, 0.08), "Steel")
-    for i, x in enumerate((0, 220)):
-        shape("cylinder", "Burner_%d_Pot" % i, f, (x, 400, 111), (0.8, 0.8, 0.28), "Steel")
-        shape("cylinder", "Burner_%d_Mala" % i, f, (x - 10, 400, 126), (0.36, 0.72, 0.03), "Broth", collide=False)
-        shape("cylinder", "Burner_%d_Baitang" % i, f, (x + 10, 400, 126), (0.36, 0.72, 0.03), "BrothWhite", collide=False)
+    counter_class = actor_class("StoveCounter", None)
+    if counter_class:
+        spawn(counter_class, "StoveCounter", f, (100, 400, 0))
+    else:
+        shape("cube", "Counter", f, (100, 400, 45), (4.8, 1.0, 0.9), "Broth")
+        shape("cube", "Counter_Top", f, (100, 400, 93), (4.9, 1.1, 0.08), "Steel")
+        for i, x in enumerate((0, 220)):
+            shape("cylinder", "Burner_%d_Pot" % i, f, (x, 400, 111), (0.8, 0.8, 0.28), "Steel")
+            shape("cylinder", "Burner_%d_Mala" % i, f, (x - 10, 400, 126), (0.36, 0.72, 0.03), "Broth", collide=False)
+            shape("cylinder", "Burner_%d_Baitang" % i, f, (x + 10, 400, 126), (0.36, 0.72, 0.03), "BrothWhite", collide=False)
 
     # 홀: 손님 식탁 4개와 의자. 경영 파트에서 사장님이 옮기거나 치울 수 있는 가구 액터다.
     place_hall_furniture()

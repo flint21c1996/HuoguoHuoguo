@@ -145,7 +145,7 @@ B로 가구 배치 모드에 들어가 정해진 칸 위에 식탁, 의자, 장�
 - 들어오기: 영업 중(낮, 밤)이면 `ArrivalInterval`(7초)의 0.6 ~ 1.4배 간격으로 입구 칸에 손님이 나타난다. 문 닫을 시간에는 새 손님이 없고, 안에 있던 손님은 마저 먹고 나간다.
 - 빈자리 = 식탁을 바라보는 의자(의자 앞 칸이 식탁, `GetFrontTile`) 중 다른 손님이 잡지 않은 것. 빈자리가 없으면 오지 않는다. 빈자리를 섞어 길이 있는 첫 자리로 보낸다.
 - 길 찾기(`FindPath`): 바닥 칸 위 상하좌우 너비 우선 탐색. 가구 칸과 고정 장애물 칸(`StaticBlocked`)을 피한다. 출발 칸과 도착 칸(의자)은 가구가 있어도 지나간다.
-  고정 장애물은 맵 시작에 칸마다 상자(칸 70%, 바닥 위 20~140)로 겹침 검사해서 찾는다. L_Station: 22칸 (TravelPad_Airlock, Counter, IngredientShelf).
+  고정 장애물은 맵 시작에 칸마다 상자(칸 70%, 바닥 위 20~140)로 겹침 검사해서 찾는다. L_Station: 22칸 (TravelPad_Airlock, StoveCounter, IngredientShelf). 카운터를 BP로 묶은 뒤에도 22칸이다.
 - 먹기: 의자에 앉아 식탁을 보고 `EatSeconds`(10초). 그동안 식탁 김이 켜진다. 김 색 = 그 식탁 콤보 수 (없음 흰색, 1개 연한 금색, 2개 이상 진한 주황). 0.5초마다와 손님이 앉고 일어날 때 다시 칠한다.
 - 계산(`Pay`): 꼬치 `SkewersPerCustomer`(3)개. 가방에서 재료를 하나씩 꺼내(`TakeOneFromBag`) 그 재료의 `Price`, 가방이 비면 기본 꼬치 `BasicSkewerPrice`(5).
   계산할 때마다 GameInstance의 받은 손님 수를 올리고, 손님 수로 열리는 가구를 확인한다 (`HGFurnitureUnlock::UnlockByCustomers`).

@@ -19,6 +19,7 @@ powershell -ExecutionPolicy Bypass -File .\Tools\Invoke-HGBuild.ps1
 ### GenerateGreyboxMaps.py - 맵/머티리얼/데이터 표 생성 내용
 - `ensure_data_tables()`: `DATA_TABLES` 목록의 CSV(`Data/*.csv`)를 DataTable(`/Game/HG/DataTable/DT_*`)로 읽어 들인다 (지금 `DT_Ingredients`, `DT_Combos`, `DT_Furniture`). 에셋이 없으면 만들고, 있으면 CSV로 다시 채운 뒤 내용이 바뀌었을 때만 저장한다 (`Docs/Content/Data.md`).
 - `MI_GB_*` 머티리얼, `L_Station`, `Legacy/L_Asteroid_Krak7`, `Legacy/L_PlanetSurface`를 만든다. 이미 있으면 건너뛴다.
+- 새 정거장의 카운터와 화구는 `BP_HG_StoveCounter`를 배치한다. 해당 BP가 없으면 기본 도형으로 블록아웃한다.
 - 이미 있는 맵은 열지도 고치지도 않는다 (2026-11-27). 맵은 에디터에서 사람이 고친다. 환경별 맵(`L_Planet_Small` 등)은 이 도구가 모른다.
 - `ensure_glow_material()`: 발광 머티리얼 `M_HG_Glow`를 만든다. 이미 있으면 인스턴스 메시 사용 표시만 켠다 (`Docs/Content/Materials.md`).
 - `ensure_planet_materials()`: 행성 그림체용 `M_HG_PlanetSky`(하늘 돔, HLSL은 `SKY_HLSL`)와 `M_HG_VertexColor`(각진 지형)를 만든다. 하늘 머티리얼이 이미 있으면 하늘(Is Sky) 표시만 켠다 (`Docs/Content/Materials.md`).

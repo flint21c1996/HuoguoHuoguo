@@ -47,7 +47,8 @@
 - 게임과 에디터의 기본 맵. 경영 파트 (World Settings GameMode = `BP_HG_ShopGameMode`). 12m x 10m 가게, 바닥 윗면 Z = 0, 가게 중심 = 원점.
 - 아웃라이너 폴더: `Lighting`, `Gameplay`, `Shop/Structure`, `Shop/Kitchen`, `Shop/Hall`, `Shop/Props`
 - 카메라 쪽 두 벽(서, 남)은 발목 높이, 먼 쪽 두 벽(동, 북)은 높게 (기본 카메라 45도 기준).
-- 주방(카운터, 화구 2개, 마라탕/백탕), 재료 진열대, 도착 전광판, 에어록 문.
+- 주방(`Shop/Kitchen`)에는 `StoveCounter`(`BP_HG_StoveCounter`)를 놓는다. 카운터 본체·상판, 화구 2개의 냄비·국물 등 8개 메시 컴포넌트를 바닥의 중심점에서 함께 옮길 수 있다. 기존 위치·머티리얼·충돌을 대조했다. 정거장 편집 액터는 45개에서 38개로 줄었다.
+- 재료 진열대, 도착 전광판, 에어록 문은 각각 기존 위치에 있다.
 - 홀(`Shop/Hall`): 가구 액터 `Table_0~3`(`BP_HG_Furniture` ID `Table`, (-300,-250) (100,-250) (-300,50) (100,50))과 `Chair_0~3`(ID `Chair`, 각 식탁 남쪽 105, Yaw 90). 경영 파트에서 옮기거나 치울 수 있는 처음 배치다. 예전 도형 묶음(Table_N_Top/Leg/Pot/Seat)은 `upgrade_station()`이 이것으로 바꿨다.
 - 게임플레이: `ShopCameraAnchor`(`BP_HG_ShopCameraAnchor`, 원점, Yaw 45 = 카메라 처음 방향), `PlayerStart_Default`(엔진 PlayerStart, 태그 Default, -100, 220, 사장님 시작), `PlayerStart_FromPlanet`(태그 FromPlanet, -450, 250, 행성에서 귀환), `TravelPad_Airlock`(`BP_HG_TravelPad`, -450, 400, 60, 다이빙 발판 → `L_PlanetSurface`).
 - 2026-11-28: 시작점을 엔진 PlayerStart로, 가구/발판/카메라 기준점을 C++ 클래스에서 BP로 바꿨다 (값과 위치 그대로, 엔진 Convert Actors). 가구 ID는 변환 때 비어서 다시 넣었다.

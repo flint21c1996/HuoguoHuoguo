@@ -44,6 +44,7 @@ C++는 기능과 규칙을 맡고, "어떤 모델/값을 쓸지"는 블루프린
 | `BluePrint/Shop/Customer/BP_HG_Customer` | `AHGCustomer` | 손님 (Customer Director `CustomerClass`) |
 | `BluePrint/Shop/Customer/BP_HG_MoneyPopup` | `AHGMoneyPopup` | 계산 "+금액" 글자 (`MoneyPopupClass`) |
 | `BluePrint/Shop/Furniture/BP_HG_Furniture` | `AHGFurniture` | 정거장 처음 가구 8개(맵), CSV `ActorClass`가 빈 가구 (Furniture Placer `DefaultFurnitureClass`) |
+| `BluePrint/Shop/Kitchen/BP_HG_StoveCounter` | `AActor` | 정거장 주방의 카운터와 화구 2개. 8개 정적 메시 컴포넌트를 함께 배치하는 BP |
 
 - 맵의 C++ 액터는 엔진 Convert Actors로 BP로 바꿨다 (이름표, 폴더, 위치, 값 그대로). 원래 클래스의 기본값과 같은 값은 옮겨지지 않는다 (가구 ID가 비어서 다시 넣었다).
 - 맵 생성 도구(`Tools/GenerateGreyboxMaps.py`)도 새 맵을 만들 때 이 BP를 놓는다 (BP가 없으면 C++ 클래스).
