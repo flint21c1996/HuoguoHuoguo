@@ -1,6 +1,6 @@
 # Planet - 행성 시드와 절차적 행성 생성기
 
-> 경로: `Source/HuoguoHuoguo/Planet/` · 마지막 갱신: 2026-11-26
+> 경로: `Source/HuoguoHuoguo/World/Planet/` · 마지막 갱신: 2026-11-26
 
 ## 역할
 
@@ -87,7 +87,7 @@
 - 행성과 소행성 지대의 재료 표식 중 20%(`HiddenIngredientRatio`)는 숨은 재료로 처음엔 보이지 않는다 (`bHidden`, 캔 것과 다른 시간대 것은 제외, 행성 시드 + 표식 번호로 정해 늘 같은 것이 숨는다). `IsAvailable()`은 숨은 재료를 뺀다.
 - `ScanMarker(번호, 시각)`: 스캐너 파동이 닿으면 깜빡임 시각(`PingTime`)을 남기고, 숨은 재료면 크기를 되돌려 드러낸다. 폐우주선 재료는 숨기지 않는다.
 
-### 폐우주선 (`FHGPlanetSeed::bDerelict`, `Planet/HGDerelict.cpp`)
+### 폐우주선 (`FHGPlanetSeed::bDerelict`, `World/Planet/HGDerelict.cpp`)
 - 다이빙 목적지의 한 종류 (사용자 결정: 새 다이빙 목적지). `MakePlanet`이 맨 뒤에서 뽑아 소행성 지대가 아닌 것 중 다섯에 하나 정도. 시험: `HGSeq hg.Derelict 1|HGDive <번호>`. `MakeDerelict`: 인공 중력 0.8, 군계는 선체에 자란 재료의 성격.
 - `EnsureGenerated`: 땅 지형과 행성 쪽 배치 없이 `ScatterProps`(재료 종류 인스턴스 메시만) -> `BuildDerelict`. 그림체(`ApplyMoodPreview`)는 나무/식물/바위섬/지형 볼거리를 0으로 두고 하늘(우주색, 별, 고리 행성, 정거장)과 조명만.
 - `BuildDerelict`: 우주선 기준 좌표계 `ShipFrame`(살짝 기울임, 시드)에 상자 묶음(색마다 인스턴스 메시, 충돌 있는 선체/바닥/벽/가구와 충돌 없는 장식/불빛/잔해).

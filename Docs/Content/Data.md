@@ -1,6 +1,6 @@
 # Data - 밸런스 데이터 (CSV 원본과 DataTable 에셋)
 
-> 경로: `Data/` (CSV 원본), `Content/HG/Data/` (DataTable 에셋) · 마지막 갱신: 2026-11-24
+> 경로: `Data/` (CSV 원본), `Content/HG/DataTable/` (DataTable 에셋) · 마지막 갱신: 2026-11-24
 
 ## 역할
 
@@ -79,12 +79,12 @@
 - 예: 대나무 화분 + 홍등 + 야광버섯 화분을 한 식탁에 붙이면 초록 쉼터, 등불 아래, 정원 등불석, 행성 향기가 함께 성립해 +85%다.
 - UTF-8 BOM으로 저장한다.
 
-### Content/HG/Data/DT_Furniture - 가구 DataTable
+### Content/HG/DataTable/DT_Furniture - 가구 DataTable
 - `ensure_data_tables()`가 `Data/Furniture.csv`로 만든다. 가구 액터(생성 스크립트)와 배치 컴포넌트가 경로로 불러온다 (`HGFurnitureData::LoadTable`).
-### Content/HG/Data/DT_Combos - 콤보 DataTable
+### Content/HG/DataTable/DT_Combos - 콤보 DataTable
 - `ensure_data_tables()`가 `Data/Combos.csv`로 만든다. GameInstance가 소프트 참조로 불러온다 (`GetComboTable`).
 
-### Content/HG/Data/DT_Ingredients - 재료 DataTable
+### Content/HG/DataTable/DT_Ingredients - 재료 DataTable
 - `Tools/GenerateGreyboxMaps.py`의 `ensure_data_tables()`가 `Data/Ingredients.csv`로 만들고 채운다. CSV와 내용이 같으면 저장하지 않는다.
 - GameInstance가 소프트 참조로 불러온다. 행성 생성기는 행 순서대로 재료 표식 종류를 만든다.
 

@@ -5,7 +5,7 @@
 ## 파일
 
 ### HuoguoHuoguo.Build.cs
-- `PublicIncludePaths.Add(ModuleDirectory)`: `#include "Game/HGPlayerControllerBase.h"`처럼 모듈 루트 기준 하위 폴더 경로로 include한다.
+- `PublicIncludePaths.Add(ModuleDirectory)`: `#include "Player/HGPlayerControllerBase.h"`처럼 모듈 루트 기준 하위 폴더 경로로 include한다.
 - 공개 의존: `Core`, `CoreUObject`, `Engine`, `InputCore`, `EnhancedInput`, `DeveloperSettings` (프로젝트 설정 클래스 `UHGLookSettings`)
 - 비공개 의존: `ProceduralMeshComponent` (행성 지형), `UMG`, `Slate`, `SlateCore` (미니맵 등 화면 UI)
 

@@ -1,6 +1,6 @@
 # Game - 두 파트의 공통 부모(게임 모드, 컨트롤러), GameInstance, 재료 데이터 구조
 
-> 경로: `Source/HuoguoHuoguo/Game/` · 마지막 갱신: 2026-11-26
+> 경로: `Source/HuoguoHuoguo/Game/` (플레이어 컨트롤러 공통 부모는 `Player/HGPlayerControllerBase`) · 마지막 갱신: 2026-11-26
 
 ## 역할
 
@@ -11,7 +11,7 @@
 
 ### HGGameModeBase (.h/.cpp)
 - 추상 클래스. `DefaultPawnClass = nullptr`, `RestartPlayer`를 비워서 엔진 기본 Pawn 생성을 막는다. 사장님은 각 파트 컨트롤러가 직접 만든다.
-- 하위: `AHGShopGameMode`(L_Station), `AHGExploreGameMode`(L_PlanetSurface, L_Asteroid_Krak7, 프로젝트 기본값).
+- 하위: `AHGShopGameMode`(L_Station), `AHGExploreGameMode`(L_PlanetSurface, Legacy/L_Asteroid_Krak7, 프로젝트 기본값).
   맵과 프로젝트 기본값에는 이들의 블루프린트(`BP_HG_ShopGameMode`, `BP_HG_ExploreGameMode`)가 들어간다 (`Docs/Content/Blueprints.md`).
 
 ### HGPlayerControllerBase (.h/.cpp)
@@ -65,7 +65,7 @@
   - 가구는 ID(`Data/Furniture.csv` 행 이름)로 남긴다. 다시 놓을 때 경영 파트가 그 행으로 가구를 만든다. 공통 폴더는 경영 파트의 가구 클래스를 모른다.
 - `GetDevSequence()`: `HGSeq`가 아직 실행하지 않은 명령들.
 - 재료
-  - `IngredientTable`(소프트 참조, 기본 `/Game/HG/Data/DT_Ingredients`): `GetIngredientTable()`이 처음 쓸 때 불러온다. 없으면 에러 로그 한 번.
+  - `IngredientTable`(소프트 참조, 기본 `/Game/HG/DataTable/DT_Ingredients`): `GetIngredientTable()`이 처음 쓸 때 불러온다. 없으면 에러 로그 한 번.
   - `FindIngredient(Id)`, `GetIngredientName(Id)`(표에 없으면 ID 그대로).
   - 가방 `Bag`(재료 ID → 개수): `AddToBag`, `GetBagCount`, `DescribeBag()`("서리다시마 2, 불씨고추 1", 표의 행 순서).
   - `RemoveFromBag(Id, Count)`: 그 재료를 Count개 꺼낸다 (가구 해금). 모자라면 꺼내지 않고 false.
@@ -76,7 +76,7 @@
   - `Money`(처음 300): `GetMoney`, `AddMoney`. 손님 계산으로 늘고, 가구를 놓거나 열 때 줄고, 가구를 치우면 절반이 돌아온다.
   - 열린 가구 `UnlockedFurniture`(가구 ID 집합): `IsFurnitureUnlocked`, `UnlockFurniture`(새로 열었으면 true). 처음부터 열린 가구(Start)는 여기 없어도 열린 것으로 친다 (판정은 경영 파트 `HGFurnitureUnlock`).
   - 받은 손님 수 `ServedCustomers`(게임 전체): `GetServedCustomers`, `AddServedCustomer`. 손님 수로 열리는 가구가 쓴다.
-  - `ComboTable`(소프트 참조, 기본 `/Game/HG/Data/DT_Combos`): `GetComboTable()`. 행 구조체 `FHGComboRow`는 경영 파트(`Shop/HGShopCombos.h`)에 있어서, 공통 폴더인 여기서는 표 에셋(`UDataTable`)만 들고 있는다.
+  - `ComboTable`(소프트 참조, 기본 `/Game/HG/DataTable/DT_Combos`): `GetComboTable()`. 행 구조체 `FHGComboRow`는 경영 파트(`Shop/Core/HGShopCombos.h`)에 있어서, 공통 폴더인 여기서는 표 에셋(`UDataTable`)만 들고 있는다.
   - 발견한 콤보 `DiscoveredCombos`(콤보 ID 집합): `DiscoverCombo(Id)`(처음이면 true), `GetDiscoveredCombos`. 나중에 도감 화면이 읽는다.
 
 ### HGDayTypes.h

@@ -43,19 +43,25 @@
 
 ## 폴더 지도
 
+폴더는 UnderOneUmbrella 프로젝트와 같은 방식으로 나눈다 (2026-11-27). Content는 게임 것(`HG/`)과 가져온 아트 원본(`ArtSource/`)을 나누고,
+Source는 `Game / Player / UI / Shop/<기능> / World/<기능> / Debug`로 나눈다. 엔진 템플릿 마네킹은 `Content/Characters/Mannequins`(저장소 밖, 이 PC에만).
+
 | 프로젝트 경로 | 내용 | 문서 |
 |---|---|---|
 | `Source/HuoguoHuoguo/` (루트) | 모듈 정의, 로그 카테고리, Build.cs | `Docs/Source/Module.md` |
-| `Source/HuoguoHuoguo/Game/` | 두 파트 공통 부모(게임 모드, 컨트롤러), GameInstance(가방, 기록), 재료 행 구조체 | `Docs/Source/Game.md` |
-| `Source/HuoguoHuoguo/Shop/` | 경영 파트 (게임 모드, 컨트롤러, 아이소 사장님, 가구와 배치 모드) | `Docs/Source/Shop.md` |
-| `Source/HuoguoHuoguo/Explore/` | 탐험 파트 (게임 모드, 컨트롤러, 3인칭 사장님 + 구형 중력) | `Docs/Source/Explore.md` |
-| `Source/HuoguoHuoguo/Player/` | 사장님 공통 몸체 | `Docs/Source/Player.md` |
-| `Source/HuoguoHuoguo/World/` | 맵에 배치하는 표식/발판 액터 | `Docs/Source/World.md` |
-| `Source/HuoguoHuoguo/Planet/` | 행성 시드, 절차적 행성 생성기 | `Docs/Source/Planet.md` |
+| `Source/HuoguoHuoguo/Game/` | 게임 모드(공통 부모, 경영, 탐험), GameInstance(가방, 기록), 재료/하루 타입, 그림체 설정 | `Docs/Source/Game.md` |
+| `Source/HuoguoHuoguo/Player/` | 사장님 캐릭터(공통, 경영, 탐험)와 플레이어 컨트롤러(공통, 경영, 탐험) | `Docs/Source/Player.md` (경영/탐험 쪽은 `Shop.md`, `Explore.md`) |
+| `Source/HuoguoHuoguo/UI/` | 탐험 UI 위젯 (미니맵, 도감) | `Docs/Source/Explore.md` |
+| `Source/HuoguoHuoguo/Shop/Core/`, `Customer/`, `Furniture/` | 경영 시스템: 칸/콤보, 손님 흐름, 가구와 배치 모드 | `Docs/Source/Shop.md` |
+| `Source/HuoguoHuoguo/World/Planet/` | 행성 시드, 절차적 행성 생성기, 폐우주선 | `Docs/Source/Planet.md` |
+| `Source/HuoguoHuoguo/World/Travel/`, `Camera/` | 맵에 배치하는 이동 발판, 시작점, 가게 카메라 기준점 | `Docs/Source/World.md` |
+| `Source/HuoguoHuoguo/World/Light/`, `Scan/` | 정거장 조명, 스캐너 파동 | `Docs/Source/Shop.md`, `Docs/Source/Explore.md` |
 | `Source/HuoguoHuoguo/Debug/` | 개발용 도우미 | `Docs/Source/Debug.md` |
-| `Content/HG/Maps/` | 맵 에셋 | `Docs/Content/Maps.md` |
-| `Content/HG/Materials/` | 머티리얼 | `Docs/Content/Materials.md` |
-| `Data/`, `Content/HG/Data/` | 밸런스 데이터 CSV 원본과 DataTable 에셋 | `Docs/Content/Data.md` |
+| `Content/HG/Maps/` (`Legacy/` = 안 쓰는 옛 맵) | 맵 에셋 | `Docs/Content/Maps.md` |
+| `Content/HG/BluePrint/Game/`, `Content/HG/Player/` | 게임 모드 BP / 사장님·컨트롤러 BP, 애니메이션 BP·블렌드 스페이스·리그 | `Docs/Content/Blueprints.md` |
+| `Content/HG/Materials/`, `Content/HG/DebugMaterials/Greybox/` | 게임 머티리얼 / 회색 박스용 단색 머티리얼 | `Docs/Content/Materials.md` |
+| `Content/ArtSource/` | 가져온 아트 원본: `Fbx/Characters/Player`(메시), `Fbx/Animation/Character`(애니메이션), `Material/`, `Texture/` | `Docs/Content/Blueprints.md` |
+| `Data/`, `Content/HG/DataTable/` | 밸런스 데이터 CSV 원본과 DataTable 에셋 | `Docs/Content/Data.md` |
 | `Tools/` | 빌드, 맵 생성, 문서 색인 스크립트 | `Docs/Tools/Tools.md` |
 | `Config/`, `.uproject`, `.gitignore` | 엔진/프로젝트 설정 | `Docs/Project/Config.md` |
 

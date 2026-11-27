@@ -1,6 +1,6 @@
 # World - 맵에 배치하는 표식과 발판 액터
 
-> 경로: `Source/HuoguoHuoguo/World/` · 마지막 갱신: 2026-11-23
+> 경로: `Source/HuoguoHuoguo/World/Travel/`, `World/Camera/` · 마지막 갱신: 2026-11-23
 
 ## 역할
 

@@ -1,6 +1,6 @@
 # Shop - 경영 파트 (아이소 시점, 칸 배치와 콤보, 손님)
 
-> 경로: `Source/HuoguoHuoguo/Shop/` · 마지막 갱신: 2026-11-24
+> 경로: `Game/HGShopGameMode`, `Player/HGShop*`, `Shop/Core/`·`Customer/`·`Furniture/`, `World/Light/`, `World/Camera/` (Source/HuoguoHuoguo 기준) · 마지막 갱신: 2026-11-24
 
 ## 역할
 
@@ -50,7 +50,7 @@ B로 가구 배치 모드에 들어가 정해진 칸 위에 식탁, 의자, 장�
 ### HGFurnitureData.h
 - `EHGFurnitureCategory`: `Table`(식탁) / `Chair`(의자) / `Decor`(장식).
 - `FHGFurnitureRow`(DataTable 행, 원본 `Data/Furniture.csv`, 열 설명은 `Docs/Content/Data.md`): `DisplayName`, `Category`, `Style`, `Pot`, `SizeX`/`SizeY`, `Price`, `BonusPercent`, `Tags`, `ColorA`/`ColorB`(`#RRGGBB`), `ActorClass`(블루프린트), `Description`.
-- `HGFurnitureData::LoadTable/FindRow/ParseColor/ParseTags/CategoryName`. 표 경로 `/Game/HG/Data/DT_Furniture`. 색은 sRGB로 읽어 선형으로 바꾼다 (엑셀에 적은 색과 화면이 비슷하게).
+- `HGFurnitureData::LoadTable/FindRow/ParseColor/ParseTags/CategoryName`. 표 경로 `/Game/HG/DataTable/DT_Furniture`. 색은 sRGB로 읽어 선형으로 바꾼다 (엑셀에 적은 색과 화면이 비슷하게).
 
 ### HGFurnitureUnlock.cpp
 카이로식 가구 해금 규칙 (선언은 `HGFurnitureData.h`의 `HGFurnitureUnlock`). 열린 가구 기록은 GameInstance.

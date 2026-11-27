@@ -1,6 +1,6 @@
 # Player - 사장님 캐릭터 공통 몸체
 
-> 경로: `Source/HuoguoHuoguo/Player/` · 마지막 갱신: 2026-11-25
+> 경로: `Source/HuoguoHuoguo/Player/` (경영/탐험 캐릭터와 컨트롤러도 이 폴더) · 마지막 갱신: 2026-11-25
 
 ## 역할
 

@@ -126,7 +126,7 @@
   - 행성 그림체 (`hg.PlanetMood`, 기본 1)
   - 소행성 지대 (`FHGPlanetSeed::bAsteroidField`)
   - 숨은 재료와 스캔 (`HiddenIngredientRatio`, `ScanMarker`)
-  - 폐우주선 (`FHGPlanetSeed::bDerelict`, `Planet/HGDerelict.cpp`)
+  - 폐우주선 (`FHGPlanetSeed::bDerelict`, `World/Planet/HGDerelict.cpp`)
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
 
@@ -173,8 +173,8 @@
 
 - 역할
 - 연결 순서
-- 주인공 모델 에셋 (`Content/HG/Characters/Boss/`)
-- 주인공 애니메이션 (`Content/HG/Characters/Boss/Anims`, `Rigs`) (2026-11-27)
+- 주인공 모델 에셋 (`Content/ArtSource/`: 메시 `Fbx/Characters/Player`, 머티리얼 `Material/Character`, 텍스처 `Texture/Character`)
+- 주인공 애니메이션 (애니메이션 `Content/ArtSource/Fbx/Animation/Character`, ABP/블렌드 스페이스/리그 `Content/HG/Player/Animations`) (2026-11-27)
 - 알려진 문제와 다음 할 일
 
 ### [Data - 밸런스 데이터 (CSV 원본과 DataTable 에셋)](Content/Data.md)
@@ -184,9 +184,9 @@
   - Data/Ingredients.csv - 재료
   - Data/Furniture.csv - 가구 목록 (엑셀로 열어 고친다)
   - Data/Combos.csv - 배치 콤보
-  - Content/HG/Data/DT_Furniture - 가구 DataTable
-  - Content/HG/Data/DT_Combos - 콤보 DataTable
-  - Content/HG/Data/DT_Ingredients - 재료 DataTable
+  - Content/HG/DataTable/DT_Furniture - 가구 DataTable
+  - Content/HG/DataTable/DT_Combos - 콤보 DataTable
+  - Content/HG/DataTable/DT_Ingredients - 재료 DataTable
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
 
@@ -196,7 +196,7 @@
 - 맵
   - L_Station - 허브 정거장 훠궈집
   - L_PlanetSurface - 절차적 행성 표면
-  - L_Asteroid_Krak7 - 이전 손배치 소행성 (연결 끊김)
+  - Legacy/L_Asteroid_Krak7 - 이전 손배치 소행성 (연결 끊김)
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일
 

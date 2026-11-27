@@ -1,6 +1,6 @@
 # Explore - 탐험 파트 (3인칭으로 행성을 걷고 재료를 캐고 미니맵을 본다)
 
-> 경로: `Source/HuoguoHuoguo/Explore/` · 마지막 갱신: 2026-11-24
+> 경로: `Game/HGExploreGameMode`, `Player/HGExplore*`·`HGExplorerCharacter`, `UI/`, `World/Scan/` (Source/HuoguoHuoguo 기준) · 마지막 갱신: 2026-11-24
 
 ## 역할
 
@@ -9,7 +9,7 @@
 ## 파일
 
 ### HGExploreGameMode (.h/.cpp)
-- `PlayerControllerClass = AHGExplorePlayerController`. L_PlanetSurface, L_Asteroid_Krak7의 World Settings에서 지정.
+- `PlayerControllerClass = AHGExplorePlayerController`. L_PlanetSurface, Legacy/L_Asteroid_Krak7의 World Settings에서 지정.
 - 프로젝트 기본 게임 모드이기도 하다 (지정 없는 시험용 맵을 열면 바로 걸어 다닐 수 있게).
 
 ### HGExplorerCharacter (.h/.cpp)

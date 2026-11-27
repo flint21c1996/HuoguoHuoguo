@@ -1,6 +1,6 @@
 # Materials - 머티리얼 에셋
 
-> 경로: `Content/HG/Materials/` · 마지막 갱신: 2026-11-26
+> 경로: `Content/HG/Materials/` (회색 박스 단색 `MI_GB_*`는 `Content/HG/DebugMaterials/Greybox/`) · 마지막 갱신: 2026-11-27
 
 ## Greybox
 

@@ -26,7 +26,7 @@
 - `PlanetGenerator`(원점, 귀환 → `L_Station`/`FromPlanet`), 배경 `GasPlanet` 구체.
 - 하늘 대기 없음 (우주).
 
-### L_Asteroid_Krak7 - 이전 손배치 소행성 (연결 끊김)
+### Legacy/L_Asteroid_Krak7 - 이전 손배치 소행성 (연결 끊김)
 - 탐험 파트 (GameMode = `BP_HG_ExploreGameMode`). 지름 40m 평평한 원판과 바위 26개, 재료 표식 9개. 절차적 행성으로 대체되어 지금은 어느 발판도 이리로 보내지 않는다.
 - 이 맵의 귀환 발판은 `FromAsteroid` 태그로 보내는데 정거장에 그 시작점이 없어서 `Default`로 대체된다. 지울지 결정이 필요하다.
 

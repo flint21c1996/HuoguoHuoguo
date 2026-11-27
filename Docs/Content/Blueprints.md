@@ -1,6 +1,6 @@
 # Blueprints - 기획/아트가 직접 고치는 클래스 설정
 
-> 경로: `Content/HG/Blueprints/`, `Content/HG/Characters/` · 마지막 갱신: 2026-11-27
+> 경로: `Content/HG/BluePrint/Game/`, `Content/HG/Player/`, `Content/ArtSource/` · 마지막 갱신: 2026-11-27
 
 ## 역할
 
@@ -21,13 +21,14 @@ C++는 기능과 규칙을 맡고, "어떤 모델/값을 쓸지"는 블루프린
 | `BP_HG_ShopBoss` | `AHGShopBossCharacter` | Mesh = `SK_HG_Boss`, 크기 1.8. 걷기 속도 등은 Character Movement, 아이소 카메라 값은 Camera\|Iso |
 | `BP_HG_Explorer` | `AHGExplorerCharacter` | Mesh = `SK_HG_Boss`, 크기 1.8. 점프/카메라/소행성 뛰기 값은 Jump, Camera, Hop, Float |
 
-- 맵: `L_Station` → `BP_HG_ShopGameMode`, `L_PlanetSurface`·`L_Asteroid_Krak7` → `BP_HG_ExploreGameMode`. 프로젝트 기본값도 `BP_HG_ExploreGameMode`.
+- 맵: `L_Station` → `BP_HG_ShopGameMode`, `L_PlanetSurface`·`Legacy/L_Asteroid_Krak7` → `BP_HG_ExploreGameMode`. 프로젝트 기본값도 `BP_HG_ExploreGameMode`.
 - 컨트롤러의 사장님 클래스가 비어 있으면 C++ 기본 클래스로 나타난다 (모델 없이 자리 표시).
 - 가게와 탐험은 사장님 BP가 따로라서, 나중에 가게 차림(앞치마)을 다른 모델로 둘 수 있다.
 
-## 주인공 모델 에셋 (`Content/HG/Characters/Boss/`)
+## 주인공 모델 에셋 (`Content/ArtSource/`: 메시 `Fbx/Characters/Player`, 머티리얼 `Material/Character`, 텍스처 `Texture/Character`)
 
 - `SK_HG_Boss` (+ `_Skeleton`, `_PhysicsAsset`): Tripo 모델을 블렌더에서 정리해 FBX로 가져왔다. 키 1m(100cm), 원점 = 발, 앞 = +Y, 본 64개 (언리얼 마네킹 이름: root, pelvis, spine_01~05, …).
+  - 폴더 정리(2026-11-27) 뒤 `SK_HG_Boss_PhysicsAsset`의 미리보기 메시가 비었다 (파이썬에서 못 고침). 피직스 에셋을 열 때 Preview Mesh를 `SK_HG_Boss`로 한 번 골라 저장한다. 게임에는 영향 없다.
   - FBX 내보내기 규칙 (중요): 뼈 길이까지 cm 값이어야 한다. 블렌더에서 아마추어+메시를 100배 하고 배율 적용(Apply Scale),
     씬 Unit Scale 0.01, Apply Unit 켬, Apply Scalings = All Local로 내보낸다 (작업 .blend는 저장하지 않고 내보내기만 한다).
     예전 방식(미터 데이터 + 단위 변환)은 100배가 뿌리 뼈 배율로 들어가서, 리타게팅 애니메이션이 그 배율을 1로 덮어써 캐릭터가 1/100로 줄어 안 보였다.
@@ -40,7 +41,7 @@ C++는 기능과 규칙을 맡고, "어떤 모델/값을 쓸지"는 블루프린
   언리얼 텍스처 에셋의 원본 경로도 이 폴더를 가리킨다. 다시 칠하면 `HG_Boss.blend`에서 저장한 뒤 텍스처 에셋에서 Reimport.
 - 그림체 규칙: 캐릭터는 "면별 단색 + 셀 셰이딩"으로 통일한다 (배경의 단색 복셀과 맞춘다). 새 캐릭터도 같은 방식으로 칠한다.
 
-## 주인공 애니메이션 (`Content/HG/Characters/Boss/Anims`, `Rigs`) (2026-11-27)
+## 주인공 애니메이션 (애니메이션 `Content/ArtSource/Fbx/Animation/Character`, ABP/블렌드 스페이스/리그 `Content/HG/Player/Animations`) (2026-11-27)
 
 - 언리얼 3인칭 템플릿의 마네킹 맨손 동작을 사장님 뼈대로 리타게팅했다. 원본 = 엔진 `Templates/TemplateResources/High/Characters`를 `Content/Characters/Mannequins`로 복사한 것.
 - `Rigs/IK_Mannequin`, `Rigs/IK_HG_Boss`: 뼈 이름이 같아서 체인 29개가 자동으로 맞았다. `Rigs/RTG_Mannequin_To_HGBoss`: 사장님 T자세를 마네킹 A자세에 자동 정렬.
