@@ -13,8 +13,8 @@ namespace
 UHGGameInstance::UHGGameInstance()
 {
 	// 소프트 참조라서 에셋이 아직 없어도 컴파일과 실행은 된다. 실제로 쓸 때 불러온다.
-	IngredientTable = TSoftObjectPtr<UDataTable>(FSoftObjectPath(TEXT("/Game/HG/Data/DT_Ingredients.DT_Ingredients")));
-	ComboTable = TSoftObjectPtr<UDataTable>(FSoftObjectPath(TEXT("/Game/HG/Data/DT_Combos.DT_Combos")));
+	IngredientTable = TSoftObjectPtr<UDataTable>(FSoftObjectPath(TEXT("/Game/HG/DataTable/DT_Ingredients.DT_Ingredients")));
+	ComboTable = TSoftObjectPtr<UDataTable>(FSoftObjectPath(TEXT("/Game/HG/DataTable/DT_Combos.DT_Combos")));
 }
 
 const TArray<FHGPlanetSeed>& UHGGameInstance::GetApproachingPlanets()

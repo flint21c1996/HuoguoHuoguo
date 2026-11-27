@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
 #include "Game/HGDayTypes.h"
-#include "Planet/HGPlanetTypes.h"
+#include "World/Planet/HGPlanetTypes.h"
 #include "HGGameInstance.generated.h"
 
 class UDataTable;
@@ -189,11 +189,11 @@ public:
 	int32 GetBlueprintsFound() const { return BlueprintsFound; }
 
 protected:
-	// 재료 DataTable 경로. 기본값은 /Game/HG/Data/DT_Ingredients (Tools/GenerateGreyboxMaps.py가 Data/Ingredients.csv로 만든다).
+	// 재료 DataTable 경로. 기본값은 /Game/HG/DataTable/DT_Ingredients (Tools/GenerateGreyboxMaps.py가 Data/Ingredients.csv로 만든다).
 	UPROPERTY(EditDefaultsOnly, Category = "Data")
 	TSoftObjectPtr<UDataTable> IngredientTable;
 
-	// 배치 콤보 DataTable 경로. 기본값은 /Game/HG/Data/DT_Combos (Data/Combos.csv에서 만든다).
+	// 배치 콤보 DataTable 경로. 기본값은 /Game/HG/DataTable/DT_Combos (Data/Combos.csv에서 만든다).
 	UPROPERTY(EditDefaultsOnly, Category = "Data")
 	TSoftObjectPtr<UDataTable> ComboTable;
 

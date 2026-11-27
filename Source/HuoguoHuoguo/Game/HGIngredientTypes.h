@@ -3,14 +3,14 @@
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
 #include "Game/HGDayTypes.h"
-#include "Planet/HGPlanetTypes.h"
+#include "World/Planet/HGPlanetTypes.h"
 #include "HGIngredientTypes.generated.h"
 
 /**
  * 재료 한 종류의 데이터 (DataTable 한 줄).
  *
  * 원본은 저장소의 `Data/Ingredients.csv`다. `Tools/GenerateGreyboxMaps.py`가 그 CSV를
- * `/Game/HG/Data/DT_Ingredients` DataTable 에셋으로 읽어 들인다. 재료를 늘리거나 값을 바꿀 때는 CSV만 고친다.
+ * `/Game/HG/DataTable/DT_Ingredients` DataTable 에셋으로 읽어 들인다. 재료를 늘리거나 값을 바꿀 때는 CSV만 고친다.
  * 행 이름(첫 열 Name)이 재료의 ID이고, 가방과 저장 기록은 이 ID(FName)로 재료를 가리킨다.
  *
  * 경영(손님, 요리)과 탐험(채집) 양쪽이 쓰므로 공통 폴더(Game/)에 둔다.

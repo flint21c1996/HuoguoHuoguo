@@ -3,9 +3,9 @@
 실행: Tools/Invoke-HGMapGen.ps1 (에디터를 닫은 상태에서 커맨드렛으로 실행)
 
 - 만드는 것
-  /Game/HG/Materials/Greybox/MI_GB_*   엔진 BasicShapeMaterial을 부모로 한 단색 머티리얼 인스턴스
+  /Game/HG/DebugMaterials/Greybox/MI_GB_*   엔진 BasicShapeMaterial을 부모로 한 단색 머티리얼 인스턴스
   /Game/HG/Maps/L_Station             허브 정거장 훠궈집 (경영 + 탐험 시작 지점)
-  /Game/HG/Maps/L_Asteroid_Krak7      (이전 단계의 손배치 소행성. 지금은 어느 발판도 이리로 보내지 않는다)
+  /Game/HG/Maps/Legacy/L_Asteroid_Krak7  (이전 단계의 손배치 소행성. 지금은 어느 발판도 이리로 보내지 않는다)
   /Game/HG/Maps/L_PlanetSurface       절차적 행성 표면. 조명과 AHGPlanetGenerator만 있고 지형은 실행할 때 시드로 만든다.
 - 이미 있는 맵과 머티리얼은 건드리지 않는다. 사람이 에디터에서 고친 배치를 덮어쓰지 않기 위해서이다.
   다시 만들고 싶으면 환경 변수 HG_MAPGEN_FORCE=1을 주고 실행한다 (기존 맵을 지우고 새로 만든다).
@@ -24,9 +24,9 @@ import unreal
 FORCE = os.environ.get("HG_MAPGEN_FORCE") == "1"
 
 MAP_DIR = "/Game/HG/Maps"
-MAT_DIR = "/Game/HG/Materials/Greybox"
+MAT_DIR = "/Game/HG/DebugMaterials/Greybox"
 STATION_MAP = MAP_DIR + "/L_Station"
-ASTEROID_MAP = MAP_DIR + "/L_Asteroid_Krak7"
+ASTEROID_MAP = MAP_DIR + "/Legacy/L_Asteroid_Krak7"
 PLANET_MAP = MAP_DIR + "/L_PlanetSurface"
 
 # 행성에서 정거장으로 돌아올 때 쓰는 도착 태그. AHGPlanetGenerator의 ReturnArrivalTag 기본값과 같다.
@@ -748,7 +748,7 @@ def build_planet_surface():
 # 맵마다 쓰는 파트(게임 모드). 맵의 World Settings > GameMode Override에 넣는다.
 # (C++ 클래스, 블루프린트 경로). 블루프린트가 있으면 블루프린트를 넣는다. 사장님 모델, 컨트롤러 같은 설정은
 # 블루프린트에서 사람이 고치므로, 이 도구는 블루프린트를 만들거나 고치지 않고 가리키기만 한다.
-BLUEPRINT_DIR = "/Game/HG/Blueprints"
+BLUEPRINT_DIR = "/Game/HG/BluePrint/Game"
 MAP_GAME_MODES = {
     STATION_MAP: ("HGShopGameMode", BLUEPRINT_DIR + "/BP_HG_ShopGameMode"),
     PLANET_MAP: ("HGExploreGameMode", BLUEPRINT_DIR + "/BP_HG_ExploreGameMode"),
@@ -824,7 +824,7 @@ def upgrade_station():
 # ---------------------------------------------------------------------------
 # 데이터 표: 저장소의 CSV(Data/*.csv)를 DataTable 에셋으로 읽어 들인다
 # ---------------------------------------------------------------------------
-DATA_DIR = "/Game/HG/Data"
+DATA_DIR = "/Game/HG/DataTable"
 
 # (에셋 이름, CSV 파일, 행 구조체). CSV가 원본이고 DataTable은 매번 CSV 내용으로 다시 채운다.
 # 그래서 재료 값을 바꿀 때는 CSV만 고치고 이 스크립트를 다시 돌린다. 에디터에서 DataTable을 직접 고치지 않는다.
