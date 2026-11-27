@@ -5,6 +5,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Debug/HGPlaceholderPaint.h"
 #include "Debug/HGVoxelShapes.h"
+#include "DrawDebugHelpers.h"
 #include "Engine/StaticMesh.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -16,6 +17,55 @@ namespace
 		TEXT("hg.BossModel"), 1,
 		TEXT("사장님 외형. 1 = 블루프린트 Mesh에 넣은 정식 모델(기본, 모델이 없으면 자리 표시), 0 = 예전 자리 표시(복셀 직장인). 다음에 사장님이 나타날 때 바뀐다."),
 		ECVF_Default);
+
+	// 시험용: 사장님 방향 화살표 (2026-11-28, 애니메이션이 이상하게 움직일 때 어느 방향이 어긋나는지 보려고).
+	TAutoConsoleVariable<int32> CVarShowFacing(
+		TEXT("hg.ShowFacing"), 0,
+		TEXT("시험용: 사장님 방향 화살표. 1이면 빨강 = 캐릭터(캡슐) 앞, 초록 = 모델(메시) 앞, 파랑 = 실제 이동 방향, 노랑 = 입력(가속) 방향, 흰색 = 위."),
+		ECVF_Default);
+}
+
+void AHGBossCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+#if ENABLE_DRAW_DEBUG
+	// 켜져 있을 때만 그린다 (평소에는 정수 비교 하나). 한 프레임짜리 선이라 매 프레임 다시 그린다.
+	if (CVarShowFacing.GetValueOnGameThread() == 0)
+	{
+		return;
+	}
+	const UWorld* World = GetWorld();
+	const FVector Up = GetMoveFrame().GetUpVector();
+	// 허리 높이에서 쏜다 (캡슐 가운데). 바닥에 묻히거나 머리에 가려지지 않게.
+	const FVector Origin = GetActorLocation();
+	const float Length = 120.f;
+	const float Thickness = 3.f;
+	auto Arrow = [&](const FVector& Dir, const FColor& Color, float Scale)
+	{
+		if (!Dir.IsNearlyZero())
+		{
+			DrawDebugDirectionalArrow(World, Origin, Origin + Dir.GetSafeNormal() * Length * Scale, 25.f, Color, false, -1.f, SDPG_Foreground, Thickness);
+		}
+	};
+	// 캐릭터(캡슐) 앞 = 액터 X축. 이동 방향으로 몸을 돌리므로(bOrientRotationToMovement) 걸을 때는 파랑과 같아야 한다.
+	Arrow(GetActorForwardVector(), FColor::Red, 1.f);
+	// 모델 앞: 메시는 모델 앞이 +Y인 규칙(언리얼 마네킹)이라 Yaw -90으로 붙였다. 그래서 메시 컴포넌트의 Y축이 모델 앞이다. 빨강과 같아야 한다.
+	if (GetMesh() && GetMesh()->IsVisible())
+	{
+		Arrow(GetMesh()->GetRightVector(), FColor::Green, 0.85f);
+	}
+	// 실제 이동 방향과 입력(가속) 방향은 발밑 평면 성분만 (위아래 성분 빼기). 길이는 같게 그린다.
+	const FVector Velocity = FVector::VectorPlaneProject(GetVelocity(), Up);
+	if (Velocity.Size() > 10.f)
+	{
+		Arrow(Velocity, FColor::Blue, 0.7f);
+	}
+	if (const UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		Arrow(FVector::VectorPlaneProject(Move->GetCurrentAcceleration(), Up), FColor::Yellow, 0.55f);
+	}
+	Arrow(Up, FColor::White, 0.5f);
+#endif
 }
 
 AHGBossCharacter::AHGBossCharacter()

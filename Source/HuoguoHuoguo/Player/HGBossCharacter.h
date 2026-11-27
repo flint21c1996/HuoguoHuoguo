@@ -37,6 +37,9 @@ public:
 	 */
 	virtual FQuat GetMoveFrame() const { return FQuat::Identity; }
 
+	// 시험용 방향 화살표(hg.ShowFacing 1)를 그린다. 꺼져 있으면 바로 끝난다.
+	virtual void Tick(float DeltaSeconds) override;
+
 protected:
 	// 외형 준비(색 칠하기, 정식 모델/복셀 몸 고르기, 차림)를 스폰할 때 끝낸다 (2026-11-28, 예전에는 BeginPlay).
 	// 엔진 표준 스폰에서는 컨트롤러의 BeginPlay가 캐릭터의 BeginPlay보다 먼저 올 수 있다.
