@@ -212,6 +212,63 @@ def ensure_planet_materials():
         unreal.log("[MapGen] 꼭짓점 색 머티리얼 생성: " + VERTEX_COLOR_MATERIAL)
 
 
+LANDSCAPE_BASIN_MATERIAL = "/Game/HG/Materials/M_HG_LandscapeBasin"
+
+# 평지 행성 땅(랜드스케이프): 평평한 곳은 땅 색 두 가지를 큰 얼룩으로 섞고, 가파른 비탈(법선이 누운 곳)은 바위 색.
+# 색 값(Ground, GroundB, Rock)은 게임에서 행성 생성기가 군계 색으로 바꾼다 (AHGPlanetGenerator::PaintFlatGround).
+LANDSCAPE_BASIN_HLSL = """
+float flatness = saturate((N.z - 0.72) * 6.0);
+float patch = saturate(0.5 + 0.5 * sin(P.x / 1700.0 + sin(P.y / 2900.0) * 2.0) * sin(P.y / 2300.0 + sin(P.x / 3700.0) * 2.0));
+float3 ground = lerp(Ground, GroundB, smoothstep(0.3, 0.7, patch));
+return lerp(Rock, ground, flatness);
+"""
+
+
+def ensure_landscape_material():
+    """평지 행성 랜드스케이프 머티리얼 M_HG_LandscapeBasin. 없을 때만 만든다 (있으면 에디터에서 고친 것을 존중).
+
+    파라미터 Ground, GroundB(땅 얼룩), Rock(비탈). Planet Maker 평지 탭이 랜드스케이프를 만들 때 이 머티리얼을 붙인다.
+    """
+    if asset_lib.does_asset_exist(LANDSCAPE_BASIN_MATERIAL):
+        return
+    mel = unreal.MaterialEditingLibrary
+    folder, name = LANDSCAPE_BASIN_MATERIAL.rsplit("/", 1)
+    mat = asset_tools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
+    custom = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, -300, 0)
+    custom.set_editor_property("code", LANDSCAPE_BASIN_HLSL)
+    custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    names = ["N", "P", "Ground", "GroundB", "Rock"]
+    inputs = []
+    for n in names:
+        ci = unreal.CustomInput()
+        ci.set_editor_property("input_name", n)
+        inputs.append(ci)
+    custom.set_editor_property("inputs", inputs)
+    normal = mel.create_material_expression(mat, unreal.MaterialExpressionVertexNormalWS, -800, -200)
+    world_pos = mel.create_material_expression(mat, unreal.MaterialExpressionWorldPosition, -800, -100)
+    mel.connect_material_expressions(normal, "", custom, "N")
+    mel.connect_material_expressions(world_pos, "", custom, "P")
+    defaults = {
+        "Ground": unreal.LinearColor(0.80, 0.40, 0.20, 1),
+        "GroundB": unreal.LinearColor(0.62, 0.26, 0.15, 1),
+        "Rock": unreal.LinearColor(0.42, 0.28, 0.22, 1),
+    }
+    y = 0
+    for n, value in defaults.items():
+        p = mel.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -800, y)
+        p.set_editor_property("parameter_name", n)
+        p.set_editor_property("default_value", value)
+        mel.connect_material_expressions(p, "RGB", custom, n)
+        y += 120
+    mel.connect_material_property(custom, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    rough = mel.create_material_expression(mat, unreal.MaterialExpressionConstant, -400, 300)
+    rough.set_editor_property("r", 0.9)
+    mel.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    mel.recompile_material(mat)
+    asset_lib.save_loaded_asset(mat)
+    unreal.log("[MapGen] 평지 랜드스케이프 머티리얼 생성: " + LANDSCAPE_BASIN_MATERIAL)
+
+
 SCAN_MATERIAL = "/Game/HG/Materials/M_HG_ScanPulse"
 # 스캐너 머티리얼 판 번호. 계산식이나 연결을 바꾸면 올린다 (옛 판을 지우고 다시 만든다).
 SCAN_VERSION = 3.0
@@ -869,6 +926,7 @@ ensure_data_tables()
 MATS = ensure_materials()
 ensure_glow_material()
 ensure_planet_materials()
+ensure_landscape_material()
 ensure_scan_material()
 ensure_look_materials()
 
