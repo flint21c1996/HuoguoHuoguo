@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "World/Planet/HGPlanetShape.h"
 #include "World/Planet/HGPlanetTypes.h"
 #include "HGPlanetGenerator.generated.h"
 
@@ -64,6 +65,9 @@ class HUOGUOHUOGUO_API AHGPlanetGenerator : public AActor
 {
 	GENERATED_BODY()
 
+	// 지형 모양 시험(HGPlanetTerrainTest.cpp)이 ChoosePlanet으로 행성을 정하고 지표 높이를 읽게 한다. 시험 빌드에만 쓰는 접근 허용이다.
+	friend class FHGPlanetTerrainTest;
+
 public:
 	AHGPlanetGenerator();
 
@@ -71,11 +75,27 @@ public:
 	// 액터들의 BeginPlay 순서는 정해져 있지 않으므로, 지형이 먼저 있어야 하는 쪽이 직접 불러서 순서를 보장한다.
 	void EnsureGenerated();
 
-	// 중력의 중심 = 행성 중심.
-	FVector GetGravityCenter() const { return GetActorLocation(); }
+	// 중력의 중심 = 행성 중심. 평지 행성이면 땅 아래 아주 먼 곳(100km)이다.
+	// 그러면 "중심에서 나를 향한 방향 = 위"로 계산하는 곳들(카메라, 스캐너, 표식)이 고칠 것 없이 평지에서 위 = +Z가 된다 (100m 거리에서 0.06도 차이).
+	FVector GetGravityCenter() const { return bFlatSite ? GetActorLocation() - FVector(0.0, 0.0, FlatGravityDepth) : GetActorLocation(); }
+
+	// 중력 중심에서 지표까지의 거리 (스캐너 파동 등). 평지면 FlatGravityDepth.
+	float GetGravityRadius() const { return bFlatSite ? FlatGravityDepth : Planet.Radius; }
+
+	// 평지 행성 맵인가 (랜드스케이프 분지 위를 걷는다).
+	bool IsFlatSite() const { return bFlatSite; }
+
+	// 평지 행성의 가짜 중력 중심 깊이(cm, 100km).
+	static constexpr float FlatGravityDepth = 10000000.f;
 
 	// 실제로 만든 행성 값.
 	const FHGPlanetSeed& GetPlanet() const { return Planet; }
+
+	// 실제로 쓴 지형 모양 값 (언덕, 능선, 크레이터 등).
+	const FHGPlanetShape& GetShape() const { return TerrainShape; }
+
+	// 실제로 판 크레이터 수 (착륙지와 겹쳐 못 놓은 것은 빠진다).
+	int32 GetCraterCount() const { return Craters.Num(); }
 
 	// 착륙 지점(북극)에 캡슐 발이 닿도록 선 변환. 위쪽(Z)이 지표 바깥을 향한다.
 	FTransform GetLandingTransform() const;
@@ -148,8 +168,51 @@ public:
 	// 귀환 발판 위치. 발판이 없으면 false.
 	bool GetReturnPadLocation(FVector& OutLocation) const;
 
+#if WITH_EDITOR
+	// ---- 에디터 미리보기 (플레이하지 않고 지형만 본다) ----
+
+	// 지금 값으로 미리보기 지형을 다시 만든다. 게임 월드에서는 아무것도 하지 않는다.
+	UFUNCTION(CallInEditor, Category = "Planet|Editor Preview", meta = (DisplayName = "미리보기 다시 만들기"))
+	void RebuildEditorPreview();
+
+	// 미리보기 지형을 지운다.
+	UFUNCTION(CallInEditor, Category = "Planet|Editor Preview", meta = (DisplayName = "미리보기 지우기"))
+	void ClearEditorPreview();
+
+	// 값을 바꾸거나 액터를 옮긴 뒤 에디터가 부른다. bPreviewInEditor가 켜져 있으면 미리보기를 다시 만든다.
+	virtual void OnConstruction(const FTransform& Transform) override;
+
+	// Planet Maker 창이 부른다: 행성 값과 지형 모양을 미리보기 값으로 넣고(되돌리기 가능) 미리보기를 다시 만든다.
+	void SetEditorPreview(const FHGPlanetSeed& InPlanet, const FHGPlanetShape& InShape);
+
+	// Planet Maker 평지 탭이 랜드스케이프를 만든 뒤 부른다: 이 생성기를 평지 방식으로 두고 땅 반폭(cm)을 맞춘다.
+	void SetFlatSite(const FHGPlanetSeed& InPlanet, float HalfExtent);
+#endif
+
 protected:
 	virtual void BeginPlay() override;
+
+	// 켜면 에디터에서(플레이하지 않아도) 값을 바꿀 때마다 지형을 다시 만들어 보여 준다. 슬라이더는 놓을 때 한 번 만든다.
+	// 미리보기 메시는 저장하지 않는 임시 부품이라 맵 파일이 커지지 않는다. 지형만 만들고(바위, 재료, 하늘 없음) 충돌도 만들지 않는다.
+	UPROPERTY(EditAnywhere, Category = "Planet|Editor Preview", meta = (DisplayName = "에디터에서 미리보기"))
+	bool bPreviewInEditor = false;
+
+	// 미리보기 지형 메시 (임시, 저장 안 함, 플레이용 복제에도 따라가지 않음).
+	UPROPERTY(Transient, DuplicateTransient)
+	TObjectPtr<UProceduralMeshComponent> EditorPreviewTerrain;
+
+	// ---- 평지 행성 (2026-11-27) ----
+
+	// 켜면 구 지형을 만들지 않고, 맵에 놓인 땅(랜드스케이프) 위에 바위, 재료, 식물, 귀환 발판을 놓는다. 중력은 아래(-Z)로.
+	// 배치는 구 행성과 같은 규칙(같은 시드 = 같은 배치)을 쓰고, 구 위의 방향을 평지 위 원판으로 넓이를 지켜 옮긴다(램버트 정적 방위 투영).
+	// 착륙 지점 = 이 액터 바로 아래 땅. 액터를 분지 가운데에 둔다.
+	UPROPERTY(EditAnywhere, Category = "Planet|Flat", meta = (DisplayName = "평지 행성 맵"))
+	bool bFlatSite = false;
+
+	// 배치할 원판의 반지름(cm) = 땅 반폭. 랜드스케이프보다 크면 땅 밖 허공에 놓이므로 Planet Maker가 랜드스케이프를 만들 때 맞춰 둔다.
+	// 재료와 바위 개수는 이 원판 넓이에 비례한다.
+	UPROPERTY(EditAnywhere, Category = "Planet|Flat", meta = (DisplayName = "평지 반폭(cm)", EditCondition = "bFlatSite", ClampMin = "1000"))
+	float FlatHalfExtent = 10000.f;
 
 	// 정거장을 거치지 않고 이 맵을 바로 열었을 때(에디터에서 맵을 열고 플레이 등) 만들 행성.
 	UPROPERTY(EditAnywhere, Category = "Planet")
@@ -158,6 +221,15 @@ protected:
 	// 켜면 PreviewPlanet의 Seed만 쓰고 나머지 값은 시드로 다시 뽑는다. 끄면 PreviewPlanet 값을 그대로 쓴다(수치 실험용).
 	UPROPERTY(EditAnywhere, Category = "Planet")
 	bool bPreviewFromSeedOnly = true;
+
+	// 켜면 이 맵을 바로 열었을 때 지형 모양을 PreviewShape 값 그대로 쓴다 (Planet Maker에서 만지는 값).
+	// 끄면 행성 값(군계, 크기)에 맞는 기본 모양(HGPlanet::DefaultShape)을 쓴다. 정거장에서 다이빙해 오면 늘 기본 모양이다.
+	UPROPERTY(EditAnywhere, Category = "Planet|Shape")
+	bool bUsePreviewShape = false;
+
+	// 지형 모양 값: 언덕, 능선, 잔 굴곡, 크레이터 개수와 크기, 착륙지 평탄 반경, 높이 곡선.
+	UPROPERTY(EditAnywhere, Category = "Planet|Shape", meta = (EditCondition = "bUsePreviewShape"))
+	FHGPlanetShape PreviewShape;
 
 	// 귀환 발판이 보낼 맵과 도착 태그.
 	UPROPERTY(EditAnywhere, Category = "Planet|Return")
@@ -170,8 +242,10 @@ protected:
 	FText ReturnName;
 
 	// 지형 격자 한 칸의 목표 길이(cm). 작을수록 지형이 매끈하지만 삼각형이 많아진다.
+	// 2026-11-27 행성 크기를 절반으로 줄이면서 150 → 100. 작은 행성(반지름 20 ~ 60m)도 크레이터와 둔덕을 담을 만큼 촘촘하게 하고,
+	// 삼각형 수는 줄어든 넓이 덕분에 예전과 비슷하다 (60m 행성 면당 95칸, 약 11만 삼각형). 중형은 면당 128칸 상한 그대로.
 	UPROPERTY(EditAnywhere, Category = "Planet|Mesh", meta = (ClampMin = "50"))
-	float TargetEdgeLength = 150.f;
+	float TargetEdgeLength = 100.f;
 
 	// 면 하나의 최대 격자 수. 128이면 면당 약 3만 3천 삼각형, 행성 전체 약 20만 삼각형.
 	UPROPERTY(EditAnywhere, Category = "Planet|Mesh", meta = (ClampMin = "8", ClampMax = "255"))
@@ -179,12 +253,9 @@ protected:
 
 	// 지형이 들쭉날쭉한 정도. 0이면 큰 언덕만(예전처럼 완만), 1이면 날카로운 능선 + 약 9m 폭 잔 굴곡을 얹는다.
 	// 높을수록 가파른 곳이 늘어 걸어 오르지 못하는 비탈이 생길 수 있다.
+	// 지형 모양 값(능선 세기, 둔덕 높이)에 한 번 더 곱하는 맵 전체 배율이다.
 	UPROPERTY(EditAnywhere, Category = "Planet|Mesh", meta = (ClampMin = "0", ClampMax = "3"))
 	float TerrainRuggedness = 1.f;
-
-	// 착륙 지점 주변을 평평하게 다지는 반경(cm).
-	UPROPERTY(EditAnywhere, Category = "Planet|Mesh")
-	float LandingFlatRadius = 1000.f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Planet")
 	TObjectPtr<UProceduralMeshComponent> Terrain;
@@ -259,6 +330,9 @@ private:
 	bool bGenerated = false;
 	FHGPlanetSeed Planet;
 
+	// 실제로 쓰는 지형 모양 값. ChoosePlanet이 PreviewShape 또는 기본 모양으로 정한다.
+	FHGPlanetShape TerrainShape;
+
 	// 시드마다 노이즈 공간의 다른 곳을 읽도록 옮기는 값. 같은 노이즈 함수로 서로 다른 지형을 얻는다.
 	FVector NoiseOffset = FVector::ZeroVector;
 
@@ -290,8 +364,9 @@ private:
 	// 폐우주선을 만든다 (HGDerelict.cpp): 선체와 방, 문, 재료(선체 밖, 안쪽 상자), 설계도 단말, 조명, 떠 있는 잔해, 귀환 포드.
 	void BuildDerelict();
 
-	// 착륙 지점을 평평하게 다지는 실제 반경. 소행성 지대의 본 소행성(반지름 10 ~ 15m)은 작아서 반지름의 30%로 줄인다.
-	float FlatRadius() const { return Planet.bAsteroidField ? FMath::Min(LandingFlatRadius, Planet.Radius * 0.3f) : LandingFlatRadius; }
+	// 착륙 지점을 평평하게 다지는 실제 반경 = 평탄 반경 값, 단 반지름의 30%를 넘지 않는다 (소행성 지대 본 소행성 10 ~ 15m는 3 ~ 4.5m).
+	// 행성도 작으면(반지름 33m 미만) 같은 규칙으로 줄인다. 그렇지 않으면 20m 행성의 반구 가까이가 평평해진다 (2026-11-27, 행성 크기 절반).
+	float FlatRadius() const { return FMath::Min(TerrainShape.LandingFlatRadius, Planet.Radius * 0.3f); }
 
 	// 소행성 지대: 본 소행성 둘레에 뛰어 건널 소행성 16 ~ 22개를 만들고(매끈한 메시, 충돌), 소행성마다 재료 1 ~ 2개를 놓는다.
 	// 행성이면 중력 천체 목록에 행성 하나만 넣는다.
@@ -320,7 +395,22 @@ private:
 	void ApplyMoodPreview();
 
 	// 지표 Dir 위에 놓을 변환 (위 = 지표 바깥, 둘레 방향 Spin). 행성 중심 기준 좌표.
+	// 평지 행성이면 Dir을 평지 위 점으로 옮기고(FlatPointOf) 위 = +Z.
 	FTransform SurfaceFrame(const FVector& Dir, float Spin, float Lift) const;
+
+	// 구 위 방향 Dir에 해당하는 지표 점(액터 기준)과 그 점의 "위". 구면 Dir * 지표 거리 / 평지 원판 위 땅 높이.
+	FVector SurfacePointOf(const FVector& Dir) const;
+	FVector SurfaceUpOf(const FVector& Dir) const { return bFlatSite ? FVector::UpVector : Dir; }
+
+	// 평지: 구 위 방향 → 원판 위 XY (액터 기준). 북극(착륙 지점) = 원판 가운데, 남극 = 원판 가장자리.
+	// 반지름 = 반폭 x sin(극에서 각도 / 2)라 구 위에 고르게 뿌린 점이 원판 위에도 고르게 퍼진다 (넓이 보존).
+	FVector2D FlatPointOf(const FVector& Dir) const;
+
+	// 평지: 액터 기준 XY에서 아래로 쏴서 땅 높이(액터 기준 Z)를 찾는다. 땅이 없으면 0.
+	double FlatGroundZ(const FVector2D& XY) const;
+
+	// 평지: 랜드스케이프 머티리얼의 색 값(Ground, GroundB, Rock)을 군계 색으로.
+	void PaintFlatGround();
 
 	// 새로 만든 표식(번호 MarkerId)을 숨은 재료로 둘지 시드로 정하고, 그렇다면 숨긴다. 이미 캤거나 다른 시간대면 건드리지 않는다.
 	void MaybeHideForScan(int32 MarkerId);
@@ -330,7 +420,9 @@ private:
 	void HideInstance(int32 MarkerId);
 
 	void ChoosePlanet();
-	void BuildTerrain();
+
+	// 지형 메시를 Target에 만든다. 게임에서는 Terrain(충돌 있음), 에디터 미리보기에서는 EditorPreviewTerrain(충돌 없음).
+	void BuildTerrain(UProceduralMeshComponent* Target, bool bCreateCollision);
 	void ScatterProps();
 	void SpawnReturnPad();
 };

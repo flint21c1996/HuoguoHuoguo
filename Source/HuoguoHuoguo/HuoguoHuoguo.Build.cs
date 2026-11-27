@@ -21,5 +21,11 @@ public class HuoguoHuoguo : ModuleRules
 
 		// 프로젝트 설정 화면에 나오는 설정 클래스(UDeveloperSettings, 예: 그림체 조절 값 UHGLookSettings).
 		PublicDependencyModuleNames.Add("DeveloperSettings");
+
+		// 행성 프리셋(Planet Maker에서 만든 값)을 JSON 파일로 읽고 쓴다 (UStruct <-> JSON 자동 변환).
+		PrivateDependencyModuleNames.AddRange(new string[] { "Json", "JsonUtilities" });
+
+		// 평지 행성: 랜드스케이프 위에 배치하고(땅 높이 찾기) 땅 머티리얼 색을 군계에 맞춘다.
+		PrivateDependencyModuleNames.Add("Landscape");
 	}
 }

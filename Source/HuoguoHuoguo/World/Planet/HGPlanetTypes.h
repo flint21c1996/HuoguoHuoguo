@@ -7,9 +7,9 @@
 UENUM(BlueprintType)
 enum class EHGPlanetBiome : uint8
 {
-	Rock,   // 바위 소행성. 매운 고추 계열.
-	Ice,    // 얼음 행성. 해초 계열.
-	Fungal, // 버섯 숲 행성. 버섯 계열.
+	Rock   UMETA(DisplayName = "바위"),   // 바위 소행성. 매운 고추 계열.
+	Ice    UMETA(DisplayName = "얼음"),   // 얼음 행성. 해초 계열.
+	Fungal UMETA(DisplayName = "버섯숲"), // 버섯 숲 행성. 버섯 계열.
 };
 
 // 행성 크기 등급. 작은 행성은 지평선이 휘어 보일 만큼 작고, 중간 행성은 걸을 때는 평지처럼 느껴진다.
@@ -30,7 +30,7 @@ enum class EHGSiteType : uint8
 {
 	PlanetSmall   UMETA(DisplayName = "소형 행성"),
 	PlanetMedium  UMETA(DisplayName = "중형 행성"),
-	PlanetLarge   UMETA(DisplayName = "대형 행성 (아직 없음)"),
+	PlanetLarge   UMETA(DisplayName = "평지 행성 (대형, 랜드스케이프)"),
 	AsteroidField UMETA(DisplayName = "소행성 지대"),
 	Derelict      UMETA(DisplayName = "폐우주선"),
 };
@@ -82,7 +82,7 @@ struct HUOGUOHUOGUO_API FHGPlanetSeed
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Planet")
 	EHGPlanetSize SizeClass = EHGPlanetSize::Small;
 
-	// 평균 반지름(cm). 작은 행성 40~120m, 중간 행성 300~600m.
+	// 평균 반지름(cm). 작은 행성 20~60m, 중간 행성 150~300m (2026-11-27에 절반으로 줄임).
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Planet", meta = (ClampMin = "1000"))
 	float Radius = 8000.f;
 
@@ -115,6 +115,11 @@ struct HUOGUOHUOGUO_API FHGPlanetSeed
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Planet")
 	bool bDerelict = false;
 
+	// 평지 행성인가 (2026-11-27). 구가 아니라 평평한 분지(랜드스케이프) 위를 걷는다. 중력은 아래로, 가장자리 밖으로 떨어지면 착륙 지점으로 돌아온다.
+	// 땅 모양과 넓이는 평지 맵(L_Planet_Large)의 랜드스케이프가 정한다 (Planet Maker 평지 탭에서 만든다). Radius는 재료 개수를 정하는 데만 쓴다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Planet")
+	bool bFlat = false;
+
 	// 목록과 안내에 쓰는 한 줄 설명. 예) "크락-7 | 소형 바위 | 반지름 80m | 중력 0.6 | 6시간 후 이탈"
 	FString Describe() const;
 };
@@ -130,11 +135,15 @@ namespace HGPlanet
 	// 행성 값을 폐우주선으로 바꾼다 (소행성 지대는 해제). 군계는 선체에 자란 재료의 성격으로 남는다.
 	HUOGUOHUOGUO_API void MakeDerelict(FHGPlanetSeed& Planet);
 
+	// 행성 값을 평지 행성으로 바꾼다 (소행성 지대, 폐우주선은 해제). 중력은 0.9. 넓이는 평지 맵의 랜드스케이프가 정한다.
+	HUOGUOHUOGUO_API void MakeFlat(FHGPlanetSeed& Planet);
+
 	// 궤도 주기(게임 내 날짜) Cycle에 정거장으로 접근하는 행성 Count개.
 	// 같은 주기에는 언제나 같은 목록이 나온다. 크기 등급이 한쪽으로 몰리지 않도록 작은 행성과 중간 행성을 섞는다.
-	HUOGUOHUOGUO_API TArray<FHGPlanetSeed> MakeApproachingPlanets(int32 UniverseSeed, int32 Cycle, int32 Count);
+	// FlatChance(0 ~ 1): 셋째부터 각 행성이 평지 행성이 될 확률 (프로젝트 설정 HG 환경 맵의 "평지 행성 확률").
+	HUOGUOHUOGUO_API TArray<FHGPlanetSeed> MakeApproachingPlanets(int32 UniverseSeed, int32 Cycle, int32 Count, float FlatChance = 0.f);
 
-	// 행성 값이 어느 환경 종류인지. 폐우주선 > 소행성 지대 > 크기 등급 순으로 본다.
+	// 행성 값이 어느 환경 종류인지. 폐우주선 > 소행성 지대 > 평지(PlanetLarge) > 크기 등급 순으로 본다.
 	HUOGUOHUOGUO_API EHGSiteType SiteTypeOf(const FHGPlanetSeed& Planet);
 
 	HUOGUOHUOGUO_API const TCHAR* BiomeName(EHGPlanetBiome Biome);

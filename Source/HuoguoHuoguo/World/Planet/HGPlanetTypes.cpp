@@ -21,6 +21,11 @@ FString FHGPlanetSeed::Describe() const
 		return FString::Printf(TEXT("%s | 소행성 지대 (%s) | 본 소행성 %.0fm | 중력 %.1f | %d시간 후 이탈"),
 			*Name, HGPlanet::BiomeName(Biome), Radius / 100.f, GravityScale, HoursLeft);
 	}
+	if (bFlat)
+	{
+		return FString::Printf(TEXT("%s | 평지 행성 (%s) | 분지 | 중력 %.1f | %d시간 후 이탈"),
+			*Name, HGPlanet::BiomeName(Biome), GravityScale, HoursLeft);
+	}
 	return FString::Printf(TEXT("%s | %s %s | 반지름 %.0fm | 중력 %.1f | %d시간 후 이탈"),
 		*Name, SizeClass == EHGPlanetSize::Small ? TEXT("소형") : TEXT("중형"), HGPlanet::BiomeName(Biome),
 		Radius / 100.f, GravityScale, HoursLeft);
@@ -44,15 +49,17 @@ namespace HGPlanet
 
 		if (P.SizeClass == EHGPlanetSize::Small)
 		{
-			P.Radius = Rng.FRandRange(4000.f, 12000.f);
+			// 반지름 20 ~ 60m (2026-11-27에 절반으로 줄임: 예전 40 ~ 120m는 너무 컸다).
+			P.Radius = Rng.FRandRange(2000.f, 6000.f);
 			P.TerrainAmplitude = Rng.FRandRange(0.04f, 0.09f);
 			P.TerrainFrequency = Rng.FRandRange(1.8f, 3.2f);
-			// 작을수록 중력이 약하다. 40m면 약 0.35, 120m면 약 0.7.
-			P.GravityScale = FMath::GetMappedRangeValueClamped(FVector2f(4000.f, 12000.f), FVector2f(0.35f, 0.7f), P.Radius);
+			// 작을수록 중력이 약하다. 20m면 약 0.35, 60m면 약 0.7 (크기를 줄여도 같은 시드의 중력은 예전과 같다).
+			P.GravityScale = FMath::GetMappedRangeValueClamped(FVector2f(2000.f, 6000.f), FVector2f(0.35f, 0.7f), P.Radius);
 		}
 		else
 		{
-			P.Radius = Rng.FRandRange(30000.f, 60000.f);
+			// 반지름 150 ~ 300m (2026-11-27에 절반으로 줄임: 예전 300 ~ 600m).
+			P.Radius = Rng.FRandRange(15000.f, 30000.f);
 			// 큰 행성은 같은 비율이면 언덕이 너무 높아지므로 비율을 낮게 잡고, 굴곡은 촘촘하게 한다.
 			P.TerrainAmplitude = Rng.FRandRange(0.012f, 0.025f);
 			P.TerrainFrequency = Rng.FRandRange(4.f, 7.f);
@@ -96,7 +103,19 @@ namespace HGPlanet
 		P.GravityScale = Rng.FRandRange(0.35f, 0.5f);
 	}
 
-	TArray<FHGPlanetSeed> MakeApproachingPlanets(int32 UniverseSeed, int32 Cycle, int32 Count)
+	void MakeFlat(FHGPlanetSeed& P)
+	{
+		P.bFlat = true;
+		P.bAsteroidField = false;
+		P.bDerelict = false;
+		P.SizeClass = EHGPlanetSize::Medium;
+		// 넓이는 평지 맵의 랜드스케이프가 정한다 (생성기가 맵의 평지 반폭으로 덮어쓴다). 여기 값은 목록 표시용 기본값.
+		P.Radius = 10000.f;
+		// 평지는 크기가 작은 행성만큼 붕 뜨지 않게, 그렇다고 무겁지도 않게.
+		P.GravityScale = 0.9f;
+	}
+
+	TArray<FHGPlanetSeed> MakeApproachingPlanets(int32 UniverseSeed, int32 Cycle, int32 Count, float FlatChance)
 	{
 		TArray<FHGPlanetSeed> Result;
 		const uint32 CycleHash = HashCombine(GetTypeHash(UniverseSeed), GetTypeHash(Cycle));
@@ -113,6 +132,15 @@ namespace HGPlanet
 			{
 				Seed = static_cast<int32>(HashCombine(static_cast<uint32>(Seed), 0x9e3779b9u) & 0x7fffffff);
 				Planet = MakePlanet(Seed);
+			}
+			// 셋째부터는 FlatChance 확률로 평지 행성. 시드에서 따로 뽑으므로 같은 주기면 같은 결과이고, 확률이 0이면 예전 목록 그대로다.
+			if (i >= 2 && FlatChance > 0.f)
+			{
+				FRandomStream FlatRng(static_cast<int32>(HashCombine(static_cast<uint32>(Seed), 0xf1a7u)));
+				if (FlatRng.FRand() < FlatChance)
+				{
+					MakeFlat(Planet);
+				}
 			}
 			Result.Add(Planet);
 		}
@@ -132,6 +160,10 @@ namespace HGPlanet
 		if (Planet.bAsteroidField)
 		{
 			return EHGSiteType::AsteroidField;
+		}
+		if (Planet.bFlat)
+		{
+			return EHGSiteType::PlanetLarge;
 		}
 		return Planet.SizeClass == EHGPlanetSize::Small ? EHGSiteType::PlanetSmall : EHGSiteType::PlanetMedium;
 	}

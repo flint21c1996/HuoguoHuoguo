@@ -20,6 +20,7 @@
 #include "Game/HGLookSettings.h"
 #include "HuoguoHuoguo.h"
 #include "HAL/PlatformTime.h"
+#include "LandscapeProxy.h"
 #include "Math/RandomStream.h"
 #include "ProceduralMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
@@ -117,6 +118,8 @@ AHGPlanetGenerator::AHGPlanetGenerator()
 	{
 		EditorIcon->SetupAttachment(Terrain);
 	}
+	// 액터를 끌거나 슬라이더를 끄는 동안에는 미리보기를 다시 만들지 않고, 놓았을 때 한 번만 만든다 (지형 한 번에 수십 ms).
+	bRunConstructionScriptOnDrag = false;
 #endif
 }
 
@@ -125,6 +128,85 @@ void AHGPlanetGenerator::BeginPlay()
 	Super::BeginPlay();
 	EnsureGenerated();
 }
+
+#if WITH_EDITOR
+void AHGPlanetGenerator::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	if (bPreviewInEditor)
+	{
+		RebuildEditorPreview();
+	}
+	else
+	{
+		ClearEditorPreview();
+	}
+}
+
+void AHGPlanetGenerator::RebuildEditorPreview()
+{
+	// 게임 월드(플레이 중)나 클래스 기본 객체에서는 만들지 않는다. 게임은 BeginPlay에서 진짜 지형을 만든다.
+	UWorld* World = GetWorld();
+	if (IsTemplate() || !World || World->IsGameWorld())
+	{
+		return;
+	}
+
+	const double StartTime = FPlatformTime::Seconds();
+	ChoosePlanet();
+
+	// 미리보기 메시는 처음 한 번 만든다. 임시(저장 안 함) + 복제 안 함이라 맵 파일에도, 플레이용 월드 복사본에도 남지 않는다.
+	if (!EditorPreviewTerrain)
+	{
+		EditorPreviewTerrain = NewObject<UProceduralMeshComponent>(this, NAME_None, RF_Transient | RF_DuplicateTransient | RF_TextExportTransient);
+		EditorPreviewTerrain->SetupAttachment(Terrain);
+		EditorPreviewTerrain->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		EditorPreviewTerrain->RegisterComponent();
+	}
+
+	if (Planet.bDerelict || bFlatSite)
+	{
+		// 폐우주선은 땅이 없고, 평지 행성의 땅은 맵의 랜드스케이프 자체다 (따로 미리볼 지형 메시가 없다).
+		EditorPreviewTerrain->ClearAllMeshSections();
+		UE_LOG(LogHuoguo, Log, TEXT("[Preview] %s: 구 지형 미리보기 없음 (%s)"), bFlatSite ? TEXT("평지 행성") : TEXT("폐우주선"), *Planet.Describe());
+		return;
+	}
+
+	BuildTerrain(EditorPreviewTerrain, false);
+	UE_LOG(LogHuoguo, Log, TEXT("[Preview] 지형 미리보기: %s | 크레이터 %d | %.0f ms"),
+		*Planet.Describe(), Craters.Num(), (FPlatformTime::Seconds() - StartTime) * 1000.0);
+}
+
+void AHGPlanetGenerator::SetEditorPreview(const FHGPlanetSeed& InPlanet, const FHGPlanetShape& InShape)
+{
+	// Modify: 에디터 되돌리기(Ctrl+Z) 기록에 남기고 맵을 "바뀜"으로 표시한다.
+	Modify();
+	PreviewPlanet = InPlanet;
+	bPreviewFromSeedOnly = false;
+	PreviewShape = InShape;
+	bUsePreviewShape = true;
+	bPreviewInEditor = true;
+	RebuildEditorPreview();
+}
+
+void AHGPlanetGenerator::SetFlatSite(const FHGPlanetSeed& InPlanet, float HalfExtent)
+{
+	Modify();
+	PreviewPlanet = InPlanet;
+	bPreviewFromSeedOnly = false;
+	bFlatSite = true;
+	FlatHalfExtent = HalfExtent;
+	ClearEditorPreview();
+}
+
+void AHGPlanetGenerator::ClearEditorPreview()
+{
+	if (EditorPreviewTerrain)
+	{
+		EditorPreviewTerrain->ClearAllMeshSections();
+	}
+}
+#endif
 
 void AHGPlanetGenerator::EnsureGenerated()
 {
@@ -142,9 +224,16 @@ void AHGPlanetGenerator::EnsureGenerated()
 		ScatterProps();
 		BuildDerelict();
 	}
+	else if (bFlatSite)
+	{
+		// 평지 행성: 땅은 맵의 랜드스케이프다. 그 위에 바위, 재료, 귀환 발판을 놓고 땅 색을 군계에 맞춘다.
+		ScatterProps();
+		SpawnReturnPad();
+		PaintFlatGround();
+	}
 	else
 	{
-		BuildTerrain();
+		BuildTerrain(Terrain, true);
 		ScatterProps();
 		SpawnReturnPad();
 	}
@@ -223,12 +312,84 @@ namespace
 	}
 }
 
+void AHGPlanetGenerator::PaintFlatGround()
+{
+	// 평지 땅(랜드스케이프) 머티리얼 M_HG_LandscapeBasin의 색 값을 군계 색으로 바꾼다 (평평한 곳 = 땅 색, 비탈 = 바위 색).
+	// 랜드스케이프 머티리얼은 맵에서 사람이 바꿀 수 있다. 그 머티리얼에 같은 이름 값이 없으면 아무 일도 일어나지 않는다.
+	const FMoodPalette Pal = MoodPalette(Planet.Biome);
+	int32 Count = 0;
+	for (TActorIterator<ALandscapeProxy> It(GetWorld()); It; ++It)
+	{
+		// 랜드스케이프 디테일의 "Use Dynamic Material Instance"가 꺼져 있으면 엔진이 색 값 바꾸기를 무시한다.
+		if (!It->bUseDynamicMaterialInstance)
+		{
+			UE_LOG(LogHuoguo, Warning, TEXT("[Flat] %s: Use Dynamic Material Instance가 꺼져 있어서 땅 색을 군계에 맞출 수 없다. 랜드스케이프 디테일에서 켤 것"), *It->GetName());
+			continue;
+		}
+		It->SetLandscapeMaterialVectorParameterValue(TEXT("Ground"), Pal.Ground);
+		It->SetLandscapeMaterialVectorParameterValue(TEXT("GroundB"), Pal.GroundB);
+		It->SetLandscapeMaterialVectorParameterValue(TEXT("Rock"), Pal.Rock);
+		++Count;
+	}
+	UE_LOG(LogHuoguo, Log, TEXT("[Flat] 평지 행성: 반폭 %.0fm, 랜드스케이프 %d개 색칠, 착륙 지점 땅 높이 %.1fm"),
+		FlatHalfExtent / 100.f, Count, FlatGroundZ(FVector2D::ZeroVector) / 100.0);
+}
+
 FTransform AHGPlanetGenerator::SurfaceFrame(const FVector& Dir, float Spin, float Lift) const
 {
+	const FVector Up = SurfaceUpOf(Dir);
 	FVector T1, T2;
-	TangentBasis(Dir, T1, T2);
+	TangentBasis(Up, T1, T2);
 	const FVector Forward = T1 * FMath::Cos(Spin) + T2 * FMath::Sin(Spin);
+	if (bFlatSite)
+	{
+		return FTransform(FRotationMatrix::MakeFromZX(Up, Forward).ToQuat(), SurfacePointOf(Dir) + Up * Lift);
+	}
 	return FTransform(FRotationMatrix::MakeFromZX(Dir, Forward).ToQuat(), Dir * (SurfaceRadiusAt(Dir) + Lift));
+}
+
+FVector AHGPlanetGenerator::SurfacePointOf(const FVector& Dir) const
+{
+	if (bFlatSite)
+	{
+		const FVector2D XY = FlatPointOf(Dir);
+		return FVector(XY.X, XY.Y, FlatGroundZ(XY));
+	}
+	return Dir * SurfaceRadiusAt(Dir);
+}
+
+FVector2D AHGPlanetGenerator::FlatPointOf(const FVector& Dir) const
+{
+	// 램버트 정적 방위 투영: 북극에서 각도 θ인 점을 가운데에서 반폭 x sin(θ/2) 떨어진 곳에 둔다.
+	// |Dir - 북극| = 2 sin(θ/2) 이므로 거리 = 반폭 x 0.5 x |Dir - 북극|. 남극(θ = 180도)이 원판 가장자리(반폭)가 된다.
+	const FVector2D Horizontal(Dir.X, Dir.Y);
+	const double Length = Horizontal.Size();
+	const double Distance = FlatHalfExtent * 0.5 * (Dir - FVector::UpVector).Size();
+	return Length > UE_KINDA_SMALL_NUMBER ? Horizontal / Length * Distance : FVector2D(Distance, 0.0);
+}
+
+double AHGPlanetGenerator::FlatGroundZ(const FVector2D& XY) const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return 0.0;
+	}
+	// 위 1km에서 아래 1km까지 쏴서 랜드스케이프에 맞은 첫 점을 쓴다. 이 생성기가 만든 바위, 하늘 섬 등은 건너뛴다.
+	const FVector Base = GetActorLocation();
+	const FVector Start(Base.X + XY.X, Base.Y + XY.Y, Base.Z + 100000.0);
+	const FVector End(Base.X + XY.X, Base.Y + XY.Y, Base.Z - 100000.0);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(HGFlatGround), false, this);
+	TArray<FHitResult> Hits;
+	World->LineTraceMultiByObjectType(Hits, Start, End, FCollisionObjectQueryParams(ECC_WorldStatic), Params);
+	for (const FHitResult& Hit : Hits)
+	{
+		if (Hit.GetActor() && Hit.GetActor()->IsA<ALandscapeProxy>())
+		{
+			return Hit.ImpactPoint.Z - Base.Z;
+		}
+	}
+	return Hits.IsEmpty() ? 0.0 : Hits[0].ImpactPoint.Z - Base.Z;
 }
 
 void AHGPlanetGenerator::ApplyMoodPreview()
@@ -868,7 +1029,8 @@ void AHGPlanetGenerator::ApplyMoodPreview()
 		Dome->bAffectDistanceFieldLighting = false;
 		Dome->RegisterComponent();
 		UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(SkyMaterial, Dome);
-		Mid->SetVectorParameterValue(TEXT("Center"), FLinearColor(GetActorLocation()));
+		// 하늘 머티리얼은 "Center에서 보는 사람 쪽 = 위"로 하늘 색을 나눈다. 평지 행성이면 땅 아래 먼 중력 중심을 넣어 어디서나 위 = +Z가 되게 한다.
+		Mid->SetVectorParameterValue(TEXT("Center"), FLinearColor(GetGravityCenter()));
 		// 하늘 꼭대기는 우주색 쪽으로 섞는다 (대기가 얇아 우주가 비쳐 보이고 별이 잘 보인다). 지평선 색은 그대로.
 		// 소행성 지대는 대기가 없는 우주 한가운데라 하늘을 거의 우주색으로 칠한다 (지평선도 어둡게).
 		const FLinearColor Space(0.02f, 0.02f, 0.07f);
@@ -1282,8 +1444,9 @@ void AHGPlanetGenerator::BuildAsteroidField()
 	// 0번 천체는 늘 이 행성(소행성 지대면 착륙하는 본 소행성).
 	GravityBodies.Reset();
 	FHGGravityBody Main;
-	Main.Center = GetActorLocation();
-	Main.Radius = Planet.Radius;
+	// 평지 행성은 땅 아래 먼 곳을 중심으로 둔 아주 큰 구처럼 다룬다 (GetGravityCenter).
+	Main.Center = GetGravityCenter();
+	Main.Radius = GetGravityRadius();
 	Main.SurfaceGravity = Planet.GravityScale;
 	GravityBodies.Add(Main);
 	if (!Planet.bAsteroidField)
@@ -1504,7 +1667,8 @@ void AHGPlanetGenerator::BuildAsteroidField()
 void AHGPlanetGenerator::ChoosePlanet()
 {
 	const UHGGameInstance* GI = GetGameInstance<UHGGameInstance>();
-	if (GI && GI->GetDivePlanet().IsSet())
+	const bool bFromDive = GI && GI->GetDivePlanet().IsSet();
+	if (bFromDive)
 	{
 		Planet = GI->GetDivePlanet().GetValue();
 	}
@@ -1522,27 +1686,42 @@ void AHGPlanetGenerator::ChoosePlanet()
 	{
 		HGPlanet::MakeDerelict(Planet);
 	}
+	// 평지 행성 맵: 어떤 행성 값이 오든 평지로 다룬다 (맵이 규칙을 정한다). 재료와 바위 개수가 원판 넓이에 맞게
+	// 반지름을 반폭의 절반으로 둔다 (구 겉넓이 4πr² = 원판 넓이 π(2r)²).
+	if (bFlatSite)
+	{
+		if (!Planet.bFlat)
+		{
+			HGPlanet::MakeFlat(Planet);
+		}
+		Planet.Radius = FlatHalfExtent * 0.5f;
+	}
+
+	// 지형 모양 값: 맵을 바로 열었고 PreviewShape를 쓰라고 했으면 그 값을, 아니면 행성 값(군계, 크기)에 맞는 기본 모양.
+	// 군계와 크기가 정해진 뒤(위의 시험용 강제 변경 포함)에 정해야 기본 모양이 맞는다.
+	TerrainShape = (!bFromDive && bUsePreviewShape) ? PreviewShape : HGPlanet::DefaultShape(Planet);
 
 	// 노이즈 이동값도 시드에서 뽑는다. 큰 값으로 옮겨서 행성마다 노이즈 공간의 전혀 다른 곳을 읽게 한다.
 	FRandomStream Rng(Planet.Seed);
 	NoiseOffset = FVector(Rng.FRandRange(-1000.f, 1000.f), Rng.FRandRange(-1000.f, 1000.f), Rng.FRandRange(-1000.f, 1000.f));
 
 	// 크레이터: 행성마다 따로 수열에서 뽑는다 (위 값들을 뽑는 순서를 바꾸지 않아 기존 지형이 그대로 유지된다).
-	// 작은 행성 3 ~ 6개, 중형 6 ~ 12개. 반지름 5 ~ 14m지만 지형 격자가 담을 수 있게 격자 5칸 이상.
+	// 개수, 반지름, 깊이 범위는 지형 모양 값(TerrainShape)에서 읽는다 (기본: 소형 3 ~ 6개, 중형 6 ~ 12개, 반지름 2.5 ~ 7m).
+	// 반지름은 지형 격자가 그릇 모양을 담을 수 있게 격자 4칸 이상으로 둔다 (격자 1m면 4m).
 	// 착륙 지점의 평평한 곳과 겹치지 않게 북극에서 떨어진 곳에만 둔다.
 	Craters.Reset();
 	FRandomStream CraterRng(static_cast<int32>(HashCombine(GetTypeHash(Planet.Seed), 0xc4a7u)));
 	const int32 Grid = FMath::Clamp(FMath::CeilToInt(Planet.Radius * UE_HALF_PI / TargetEdgeLength), 8, MaxGridPerFace);
 	const float CellLength = Planet.Radius * UE_HALF_PI / Grid;
-	const int32 CraterCount = Planet.SizeClass == EHGPlanetSize::Small ? CraterRng.RandRange(3, 6) : CraterRng.RandRange(6, 12);
+	const int32 CraterCount = CraterRng.RandRange(TerrainShape.CraterCountMin, FMath::Max(TerrainShape.CraterCountMin, TerrainShape.CraterCountMax));
 	for (int32 i = 0; i < CraterCount; ++i)
 	{
 		for (int32 Try = 0; Try < 20; ++Try)
 		{
 			FCrater Crater;
 			Crater.Dir = CraterRng.VRand();
-			Crater.Radius = FMath::Max(CraterRng.FRandRange(500.f, 1400.f), CellLength * 5.f);
-			Crater.Depth = Crater.Radius * CraterRng.FRandRange(0.18f, 0.3f);
+			Crater.Radius = FMath::Max(CraterRng.FRandRange(TerrainShape.CraterRadiusMin, TerrainShape.CraterRadiusMax), CellLength * 4.f);
+			Crater.Depth = Crater.Radius * CraterRng.FRandRange(TerrainShape.CraterDepthRatioMin, TerrainShape.CraterDepthRatioMax);
 			if (FMath::Acos(FMath::Clamp(Crater.Dir.Z, -1.0, 1.0)) * Planet.Radius > FlatRadius() * 2.5f + Crater.Radius)
 			{
 				Craters.Add(Crater);
@@ -1554,50 +1733,37 @@ void AHGPlanetGenerator::ChoosePlanet()
 
 float AHGPlanetGenerator::SurfaceRadiusAt(const FVector& Dir) const
 {
-	float Height = Fbm(Dir * Planet.TerrainFrequency + NoiseOffset, 5);
+	// 큰 언덕: 여러 겹 노이즈. 겹 수, 겹 배율, 겹 감쇠는 지형 모양 값(TerrainShape)에서 읽는다.
+	float Height = HGNoise::Fbm(Dir * Planet.TerrainFrequency + NoiseOffset, TerrainShape.HillOctaves, TerrainShape.HillLacunarityPercent, TerrainShape.HillPersistencePercent);
 
-	// 생물 군계별 지형 성격. 얼음은 매끈하게, 버섯숲은 둔덕이 더 솟게 한다.
-	if (Planet.Biome == EHGPlanetBiome::Ice)
+	// 솟은 곳과 꺼진 곳에 따로 배율을 곱한다 (기본: 얼음은 둘 다 0.6배로 매끈하게, 버섯숲은 솟은 곳 1.4배 / 꺼진 곳 0.7배).
+	Height = Height > 0.f ? Height * TerrainShape.HighlandScale : Height * TerrainShape.LowlandScale;
+
+	// 높이 곡선: 키가 있을 때만 언덕 높이를 곡선으로 바꾼다 (고원, 단구 등).
+	if (const FRichCurve* Curve = TerrainShape.HeightCurve.GetRichCurveConst(); Curve && Curve->GetNumKeys() > 0)
 	{
-		Height *= 0.6f;
-	}
-	else if (Planet.Biome == EHGPlanetBiome::Fungal)
-	{
-		Height = Height > 0.f ? Height * 1.4f : Height * 0.7f;
+		Height = Curve->Eval(Height);
 	}
 
 	// 들쭉날쭉함 (TerrainRuggedness). 위의 큰 언덕만 있으면 작은 행성 한 바퀴에 언덕이 서너 개뿐이라 완만해 보였다.
 	// 그 위에 두 겹을 더 얹는다. 둘 다 같은 Dir이면 언제나 같은 값이라 메시, 배치, 착륙이 모두 그대로 맞는다.
+	// 세기(능선 세기, 둔덕 높이)는 지형 모양 값에서 읽는다 (기본: 바위는 능선이 날카롭고, 얼음은 얌전하다).
 	float Bumps = 0.f; // cm. 행성 크기와 상관없이 일정한 높이의 잔 굴곡
 	if (TerrainRuggedness > 0.f)
 	{
-		// 생물 군계별 성격: 바위는 능선이 날카롭고, 버섯숲은 둔덕이 울퉁불퉁하고, 얼음은 비교적 얌전하다.
-		float RidgeWeight = 0.5f;
-		float BumpHeight = 70.f;
-		if (Planet.Biome == EHGPlanetBiome::Ice)
-		{
-			RidgeWeight = 0.4f;
-			BumpHeight = 45.f;
-		}
-		else if (Planet.Biome == EHGPlanetBiome::Rock)
-		{
-			RidgeWeight = 0.7f;
-			BumpHeight = 80.f;
-		}
-
 		// 1) 능선(ridged noise): 노이즈 값이 0을 지나는 줄을 따라 1 - |노이즈|가 뾰족하게 솟는다. 제곱해서 봉우리를 더 날카롭게 한다.
-		//    큰 언덕보다 약 2.7배 촘촘하게 깔고 세 겹 겹친다. 평균이 약 0.5라 빼서 행성이 통째로 부풀지 않게 한다.
-		const FVector P = Dir * (Planet.TerrainFrequency * 2.7f) + NoiseOffset * 1.37;
-		const float Ridge = HGNoise::Ridged(P, 3, 207);
-		Height += RidgeWeight * TerrainRuggedness * (Ridge - 0.5f);
+		//    큰 언덕보다 촘촘하게(기본 2.7배) 깔고 여러 겹(기본 3) 겹친다. 평균이 약 0.5라 빼서 행성이 통째로 부풀지 않게 한다.
+		const FVector P = Dir * (Planet.TerrainFrequency * TerrainShape.RidgeFrequencyScale) + NoiseOffset * 1.37;
+		const float Ridge = HGNoise::Ridged(P, TerrainShape.RidgeOctaves, TerrainShape.RidgeLacunarityPercent);
+		Height += TerrainShape.RidgeWeight * TerrainRuggedness * (Ridge - 0.5f);
 
-		// 2) 잔 굴곡: 약 9m 폭의 둔덕. 지형 격자 한 칸이 크면(중형 행성) 격자가 담을 수 있게 폭을 격자 4칸 이상으로 늘리고,
+		// 2) 잔 굴곡: 기본 9m 폭의 둔덕. 지형 격자 한 칸이 크면(중형 행성) 격자가 담을 수 있게 폭을 격자 4칸 이상으로 늘리고,
 		//    폭이 늘어난 만큼 높이도 키워 기울기가 비슷하게 보이게 한다.
 		const int32 Grid = FMath::Clamp(FMath::CeilToInt(Planet.Radius * UE_HALF_PI / TargetEdgeLength), 8, MaxGridPerFace);
 		const float CellLength = Planet.Radius * UE_HALF_PI / Grid;
-		const float Wavelength = FMath::Max(900.f, CellLength * 4.f);
-		Bumps = BumpHeight * TerrainRuggedness * (Wavelength / 900.f)
-			* Fbm(Dir * (Planet.Radius / Wavelength) - NoiseOffset * 0.71, 2) * 2.f;
+		const float Wavelength = FMath::Max(TerrainShape.BumpWavelength, CellLength * 4.f);
+		Bumps = TerrainShape.BumpHeight * TerrainRuggedness * (Wavelength / TerrainShape.BumpWavelength)
+			* Fbm(Dir * (Planet.Radius / Wavelength) - NoiseOffset * 0.71, TerrainShape.BumpOctaves) * 2.f;
 	}
 
 	// 착륙 지점(북극, +Z) 주변은 평평하게 다진다. 북극에서 잰 표면 거리가 평탄 반경 안이면 높이를 0으로,
@@ -1606,27 +1772,34 @@ float AHGPlanetGenerator::SurfaceRadiusAt(const FVector& Dir) const
 	const float ArcDistance = AngleFromPole * Planet.Radius;
 	const float Flatten = FMath::SmoothStep(FlatRadius(), FlatRadius() * 2.f, ArcDistance);
 
-	// 크레이터: 가운데가 파인 그릇(깊이 x (1 - d²)) + 가장자리를 따라 솟은 둑(깊이의 0.35배, 폭 반지름의 0.25배).
+	// 크레이터: 가운데가 파인 그릇(깊이 x (1 - d²)) + 가장자리를 따라 솟은 둑(기본 깊이의 0.35배, 폭 반지름의 0.25배).
 	// d = 크레이터 중심에서 반지름 단위 거리. 짧은 호는 현 길이로 근사한다 (크레이터는 행성보다 훨씬 작다).
+	// 둑은 가장자리에서 둑 폭의 3.2배 떨어지면 깊이의 0.004% 이하라 계산을 건너뛴다 (기본 둑 폭이면 d < 1.8).
+	const float RimReach = 1.f + TerrainShape.CraterRimWidth * 3.2f;
 	float CraterHeight = 0.f;
 	for (const FCrater& Crater : Craters)
 	{
 		const float D = static_cast<float>((Dir - Crater.Dir).Size() * Planet.Radius) / Crater.Radius;
-		if (D < 1.8f)
+		if (D < RimReach)
 		{
 			if (D < 1.f)
 			{
 				CraterHeight -= Crater.Depth * (1.f - D * D);
 			}
-			CraterHeight += Crater.Depth * 0.35f * FMath::Exp(-FMath::Square((D - 1.f) / 0.25f));
+			CraterHeight += Crater.Depth * TerrainShape.CraterRimHeight * FMath::Exp(-FMath::Square((D - 1.f) / TerrainShape.CraterRimWidth));
 		}
 	}
 
 	return Planet.Radius * (1.f + Planet.TerrainAmplitude * Height * Flatten) + Bumps * Flatten + CraterHeight;
 }
 
-void AHGPlanetGenerator::BuildTerrain()
+void AHGPlanetGenerator::BuildTerrain(UProceduralMeshComponent* Target, bool bCreateCollision)
 {
+	if (!Target)
+	{
+		return;
+	}
+
 	// 면 하나의 격자 수: 목표 격자 길이에 맞추되 상한을 둔다. 정육면체 한 면은 구에서 약 90도(반지름 * pi/2) 호에 해당한다.
 	const int32 Grid = FMath::Clamp(FMath::CeilToInt(Planet.Radius * UE_HALF_PI / TargetEdgeLength), 8, MaxGridPerFace);
 	const int32 Row = Grid + 1;
@@ -1709,7 +1882,7 @@ void AHGPlanetGenerator::BuildTerrain()
 		}
 	}
 
-	Terrain->ClearAllMeshSections();
+	Target->ClearAllMeshSections();
 	if (IsMoodEnabled() && CVarPlanetFaceted.GetValueOnGameThread() == 0)
 	{
 		// 그림체: 매끈한 지형 (기본). 정점을 이웃 삼각형과 나눠 쓰고 부드러운 법선으로 칠해서 각이 보이지 않는다.
@@ -1742,10 +1915,10 @@ void AHGPlanetGenerator::BuildTerrain()
 			Color.A = 1.f;
 			Colors[v] = Color.ToFColor(false);
 		}
-		Terrain->CreateMeshSection(0, Vertices, Triangles, Normals, UVs, Colors, TArray<FProcMeshTangent>(), true);
+		Target->CreateMeshSection(0, Vertices, Triangles, Normals, UVs, Colors, TArray<FProcMeshTangent>(), bCreateCollision);
 		if (UMaterialInterface* VertexColorMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/HG/Materials/M_HG_VertexColor.M_HG_VertexColor")))
 		{
-			Terrain->SetMaterial(0, VertexColorMaterial);
+			Target->SetMaterial(0, VertexColorMaterial);
 		}
 	}
 	else if (IsMoodEnabled())
@@ -1786,16 +1959,16 @@ void AHGPlanetGenerator::BuildTerrain()
 				FlatColors.Add(Packed);
 			}
 		}
-		Terrain->CreateMeshSection(0, FlatVertices, FlatTriangles, FlatNormals, FlatUVs, FlatColors, TArray<FProcMeshTangent>(), true);
+		Target->CreateMeshSection(0, FlatVertices, FlatTriangles, FlatNormals, FlatUVs, FlatColors, TArray<FProcMeshTangent>(), bCreateCollision);
 		if (UMaterialInterface* VertexColorMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/HG/Materials/M_HG_VertexColor.M_HG_VertexColor")))
 		{
-			Terrain->SetMaterial(0, VertexColorMaterial);
+			Target->SetMaterial(0, VertexColorMaterial);
 		}
 	}
 	else
 	{
-		Terrain->CreateMeshSection(0, Vertices, Triangles, Normals, UVs, TArray<FColor>(), TArray<FProcMeshTangent>(), true);
-		HGPlaceholder::Paint(Terrain, HGPlanet::GroundColor(Planet.Biome));
+		Target->CreateMeshSection(0, Vertices, Triangles, Normals, UVs, TArray<FColor>(), TArray<FProcMeshTangent>(), bCreateCollision);
+		HGPlaceholder::Paint(Target, HGPlanet::GroundColor(Planet.Biome));
 	}
 
 	UE_LOG(LogHuoguo, Log, TEXT("행성 지형: 면당 격자 %d, 정점 %d, 삼각형 %d"), Grid, Vertices.Num(), Triangles.Num() / 3);
@@ -1834,13 +2007,16 @@ void AHGPlanetGenerator::ScatterProps()
 	// 지표 위의 변환: 위쪽(Z)을 지표 바깥으로, 둘레 방향은 무작위로 돌린다.
 	auto SurfaceTransform = [this, &Rng, &Center](const FVector& Dir, float Sink, const FVector& Scale)
 	{
+		// 위 방향: 구면이면 Dir, 평지면 +Z (SurfaceUpOf).
+		const FVector Up = SurfaceUpOf(Dir);
 		FVector T1, T2;
-		TangentBasis(Dir, T1, T2);
+		TangentBasis(Up, T1, T2);
 		const float Spin = Rng.FRandRange(0.f, UE_TWO_PI);
 		const FVector Forward = T1 * FMath::Cos(Spin) + T2 * FMath::Sin(Spin);
-		const FQuat Rot = FRotationMatrix::MakeFromZX(Dir, Forward).ToQuat();
-		// 인스턴스 좌표는 컴포넌트(행성 중심) 기준이다.
-		return FTransform(Rot, Dir * (SurfaceRadiusAt(Dir) - Sink), Scale);
+		const FQuat Rot = FRotationMatrix::MakeFromZX(Up, Forward).ToQuat();
+		// 인스턴스 좌표는 컴포넌트(행성 중심) 기준이다. 평지면 원판 위 땅 점.
+		const FVector Location = bFlatSite ? SurfacePointOf(Dir) - Up * Sink : Dir * (SurfaceRadiusAt(Dir) - Sink);
+		return FTransform(Rot, Location, Scale);
 	};
 
 	RoundRocks->ClearInstances();
@@ -2074,6 +2250,11 @@ FTransform AHGPlanetGenerator::GetLandingTransform() const
 	// 착륙 지점은 북극(+Z)이다. 그 주변은 SurfaceRadiusAt에서 평평하게 다졌다.
 	// 캡슐 반높이(92) + 여유 3만큼 띄워서 발이 땅에 닿게 한다.
 	const FVector Up = FVector::UpVector;
+	if (bFlatSite)
+	{
+		// 평지: 이 액터 바로 아래 땅.
+		return FTransform(FRotator::ZeroRotator, GetActorLocation() + Up * (FlatGroundZ(FVector2D::ZeroVector) + 95.0));
+	}
 	return FTransform(FRotator::ZeroRotator, GetActorLocation() + Up * (SurfaceRadiusAt(Up) + 95.f));
 }
 
@@ -2087,8 +2268,10 @@ void AHGPlanetGenerator::SpawnReturnPad()
 
 	// 착륙 지점에서 4m 떨어진 곳(평탄 구역 안)에 세운다. 발판 액터의 중심은 바닥 + 60이다.
 	const FVector Dir = (FVector::UpVector * Planet.Radius + FVector::BackwardVector * 400.f).GetSafeNormal();
-	const FVector Location = GetActorLocation() + Dir * (SurfaceRadiusAt(Dir) + 60.f);
-	const FTransform PadTransform(FRotationMatrix::MakeFromZ(Dir).ToQuat(), Location);
+	// 평지면 SurfacePointOf가 원판 위 점(가운데에서 약 4m)과 땅 높이를 준다.
+	const FVector Up = SurfaceUpOf(Dir);
+	const FVector Location = bFlatSite ? GetActorLocation() + SurfacePointOf(Dir) + Up * 60.0 : GetActorLocation() + Dir * (SurfaceRadiusAt(Dir) + 60.f);
+	const FTransform PadTransform(FRotationMatrix::MakeFromZ(Up).ToQuat(), Location);
 
 	// 배치 전에 속성을 넣어야 OnConstruction이 올바른 색으로 칠하므로 지연 생성을 쓴다.
 	AHGTravelPad* Pad = GetWorld()->SpawnActorDeferred<AHGTravelPad>(AHGTravelPad::StaticClass(), PadTransform, this);
