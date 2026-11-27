@@ -1,6 +1,6 @@
 # Planet - 행성 시드와 절차적 행성 생성기
 
-> 경로: `Source/HuoguoHuoguo/World/Planet/` · 마지막 갱신: 2026-11-26
+> 경로: `Source/HuoguoHuoguo/World/Planet/` · 마지막 갱신: 2026-11-27
 
 ## 역할
 
@@ -11,14 +11,29 @@
 ### HGPlanetTypes (.h/.cpp)
 - `EHGPlanetBiome`: `Rock`(바위, 고추), `Ice`(얼음, 해초), `Fungal`(버섯숲, 버섯)
 - `EHGPlanetSize`: `Small`(반지름 40~120m), `Medium`(300~600m)
+- `EHGSiteType`(2026-11-27): 다이빙 목적지의 환경 종류 `PlanetSmall`, `PlanetMedium`, `PlanetLarge`(아직 없음), `AsteroidField`, `Derelict`. 환경마다 맵이 따로 있다 (`Docs/Content/Maps.md`).
+  `HGPlanet::SiteTypeOf(Seed)`: 폐우주선 > 소행성 지대 > 크기 등급 순으로 정한다.
 - `FHGPlanetSeed`: `Seed`, `Name`, `Biome`, `SizeClass`, `Radius`(cm), `TerrainAmplitude`(반지름 대비 높낮이 비율), `TerrainFrequency`, `GravityScale`, `Richness`, `HoursLeft`(표시용). `Describe()`는 한 줄 설명.
 - `HGPlanet::MakePlanet(Seed)`: `FRandomStream`으로 값을 뽑는다. 뽑는 순서를 바꾸면 기존 행성이 바뀌므로 새 값은 맨 뒤에서 뽑는다.
   - 소형: 진폭 4~9%, 중력 0.35~0.7(반지름에 비례). 중형: 진폭 1.2~2.5%, 촘촘한 굴곡, 중력 0.8~1.0.
 - `HGPlanet::MakeApproachingPlanets(UniverseSeed, Cycle, Count)`: 주기별 시드 해시로 행성 목록. 첫째는 소형, 둘째는 중형이 나올 때까지 다시 뽑아 둘 다 고를 수 있게 보장한 뒤 이탈 시간순 정렬.
 - 생물 군계별 색 `GroundColor`, `RockColor`.
 
+### HGNoise (.h/.cpp), HGNoiseTest.cpp (2026-11-27)
+정수(고정소수점)로만 계산하는 펄린 노이즈. 행성 지형과 무늬는 모두 이것을 쓴다 (엔진 `FMath::PerlinNoise3D`는 더 이상 쓰지 않음).
+- 이유: 실수 계산은 CPU, 컴파일러 설정, 엔진 버전에 따라 마지막 자리가 달라질 수 있다. 노이즈 안을 정수로만 계산하면 윈도우든 맥이든,
+  엔진이 바뀌어도 같은 시드면 같은 행성이 나온다 (행성은 시드만 저장한다).
+- 고정소수점: 소수를 65536배 한 정수(1.0 = 65536). 펄린 노이즈는 정수 격자점에서 0이라 소수 자리를 정수 안에 담는다.
+- `PerlinFixed(X,Y,Z)`(정수 입출력), `Perlin(FVector)`, `Fbm(P, 겹 수, 라쿠나리티%)`(세기 절반씩, 기본 203%), `Ridged(P, 겹 수, 207%)`(능선, 0~1).
+- 섞기 표(0~255 순열)는 정해진 정수 섞기(xorshift + 피셔-예이츠)로 만든다. 이 표나 계산을 바꾸면 모든 행성 모양이 바뀐다.
+- 한계: `FVector`로 받는 입력은 1/65536 단위로 반올림해 정수로 바꾼다. 좌표를 만드는 바깥 계산(방향 벡터)은 실수라서,
+  반올림 경계에 걸린 극히 드문 점은 플랫폼마다 1/65536 차이가 날 수 있다.
+- 시험 `HG.Noise.Deterministic`(에디터 자동화 테스트, `Automation RunTests HG.Noise`): 격자점 0, 범위, 반복 같음, 고정 점 4096개 체크섬.
+  체크섬 `-2982263534300911962`(2026-11-27 Windows x64 기록). 다른 플랫폼/엔진에서도 같아야 하고, 바뀌면 행성 모양이 바뀐 것이다.
+- 이 노이즈로 바꾸면서 같은 시드의 행성 모양이 예전(엔진 노이즈)과 달라졌다.
+
 ### HGPlanetGenerator (.h/.cpp)
-`L_PlanetSurface`에 하나 배치. 행성 중심 = 액터 위치.
+환경별 맵(`L_Planet_Small`, `L_Planet_Medium`, `L_AsteroidField`, `L_Derelict`)과 `Legacy/L_PlanetSurface`에 하나씩 배치. 행성 중심 = 액터 위치.
 - `ChoosePlanet()`: GameInstance의 `GetDivePlanet()`이 있으면 그것, 없으면(맵을 바로 열면) `PreviewPlanet`(`bPreviewFromSeedOnly`면 Seed만 쓰고 재생성). 시드로 노이즈 오프셋을 정한다.
 - `SurfaceRadiusAt(Dir)`: 지형의 유일한 높이 함수. 5옥타브 fBm(Perlin3D), 생물 군계 보정(얼음 완만, 버섯숲 둔덕 강조), 북극 `LandingFlatRadius`(10m) 평탄화 후 2배 거리까지 부드럽게 복귀.
   - 들쭉날쭉함 `TerrainRuggedness`(기본 1, 0이면 큰 언덕만): 큰 언덕 위에 두 겹을 더 얹는다.

@@ -30,6 +30,10 @@
 - 큰 구조
   - 경영 파트와 탐험 파트는 완전히 분리 [구현됨]
   - 행성은 둥글고 절차적으로 만든다 [구현됨]
+  - 환경마다 맵을 나눈다 [구현됨, 사용자 결정 2026-11-27]
+  - 행성: 뼈대는 고정, 살은 바뀌게 [결정, 사용자 결정 2026-11-27]
+  - 행성 크기와 중력 손맛 [결정, 사용자 결정]
+  - 같은 시드 = 어느 컴퓨터에서나 같은 행성 [일부 구현됨, 사용자 결정 2026-11-27]
   - 하루 구조 [구현됨 기본, 사용자 결정]
 - 경영 파트
   - 시점과 조작 [구현됨]
@@ -48,6 +52,7 @@
   - 전투 [아이디어]
   - 미니맵 [구현됨]
   - 큰 지도 [아이디어]
+  - 순간이동 장치 [아이디어, 역할 미정]
 - 가방 [구현됨 일부]
 - 하지 않기로 한 것
 - 작업 방식에 대한 요청
@@ -104,6 +109,7 @@
   - HGGameModeBase (.h/.cpp)
   - HGPlayerControllerBase (.h/.cpp)
   - HGLookSettings.h
+  - HGSiteSettings.h
   - HGGameInstance (.h/.cpp)
   - HGDayTypes.h
   - HGIngredientTypes.h
@@ -122,6 +128,7 @@
 - 역할
 - 파일
   - HGPlanetTypes (.h/.cpp)
+  - HGNoise (.h/.cpp), HGNoiseTest.cpp (2026-11-27)
   - HGPlanetGenerator (.h/.cpp)
   - 행성 그림체 (`hg.PlanetMood`, 기본 1)
   - 소행성 지대 (`FHGPlanetSeed::bAsteroidField`)
@@ -193,9 +200,10 @@
 ### [Maps - 맵 에셋](Content/Maps.md)
 
 - 역할
+- 환경별 맵 (2026-11-27, 사용자가 에디터에서 `L_PlanetSurface`를 복제해 만듦)
 - 맵
   - L_Station - 허브 정거장 훠궈집
-  - L_PlanetSurface - 절차적 행성 표면
+  - Legacy/L_PlanetSurface - 예전의 절차적 행성 표면 (은퇴)
   - Legacy/L_Asteroid_Krak7 - 이전 손배치 소행성 (연결 끊김)
 - 흐름 / 규칙
 - 알려진 문제와 다음 할 일

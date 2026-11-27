@@ -18,7 +18,8 @@ powershell -ExecutionPolicy Bypass -File .\Tools\Invoke-HGBuild.ps1
 
 ### GenerateGreyboxMaps.py - 맵/머티리얼/데이터 표 생성 내용
 - `ensure_data_tables()`: `DATA_TABLES` 목록의 CSV(`Data/*.csv`)를 DataTable(`/Game/HG/DataTable/DT_*`)로 읽어 들인다 (지금 `DT_Ingredients`, `DT_Combos`, `DT_Furniture`). 에셋이 없으면 만들고, 있으면 CSV로 다시 채운 뒤 내용이 바뀌었을 때만 저장한다 (`Docs/Content/Data.md`).
-- `MI_GB_*` 머티리얼, `L_Station`, `Legacy/L_Asteroid_Krak7`, `L_PlanetSurface`를 만든다. 이미 있으면 건너뛴다.
+- `MI_GB_*` 머티리얼, `L_Station`, `Legacy/L_Asteroid_Krak7`, `Legacy/L_PlanetSurface`를 만든다. 이미 있으면 건너뛴다.
+- 이미 있는 맵은 열지도 고치지도 않는다 (2026-11-27). 맵은 에디터에서 사람이 고친다. 환경별 맵(`L_Planet_Small` 등)은 이 도구가 모른다.
 - `ensure_glow_material()`: 발광 머티리얼 `M_HG_Glow`를 만든다. 이미 있으면 인스턴스 메시 사용 표시만 켠다 (`Docs/Content/Materials.md`).
 - `ensure_planet_materials()`: 행성 그림체용 `M_HG_PlanetSky`(하늘 돔, HLSL은 `SKY_HLSL`)와 `M_HG_VertexColor`(각진 지형)를 만든다. 하늘 머티리얼이 이미 있으면 하늘(Is Sky) 표시만 켠다 (`Docs/Content/Materials.md`).
 - `ensure_scan_material()`: 스캐너 파동 화면 효과 `M_HG_ScanPulse`(포스트 프로세스)를 만든다. 이 도구만 만드는 효과라 판 번호 `ScanVersion`이 `SCAN_VERSION`과 다르면 지우고 다시 만든다 (같으면 건너뛴다). 이웃 파라미터는 4칸이라 RGBA 출력에 잇는다 (RGB에 이었다가 셰이더 컴파일이 실패했다).
@@ -26,7 +27,7 @@ powershell -ExecutionPolicy Bypass -File .\Tools\Invoke-HGBuild.ps1
 - `ensure_fixed_exposure(label, ev)`: 맵 전체 노출을 고정하는 포스트 프로세스 볼륨. 없을 때만 만들고, 있으면 에디터에서 고친 값을 존중해 건드리지 않는다. 정거장은 `STATION_EXPOSURE_EV`(2.0). 값을 맞춰 볼 때는 환경 변수 `HG_STATION_EXPOSURE`를 주고 실행하면 그 값으로 덮어쓴다.
 - `MAP_GAME_MODES`: 맵마다 World Settings GameMode를 정한다 (L_Station = 경영, 나머지 = 탐험). 새 맵을 만들 때와 이미 있는 맵 모두에 적용한다.
   값은 (C++ 클래스, 블루프린트 경로). `/Game/HG/BluePrint/Game`의 게임 모드 BP가 있으면 BP를, 없으면 C++ 클래스를 넣는다. BP 자체는 만들거나 고치지 않는다.
-- `upgrade_station()` / `upgrade_existing_map()`: 이미 있는 맵에서 값만 새 규칙으로 바꾼다 (게임 모드 지정, 정거장 에어록 발판을 다이빙 발판으로, `FromAsteroid` 시작점을 `FromPlanet`으로). 바뀐 것이 없으면 저장하지 않는다.
+- `upgrade_station()` / `upgrade_existing_map()`: (2026-11-27부터 부르지 않음) 예전에 이미 있는 맵의 값(게임 모드, 에어록 발판, 시작점, 홀 가구)을 새 규칙으로 바꾸던 함수. 손으로 고친 맵을 덮어쓸 수 있어서 기록으로만 남긴다.
 - 예외로 액터를 지우는 경우 하나: 정거장에 가구 액터(`HGFurniture`)가 하나도 없고 홀 식탁이 예전 도형 묶음(`Table_N_Top/Leg/Pot/Seat`)이면, 그 도형들을 지우고 `place_hall_furniture()`로 식탁 4 + 의자 4 가구 액터를 놓는다. 가구 액터가 하나라도 있으면 건드리지 않는다.
 - 파이썬에서 C++ 속성 이름은 `b` 접두사를 뺀 snake_case다 (`bDiveToSelectedPlanet` → `dive_to_selected_planet`).
 

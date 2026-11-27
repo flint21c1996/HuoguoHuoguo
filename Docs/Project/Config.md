@@ -16,6 +16,10 @@
 `[/Script/EngineSettings.GameMapsSettings]`
 - `GameDefaultMap`, `EditorStartupMap` = `/Game/HG/Maps/L_Station`
 - `GlobalDefaultGameMode` = `/Game/HG/BluePrint/Game/BP_HG_ExploreGameMode.BP_HG_ExploreGameMode_C` (맵에 지정이 없을 때만 쓴다. 실제 파트는 맵 World Settings가 정한다. `Docs/Content/Blueprints.md`)
+
+`Config/DefaultGame.ini`
+- `[/Script/HuoguoHuoguo.HGSiteSettings] SiteMaps`: 환경 종류 → 다이빙 맵 (프로젝트 설정 → Game → HG 환경 맵에서 고치면 여기에 저장된다, `Docs/Source/Game.md`).
+- `[/Script/HuoguoHuoguo.HGLookSettings]`: 그림체 조절 값 (프로젝트 설정 → Game → HG 그림체).
 - `GameInstanceClass` = `/Script/HuoguoHuoguo.HGGameInstance`
 
 `[/Script/Engine.RendererSettings]`

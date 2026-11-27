@@ -21,7 +21,10 @@
 ### HGTravelPad (.h/.cpp)
 - 밟으면(사장님 `AHGBossCharacter`와 겹치면) 그 사장님의 컨트롤러 `AHGPlayerControllerBase::RequestTravel(this)`. 경영/탐험 어느 파트에서도 동작한다.
 - 속성: `DestinationLevel`(소프트 참조), `ArrivalTag`, `DestinationName`, `PadColor`, `bDiveToSelectedPlanet`.
-- `bDiveToSelectedPlanet`: 다이빙 발판. 정거장에서 고른 접근 행성을 표면 맵으로 넘긴다.
+- `bDiveToSelectedPlanet`: 다이빙 발판. 정거장에서 고른 접근 행성을 도착 맵의 생성기로 넘긴다.
+  - 갈 맵은 고른 행성의 환경 종류(`HGPlanet::SiteTypeOf`: 폐우주선 > 소행성 지대 > 소형/중형)를 보고 `UHGSiteSettings`(프로젝트 설정 → Game → HG 환경 맵, `Config/DefaultGame.ini`)에서 찾는다.
+  - 설정에 없거나 비어 있는 환경은 발판의 `DestinationLevel`(기본 목적지, 지금 `Legacy/L_PlanetSurface`)로 간다. 로그 `[Dive] 이름 → 환경, 맵`.
+  - 처리는 `Player/HGPlayerControllerBase::RequestTravel`.
 - 트리거 상자(70x70x60)가 루트, 얇은 원기둥 메시가 바닥 표시. 액터는 바닥 + 60에 둔다. `OnConstruction`에서 색칠.
 
 ## 흐름 / 규칙

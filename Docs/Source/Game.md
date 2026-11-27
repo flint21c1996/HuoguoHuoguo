@@ -50,6 +50,11 @@
   - 포스트 프로세스 컴포넌트는 컨트롤러가 아니라 컨트롤러가 만든 빈 액터(`LookHolder`)에 붙인다. 컨트롤러는 늘 숨김 액터라서 직접 붙이면 `ShouldRender`가 거짓이 되어 화면에 안 나왔다.
   - 이름이 `HGStyle`인 것은 탐험 컨트롤러에 카메라 돌리기 명령 `HGLook`이 이미 있어서다.
 
+### HGSiteSettings.h
+- `UHGSiteSettings`(`UDeveloperSettings`, config=Game, `DefaultGame.ini`): 환경 종류(`EHGSiteType`) → 다이빙할 맵. 프로젝트 설정 → Game → **HG 환경 맵**.
+- 지금 값: 소형 → `L_Planet_Small`, 중형 → `L_Planet_Medium`, 소행성 지대 → `L_AsteroidField`, 폐우주선 → `L_Derelict`. 대형은 비어 있음.
+- `FindMap(Site)`: 없으면 빈 값 (다이빙 발판의 기본 목적지를 쓴다, `Docs/Source/World.md`).
+
 ### HGGameInstance (.h/.cpp)
 맵이 바뀌어도 유지되는 상태.
 - 도착 태그: `SetPendingArrival` / `ConsumePendingArrival`
